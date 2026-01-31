@@ -4,3 +4,4 @@ requests
 matplotlib
 pyotp
 qrcode
+xlsxwriter
