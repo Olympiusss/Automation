@@ -6,15 +6,104 @@ from datetime import datetime, timezone
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+import pyotp
+import qrcode
+import base64
+import re
 
-# --- CONFIG ---
+# --------------------
+# CONFIG
+# --------------------
 SUBDOMAIN = "cybervergent-nfr.alienvault.cloud"
 CLIENT_ID = "nascent"
 CLIENT_SECRET = "gJk9DVMKgSupgUCY3ggRoAnxT9mV4aHi"
-ACCOUNT_NAME = "generic-account"  # Update this to match your AlienVault account name
+ACCOUNT_NAME = "generic-account" 
+
+# TOTP (Google Authenticator) CONFIGURATION
+# We reuse the same secret as the Automation App for convenience
+try:
+    TOTP_SECRET = st.secrets["general"]["totp_secret"]
+except Exception:
+    # Fallback or error if secrets are missing
+    st.error("❌ Missing secrets.toml configuration for [general] totp_secret")
+    st.stop()
+    
+TOTP_APP_NAME = "AlienVault Extractor"
+TOTP_ISSUER = "Esentry Security"
 
 st.set_page_config(page_title="AlienVault Alarm Extractor", layout="wide")
-st.title("🚨 AlienVault Alarm Extractor")
+
+# ========================================
+# TOTP AUTHENTICATION GATE (Layer 1 Security)
+# ========================================
+# Initialize TOTP authentication state
+if "totp_authenticated" not in st.session_state:
+    st.session_state.totp_authenticated = False
+
+# Check if user has authenticated with TOTP
+if not st.session_state.totp_authenticated:
+    # Auth Header with Logo
+    try:
+        with open("s1_logo.png", "rb") as f:
+            data = f.read()
+            encoded = base64.b64encode(data).decode()
+        
+        st.markdown(f"""
+        <div style="display: flex; align-items: center;">
+            <img src="data:image/png;base64,{encoded}" width="50" style="margin-right: 15px;">
+            <h1 style="margin: 0; padding: 0;">🔐 AlienVault Extractor - Authentication Required</h1>
+        </div>
+        """, unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.title("🔐 AlienVault Extractor - Authentication Required")
+    
+    # Create TOTP object
+    totp = pyotp.TOTP(TOTP_SECRET)
+    
+    # Authentication form
+    st.markdown("---")
+    st.markdown("### Enter Verification Code")
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        totp_code = st.text_input(
+            "6-Digit Code from your Authenticator app",
+            max_chars=6,
+            placeholder="000000",
+            key="totp_input",
+            type="password"
+        )
+    with col2:
+        verify_button = st.button("Verify & Access Dashboard", type="primary")
+    
+    if verify_button:
+        if totp_code and len(totp_code) == 6:
+            # Verify the TOTP code
+            if totp.verify(totp_code, valid_window=1):  # Allow 1 time step
+                st.session_state.totp_authenticated = True
+                st.success("✅ Authentication successful! Redirecting to dashboard...")
+                st.rerun()
+            else:
+                st.error("❌ Invalid code. Please check code in your Authenticator app.")
+        else:
+            st.warning("⚠️ Please enter a 6-digit code.")
+    
+    st.stop()  # Stop execution here if not authenticated
+
+# ========================================
+# MAIN DASHBOARD (Only accessible after TOTP)
+# ========================================
+
+# Header with Logo
+col_logo, col_title = st.columns([1, 15])
+with col_logo:
+    try:
+        st.image("s1_logo.png", width=100)
+    except Exception:
+        pass # Fail gracefully if image missing
+with col_title:
+    st.title("🚨 AlienVault Alarm Extractor")
+
 st.write("Fetch alarm summaries (and events if available) and export them to Excel with categorized sheets.")
 
 # --- INPUTS ---
