@@ -237,7 +237,8 @@ if st.button("🚀 Fetch Alarms"):
         alarms = fetch_all_parallel("alarms", {
             "timestamp_occured_gte": start_ms,
             "timestamp_occured_lte": end_ms,
-            "sort": "timestamp_occured,desc"
+            "sort": "timestamp_occured,desc",
+            "suppressed": False  # Match UI: Exclude suppressed alarms
         }, headers, max_records=50000)
         # Fetch events in parallel (up to 1M)
         st.subheader("📥 Fetching Events...")
