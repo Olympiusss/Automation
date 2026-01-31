@@ -34,13 +34,7 @@ HEADERS = {
 # TODO: Move to environment variables or encrypted config for production
 SITE_PINS = {
     "Default site": "Decipher211$",
-    "RoutePay": "Decipher777$",
-    "Infoprive Systems": "Decipher222$",
-    "Zone Payment Network Limited": "Decipher555$",
-    "Qore Inc Technologies": "Decipher666$",
-    "SunTrust Bank": "Decipher888$",
-    "Cybervergent": "Decipher111$",
-    "eTranzact": "Decipher333$"
+    "Esentry": "Decipher777$"
 }
 
 # Session timeout in minutes (set to 0 to require re-authentication after each fetch)
@@ -994,7 +988,7 @@ for auth_site in list(st.session_state.authenticated_sites.keys()):
 
 # Only show fetch button if all sites are authenticated
 if not all_authenticated:
-    st.warning("⚠️ Please authenticate all sites before fetching data.")
+    st.warning("⚠️ You need to authenticate sites before fetching data.")
     st.stop()
 
 if st.button("🚀 Fetch Site Data"):
@@ -1151,7 +1145,7 @@ if st.button("🚀 Fetch Site Data"):
 
         with col_download:
             st.download_button(
-                label=f"⬇️ Excel",
+                label=f"⬇️ Download data for {site_name}",
                 data=output.getvalue(),
                 file_name=f"{site_name.replace(' ','_')}_Summary.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
