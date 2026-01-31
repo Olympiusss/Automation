@@ -684,10 +684,36 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
         resolution = ti.get("incidentStatus", "N/A")
         verdict = ti.get("analystVerdict", "N/A")
 
+        # New Fields: Reported Time, Updated Time, Agent Version
+        created_at_raw = ti.get("createdAt")
+        updated_at_raw = ti.get("updatedAt")
+        agent_version = ari.get("agentVersion", "N/A")
+
+        # Format Dates
+        reported_time = "N/A"
+        updated_time = "N/A"
+        
+        try:
+            if created_at_raw:
+                dt_c = datetime.fromisoformat(created_at_raw.replace('Z', '+00:00'))
+                reported_time = dt_c.strftime('%Y-%m-%d • %H:%M:%S')
+            
+            if updated_at_raw:
+                dt_u = datetime.fromisoformat(updated_at_raw.replace('Z', '+00:00'))
+                # Manual suffix logic for "Jan 30th"
+                day = dt_u.day
+                sfx = 'th' if 11<=day<=13 else {1:'st',2:'nd',3:'rd'}.get(day%10, 'th')
+                updated_time = dt_u.strftime(f'%b {day}{sfx} %Y • %H:%M:%S')
+        except Exception:
+            pass
+
         detailed_threats.append({
             "ENDPOINT": endpoint,
+            "REPORTED TIME": reported_time,
+            "UPDATED TIME": updated_time,
             "THREAT FILE": threat_file,
             "THREAT CLASSIFICATION": classification,
+            "AGENT VERSION": agent_version,
             "THREAT MITIGATION STATUS": mitigation,
             "THREAT RESOLUTION STATUS": resolution,
             "ANALYST VERDICT": verdict
@@ -697,18 +723,19 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
     
     # Group by all columns (except count) and count occurrences
     if not df_detailed_threats.empty:
-         df_grouped_threats = df_detailed_threats.groupby(
-             ["ENDPOINT", "THREAT FILE", "THREAT CLASSIFICATION", "THREAT MITIGATION STATUS", "THREAT RESOLUTION STATUS", "ANALYST VERDICT"]
-         ).size().reset_index(name="COUNT")
+         # Define columns to group by (all display columns)
+         group_cols = ["ENDPOINT", "REPORTED TIME", "UPDATED TIME", "THREAT FILE", "THREAT CLASSIFICATION", "AGENT VERSION", "THREAT MITIGATION STATUS", "THREAT RESOLUTION STATUS", "ANALYST VERDICT"]
          
-         # Reorder columns: Endpoint, Count, Threat File, ...
-         cols = ["ENDPOINT", "COUNT", "THREAT FILE", "THREAT CLASSIFICATION", "THREAT MITIGATION STATUS", "THREAT RESOLUTION STATUS", "ANALYST VERDICT"]
-         df_grouped_threats = df_grouped_threats[cols]
+         df_grouped_threats = df_detailed_threats.groupby(group_cols).size().reset_index(name="COUNT")
+         
+         # Reorder columns: Endpoint, Count, then the rest
+         display_cols = ["ENDPOINT", "COUNT"] + [c for c in group_cols if c != "ENDPOINT"]
+         df_grouped_threats = df_grouped_threats[display_cols]
          
          # Sort by Count desc
          df_grouped_threats = df_grouped_threats.sort_values(by="COUNT", ascending=False)
     else:
-         df_grouped_threats = pd.DataFrame(columns=["ENDPOINT", "COUNT", "THREAT FILE", "THREAT CLASSIFICATION", "THREAT MITIGATION STATUS", "THREAT RESOLUTION STATUS", "ANALYST VERDICT"])
+         df_grouped_threats = pd.DataFrame(columns=["ENDPOINT", "COUNT", "REPORTED TIME", "UPDATED TIME", "THREAT FILE", "THREAT CLASSIFICATION", "AGENT VERSION", "THREAT MITIGATION STATUS", "THREAT RESOLUTION STATUS", "ANALYST VERDICT"])
     # --------------------------------------------
     
     # --- Threat File Counts (just the files, not grouped by endpoint) ---
@@ -1026,7 +1053,7 @@ if st.button("🚀 Fetch Site Data"):
 )
 
 
-        st.subheader("🧨 Threats Summary")
+        st.subheader("🧨Threats Summary")
         st.write("**Threat Classifications by Frequency**")
         st.dataframe(style_threat_classification_dataframe(summary["df_threat_class"]))
         render_pie_chart(
@@ -1144,7 +1171,11 @@ if st.button("🚀 Fetch Site Data"):
 
         with col_download:
             st.download_button(
+<<<<<<< HEAD
                 label=f"⬇️ Download data for {site_name}",
+=======
+                label=f"⬇️ Download Data for {site_name}",
+>>>>>>> a7a95f8 (Sync sentinel.py manual tweaks)
                 data=output.getvalue(),
                 file_name=f"{site_name.replace(' ','_')}_Summary.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
