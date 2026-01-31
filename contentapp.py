@@ -235,17 +235,18 @@ if st.button("🚀 Fetch Alarms"):
         # Fetch alarms in parallel (up to 50K)
         st.subheader("📥 Fetching Alarms...")
         alarms = fetch_all_parallel("alarms", {
-            "timestamp_occured_gte": start_ms,
-            "timestamp_occured_lte": end_ms,
-            "sort": "timestamp_occured,desc",
-            "suppressed": False  # Match UI: Exclude suppressed alarms
+             "timestamp_received_gte": start_ms,
+             "timestamp_received_lte": end_ms,
+             "sort": "timestamp_received,desc",
+             "suppressed": False,
+             "status": ["open", "closed", "in_review"] # Match UI "Alarm Status" filter
         }, headers, max_records=50000)
         # Fetch events in parallel (up to 1M)
         st.subheader("📥 Fetching Events...")
         events = fetch_all_parallel("events", {
-            "timestamp_occured_gte": start_ms,
-            "timestamp_occured_lte": end_ms,
-            "sort": "timestamp_occured,desc"
+             "timestamp_received_gte": start_ms,
+             "timestamp_received_lte": end_ms,
+             "sort": "timestamp_received,desc"
         }, headers, max_records=1000000)
         if not alarms and not events:
             st.warning("⚠️ No alarms or events found for the selected period.")
