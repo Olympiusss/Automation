@@ -34,7 +34,7 @@ HEADERS = {
 # TODO: Move to environment variables or encrypted config for production
 SITE_PINS = {
     "Default site": "Decipher211$",
-    "Esentry": "Decipher777$"
+    "esentry": "Decipher777$"
 }
 
 # Session timeout in minutes (set to 0 to require re-authentication after each fetch)
