@@ -796,7 +796,7 @@ if not st.session_state.totp_authenticated:
     with col_auth_logo:
         st.image("s1_logo.png", width=100)
     with col_auth_title:
-        st.title("SentinelOne Dashboard - Authentication Required")
+        st.title("🔐 SentinelOne Dashboard - Authentication Required")
     
     
     # Create TOTP object
