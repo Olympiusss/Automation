@@ -774,7 +774,7 @@ st.set_page_config(page_title="SentinelOne Dashboard", layout="wide")
 col_logo, col_title = st.columns([1, 15])
 with col_logo:
     # SentinelOne Purple Logo
-    st.image("s1_logo.png", width=50)
+    st.image("s1_logo.png", width=100)
 with col_title:
     st.title("SentinelOne - Reporting Visualization")
 st.markdown(
