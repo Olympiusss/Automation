@@ -1147,7 +1147,7 @@ if st.button("🚀 Fetch Site Data"):
 
         with col_download:
             st.download_button(
-                label=f"⬇️ Excel",
+                label=f"⬇️ Download Data",
                 data=output.getvalue(),
                 file_name=f"{site_name.replace(' ','_')}_Summary.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
