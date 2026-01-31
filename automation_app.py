@@ -800,32 +800,32 @@ if not st.session_state.totp_authenticated:
     )
     
     # Display setup instructions
-    with st.expander("🆕 First Time Setup - Click Here", expanded=True):
-        st.markdown("""
-        **Instructions:**
-        1. Install **Google Authenticator** app on your phone:
-           - [iOS App Store](https://apps.apple.com/app/google-authenticator/id388497605)
-           - [Android Play Store](https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2)
-        2. Open the app and tap **"+"** or **"Add account"**
-        3. Select **"Scan a QR code"**
-        4. Scan the QR code below
-        5. Enter the 6-digit code from the app
-        """)
+    # with st.expander("🆕 First Time Setup - Click Here", expanded=True):
+    #     st.markdown("""
+    #     **Instructions:**
+    #     1. Install **Google Authenticator** app on your phone:
+    #        - [iOS App Store](https://apps.apple.com/app/google-authenticator/id388497605)
+    #        - [Android Play Store](https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2)
+    #     2. Open the app and tap **"+"** or **"Add account"**
+    #     3. Select **"Scan a QR code"**
+    #     4. Scan the QR code below
+    #     5. Enter the 6-digit code from the app
+    #     """)
         
-        # Generate QR code
-        qr = qrcode.QRCode(version=1, box_size=10, border=4)
-        qr.add_data(provisioning_uri)
-        qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-        
-        # Display QR code
-        st.image(qr_img.get_image(), caption="Scan this QR code with Google Authenticator", width=300)
-        
+    #     # Generate QR code
+    #     qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    #     qr.add_data(provisioning_uri)
+    #     qr.make(fit=True)
+    #     qr_img = qr.make_image(fill_color="black", back_color="white")
+    #     
+    #     # Display QR code
+    #     st.image(qr_img.get_image(), caption="Scan this QR code with Google Authenticator", width=300)
+    
     # Show manual entry option
-    with st.expander("⌨️ Manual Entry (Alternative)"):
-        st.code(TOTP_SECRET)
-        st.caption(f"Account name: {TOTP_APP_NAME}")
-        st.caption(f"Issuer: {TOTP_ISSUER}")
+    # with st.expander("⌨️ Manual Entry (Alternative)"):
+    #     st.code(TOTP_SECRET)
+    #     st.caption(f"Account name: {TOTP_APP_NAME}")
+    #     st.caption(f"Issuer: {TOTP_ISSUER}")
     
     # Authentication form
     st.markdown("---")
