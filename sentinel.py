@@ -1065,13 +1065,10 @@ if st.button("🚀 Fetch Site Data"):
             summary["df_sentinel_summary"].to_excel(writer, sheet_name="Sentinel_Summary", index=False)
             summary["df_os_table"].to_excel(writer, sheet_name="OS_Types", index=False)
             summary["df_endpoints_list"].to_excel(writer, sheet_name="Endpoint_List", index=False)
-        with col_download:
+        
+            with col_download:
             st.download_button(
-<<<<<<< HEAD
-                label=f"⬇️ Download data for {site_name}",
-=======
                 label=f"⬇️ Download Data for {site_name}",
->>>>>>> a7a95f8 (Sync sentinel.py manual tweaks)
                 data=output.getvalue(),
                 file_name=f"{site_name.replace(' ','_')}_Summary.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
