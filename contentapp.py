@@ -118,7 +118,7 @@ def get_token():
         st.error(f"❌ Auth failed ({res.status_code}): {res.text}")
         st.stop()
     return res.json().get("access_token")
-def fetch_page(url, headers, params, page_num, response_key, timeout=15):
+def fetch_page(url, headers, params, page_num, response_key, timeout=60):
     """Fetch a single page - used for parallel execution"""
     try:
         page_params = params.copy()
@@ -153,7 +153,7 @@ def fetch_all_parallel(endpoint, params, headers, max_records=100000):
     
     # First request to get total count
     try:
-        r = requests.get(url, headers=headers, params=params, timeout=15)
+        r = requests.get(url, headers=headers, params=params, timeout=60)
         if r.status_code != 200:
             st.error(f"❌ Error fetching {endpoint}")
             return []
