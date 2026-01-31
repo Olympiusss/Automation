@@ -169,7 +169,7 @@ def render_pie_chart(df, label_col, value_col, title):
         startangle=90,
         colors=colors[:len(df_display)],
         pctdistance=0.7,
-        textprops={"fontsize": 7, "color": "white", "weight": "bold"},
+        textprops={"fontsize": 10, "color": "white", "weight": "bold"},
         radius=0.9
     )
     
@@ -185,7 +185,7 @@ def render_pie_chart(df, label_col, value_col, title):
         title="",
         loc="center left",
         bbox_to_anchor=(1, 0.5),
-        fontsize=7,
+        fontsize=8,
         facecolor='#0E1117',
         edgecolor='#0E1117',
         labelcolor='white',
@@ -1073,7 +1073,7 @@ if st.button("🚀 Fetch Site Data"):
         st.dataframe(summary["df_vuln_apps"])
         st.write("**Top vulnerable endpoints (by occurrences)**")
         st.dataframe(summary["df_vuln_eps"])
-        st.write("**Severity**")
+        st.write("**Application Severity**")
         st.dataframe(style_severity_dataframe(summary["df_vuln_sev"]))
 
         with st.expander("See Detailed Vulnerability List (Endpoints per App)"):
