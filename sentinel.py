@@ -1066,7 +1066,7 @@ if st.button("🚀 Fetch Site Data"):
             summary["df_os_table"].to_excel(writer, sheet_name="OS_Types", index=False)
             summary["df_endpoints_list"].to_excel(writer, sheet_name="Endpoint_List", index=False)
         
-            with col_download:
+        with col_download:
             st.download_button(
                 label=f"⬇️ Download Data for {site_name}",
                 data=output.getvalue(),
