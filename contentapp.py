@@ -99,10 +99,19 @@ st.write("Fetch alarm summaries (and events if available) and export them to Exc
 # --- INPUTS ---
 col1, col2 = st.columns(2)
 with col1:
-    start_date = st.date_input("📅 Start Date", value=datetime.now() - pd.Timedelta(days=30))
+    start_date = st.date_input("📅 Start Date", value=datetime.now() - pd.Timedelta(days=1))
+    start_time_str = st.text_input("🕒 Start Time (HH:MM)", value="00:00", placeholder="00:00")
 with col2:
     end_date = st.date_input("📅 End Date", value=datetime.now())
-st.info("💡 **Tip**: For faster results, select shorter date ranges (e.g., last 7 or 30 days)")
+    end_time_str = st.text_input("🕒 End Time (HH:MM)", value="23:59", placeholder="23:59")
+# Parse time strings
+try:
+    start_time = datetime.strptime(start_time_str, "%H:%M").time()
+    end_time = datetime.strptime(end_time_str, "%H:%M").time()
+except ValueError:
+    st.error("❌ Invalid time format. Please use HH:MM (e.g., 14:30)")
+    st.stop()
+st.info("💡 **Tip**: Fetching large datasets (e.g., > 20,000 events) takes time. Narrow your date/time range for instant results.")
 if start_date > end_date:
     st.error("❌ Start date cannot be after end date.")
     st.stop()
@@ -131,10 +140,10 @@ def fetch_page(url, headers, params, page_num, response_key, timeout=60):
     except:
         pass
     return []
-def fetch_all_parallel(endpoint, params, headers, max_records=100000):
+def fetch_all_parallel(endpoint, params, headers, max_records=20000):
     """
     Ultra-fast parallel fetch with concurrent requests.
-    Target: 50K alarms, 1M events in ~20 seconds
+    Target: Fetch up to max_records quickly.
     """
     start_time = time.time()
     
@@ -185,7 +194,7 @@ def fetch_all_parallel(endpoint, params, headers, max_records=100000):
     # Show what we're fetching
     will_fetch = min(total_elements, max_records)
     if total_elements > max_records:
-        st.warning(f"⚠️ Found {total_elements:,} {endpoint}, fetching {max_records:,} most recent")
+        st.warning(f"⚠️ Found {total_elements:,} {endpoint}, fetching {max_records:,} most recent (Limit reached)")
     else:
         st.info(f"📊 Fetching {total_elements:,} {endpoint} across {max_pages_needed} pages...")
     
@@ -226,28 +235,30 @@ def fetch_all_parallel(endpoint, params, headers, max_records=100000):
     return all_data[:max_records]  # Ensure we don't exceed limit
 if st.button("🚀 Fetch Alarms"):
     with st.spinner("Fetching data from AlienVault..."):
-        start_dt = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
-        end_dt = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+        # Combine Date + Time
+        start_dt = datetime.combine(start_date, start_time).replace(tzinfo=timezone.utc)
+        end_dt = datetime.combine(end_date, end_time).replace(tzinfo=timezone.utc)
+        
         start_ms = int(start_dt.timestamp() * 1000)
         end_ms = int(end_dt.timestamp() * 1000)
         token = get_token()
         headers = {"Authorization": f"Bearer {token}"}
-        # Fetch alarms in parallel (up to 50K)
+        # Fetch alarms in parallel (Limit to 20k for speed)
         st.subheader("📥 Fetching Alarms...")
         alarms = fetch_all_parallel("alarms", {
              "timestamp_received_gte": start_ms,
              "timestamp_received_lte": end_ms,
              "sort": "timestamp_received,desc",
              "suppressed": False,
-             "status": ["open", "closed", "in_review"] # Match UI "Alarm Status" filter
-        }, headers, max_records=50000)
-        # Fetch events in parallel (up to 1M)
+             "status": ["open", "closed", "in_review"] 
+        }, headers, max_records=20000)
+        # Fetch events in parallel (Limit to 20k for speed)
         st.subheader("📥 Fetching Events...")
         events = fetch_all_parallel("events", {
              "timestamp_received_gte": start_ms,
              "timestamp_received_lte": end_ms,
              "sort": "timestamp_received,desc"
-        }, headers, max_records=1000000)
+        }, headers, max_records=20000)
         if not alarms and not events:
             st.warning("⚠️ No alarms or events found for the selected period.")
         else:
