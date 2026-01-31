@@ -990,7 +990,7 @@ for auth_site in list(st.session_state.authenticated_sites.keys()):
 
 # Only show fetch button if all sites are authenticated
 if not all_authenticated:
-    st.warning("⚠️ Please authenticate all sites before fetching data.")
+    st.warning("⚠️ You need to authenticate sites before fetching data.")
     st.stop()
 
 if st.button("🚀 Fetch Site Data"):
@@ -1029,7 +1029,7 @@ if st.button("🚀 Fetch Site Data"):
 )
 
 
-        st.subheader("🧨 Threats Summary")
+        st.subheader("🧨Threats Summary")
         st.write("**Threat Classifications by Frequency**")
         st.dataframe(style_threat_classification_dataframe(summary["df_threat_class"]))
         render_pie_chart(
