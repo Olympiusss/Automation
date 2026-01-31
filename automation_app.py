@@ -10,6 +10,7 @@ import re
 import matplotlib.pyplot as plt
 import pyotp
 import qrcode
+import base64
 
 
 # --------------------
@@ -791,12 +792,18 @@ if "totp_authenticated" not in st.session_state:
 
 # Check if user has authenticated with TOTP
 if not st.session_state.totp_authenticated:
-    # Auth Header with Logo
-    col_auth_logo, col_auth_title = st.columns([0.6, 15])
-    with col_auth_logo:
-        st.image("s1_logo.png", width=55)
-    with col_auth_title:
-        st.title("🔐 SentinelOne Dashboard - Authentication Required")
+    # Auth Header with Logo (Using HTML Flexbox for perfect alignment)
+    with open("s1_logo.png", "rb") as f:
+        data = f.read()
+        encoded = base64.b64encode(data).decode()
+    
+    st.markdown(f"""
+    <div style="display: flex; align-items: center;">
+        <img src="data:image/png;base64,{encoded}" width="50" style="margin-right: 15px;">
+        <h1 style="margin: 0; padding: 0;">🔐 SentinelOne Dashboard - Authentication Required</h1>
+    </div>
+    """, unsafe_allow_html=True)
+
     
     
     # Create TOTP object
