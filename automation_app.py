@@ -1007,7 +1007,10 @@ if st.button("🚀 Fetch Site Data"):
 
     for site_name in selected:
         site_id = site_options[site_name]
-        st.header(f"🔹 {site_name}")
+        # Create columns for Header (Left) and Download Button (Right)
+        col_header, col_download = st.columns([3, 1])
+        with col_header:
+            st.header(f"🔹 {site_name}")
 
         with st.spinner(f"Fetching {site_name}..."):
             endpoints = fetch_endpoints_for_site(site_id)
@@ -1142,12 +1145,14 @@ if st.button("🚀 Fetch Site Data"):
             summary["df_os_table"].to_excel(writer, sheet_name="OS_Types", index=False)
             summary["df_endpoints_list"].to_excel(writer, sheet_name="Endpoint_List", index=False)
 
-        st.download_button(
-            label=f"⬇️ Download Excel for {site_name}",
-            data=output.getvalue(),
-            file_name=f"{site_name.replace(' ','_')}_Summary.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        with col_download:
+            st.download_button(
+                label=f"⬇️ Excel",
+                data=output.getvalue(),
+                file_name=f"{site_name.replace(' ','_')}_Summary.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key=f"dl_btn_{site_name}" # Unique key for each button
+            )
     
     # Clear authentication after data fetch to require re-authentication for next fetch
     st.session_state.authenticated_sites = {}
