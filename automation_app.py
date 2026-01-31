@@ -28,14 +28,14 @@ HEADERS = {
 # Map site names to their required PINs
 # TODO: Move to environment variables or encrypted config for production
 SITE_PINS = {
-    "Default site": "Decipher211",
-    "RoutePay": "Decipher777",
-    "Infoprive Systems": "Decipher222",
-    "Zone Payment Network Limited": "Decipher555",
-    "Qore Inc Technologies": "Decipher666",
-    "SunTrust Bank": "Decipher888",
-    "Cybervergent": "Decipher111",
-    "eTranzact": "Decipher333"
+    "Default site": "Decipher211$",
+    "RoutePay": "Decipher777$",
+    "Infoprive Systems": "Decipher222$",
+    "Zone Payment Network Limited": "Decipher555$",
+    "Qore Inc Technologies": "Decipher666$",
+    "SunTrust Bank": "Decipher888$",
+    "Cybervergent": "Decipher111$",
+    "eTranzact": "Decipher333$"
 }
 
 # Session timeout in minutes (set to 0 to require re-authentication after each fetch)
@@ -770,7 +770,7 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
 # Streamlit UI
 # --------------------
 st.set_page_config(page_title="SentinelOne Dashboard", layout="wide")
-st.title("🛡 SentinelOne — Threats & Vulnerabilities Dashboard")
+st.title("🛡 SentinelOne - Reporting Visualization")
 st.markdown(
     "Enter a date range and click **Fetch**. The app will query Threats, Vulnerabilities, Agents & Restrictions "
     "from SentinelOne, summarize them, and let you download a full Excel report."
@@ -787,8 +787,6 @@ if "totp_authenticated" not in st.session_state:
 if not st.session_state.totp_authenticated:
     st.title("🔐 SentinelOne Dashboard - Authentication Required")
     
-    st.markdown("### Google Authenticator Setup")
-    st.info("📱 This dashboard uses Google Authenticator for secure access.")
     
     # Create TOTP object
     totp = pyotp.TOTP(TOTP_SECRET)
@@ -834,14 +832,14 @@ if not st.session_state.totp_authenticated:
     col1, col2 = st.columns([2, 1])
     with col1:
         totp_code = st.text_input(
-            "6-Digit Code from Google Authenticator",
+            "6-Digit Code from your Authenticator app",
             max_chars=6,
             placeholder="000000",
             key="totp_input",
             type="password"
         )
     with col2:
-        verify_button = st.button("🔓 Verify & Access Dashboard", type="primary")
+        verify_button = st.button("Verify & Access Dashboard", type="primary")
     
     if verify_button:
         if totp_code and len(totp_code) == 6:
