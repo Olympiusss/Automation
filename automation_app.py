@@ -770,7 +770,13 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
 # Streamlit UI
 # --------------------
 st.set_page_config(page_title="SentinelOne Dashboard", layout="wide")
-st.title("🛡 SentinelOne - Reporting Visualization")
+# Header with Logo
+col_logo, col_title = st.columns([1, 15])
+with col_logo:
+    # SentinelOne Purple Logo
+    st.image("https://assets-global.website-files.com/606a8e7f8e5f462551982b69/606a92ec21b747372d627581_SentinelOne-Logo-Icon-Purple.svg", width=50)
+with col_title:
+    st.title("SentinelOne - Reporting Visualization")
 st.markdown(
     "Enter a date range and click **Fetch**. The app will query Threats, Vulnerabilities, Agents & Restrictions "
     "from SentinelOne, summarize them, and let you download a full Excel report."
