@@ -792,9 +792,9 @@ if "totp_authenticated" not in st.session_state:
 # Check if user has authenticated with TOTP
 if not st.session_state.totp_authenticated:
     # Auth Header with Logo
-    col_auth_logo, col_auth_title = st.columns([1, 15])
+    col_auth_logo, col_auth_title = st.columns([0.6, 15])
     with col_auth_logo:
-        st.image("s1_logo.png", width=100)
+        st.image("s1_logo.png", width=55)
     with col_auth_title:
         st.title("🔐 SentinelOne Dashboard - Authentication Required")
     
