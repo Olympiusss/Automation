@@ -139,7 +139,7 @@ def render_pie_chart(df, label_col, value_col, title):
         return
     
     # Set modern, beautiful font - Segoe UI
-    plt.rcParams['font.family'] = 'Segoe UI'
+    plt.rcParams['font.family'] = 'Times New Roman'
     
     # Set dark theme for pie chart - compact size for most charts
     fig, ax = plt.subplots(figsize=(3, 3), facecolor='#0E1117')
@@ -147,7 +147,6 @@ def render_pie_chart(df, label_col, value_col, title):
     
     # Limit to top 10 items to prevent overcrowding
     df_display = df.head(10).copy()
-    
     # Vibrant, appealing color palette
     colors = [
         '#1E3A8A',  # Dark Blue (Malware)
@@ -190,12 +189,12 @@ def render_pie_chart(df, label_col, value_col, title):
         facecolor='#0E1117',
         edgecolor='#0E1117',
         labelcolor='white',
-        prop={'family': 'Segoe UI', 'size': 7},
+        prop={'family': 'Times New Roman', 'size': 7},
         frameon=False
     )
     
     ax.axis("equal")
-    ax.set_title(title, fontsize=10, color='white', pad=12, weight='bold')
+    ax.set_title(title, fontsize=8, color='white', pad=12, weight='bold')
     plt.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
@@ -208,7 +207,7 @@ def render_pie_chart_wide(df, label_col, value_col, title):
     if df.empty:
         return
     
-    plt.rcParams['font.family'] = 'Segoe UI'
+    plt.rcParams['font.family'] = 'Times New Roman'
     
     # Wide landscape layout
     fig, ax = plt.subplots(figsize=(10, 5), facecolor='#0E1117')
@@ -229,13 +228,13 @@ def render_pie_chart_wide(df, label_col, value_col, title):
         startangle=90,
         colors=colors[:len(df_display)],
         pctdistance=0.75,
-        textprops={"fontsize": 10, "color": "white", "weight": "bold"},
+        textprops={"fontsize": 6, "color": "white", "weight": "bold"},
         radius=1.0,
         center=(-0.45, 0)  # Shift pie further left
     )
     
     for t in autotexts:
-        t.set_fontsize(10)
+        t.set_fontsize(6)
         t.set_color('white')
         t.set_weight('bold')
     
@@ -245,7 +244,7 @@ def render_pie_chart_wide(df, label_col, value_col, title):
         title="",
         loc="center left",
         bbox_to_anchor=(0.85, 0.5),  # Move legend further right
-        fontsize=9,
+        fontsize=6,
         facecolor='#0E1117',
         edgecolor='#0E1117',
         labelcolor='white',
@@ -254,7 +253,7 @@ def render_pie_chart_wide(df, label_col, value_col, title):
     )
     
     ax.axis("equal")
-    ax.set_title(title, fontsize=14, color='white', pad=20, weight='bold')
+    ax.set_title(title, fontsize=8, color='white', pad=20, weight='bold')
     plt.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
@@ -266,7 +265,7 @@ def render_bar_chart(df, label_col, value_col, title, color="#5A4FCF"):
     
     fig, ax = plt.subplots(figsize=(5, 3))
     ax.bar(df[label_col], df[value_col], color=color)
-    ax.set_title(title, fontsize=10)
+    ax.set_title(title, fontsize=8)
     ax.set_ylabel("Count")
     plt.xticks(rotation=45, ha='right')
     st.pyplot(fig)
@@ -1036,7 +1035,7 @@ if st.button("🚀 Fetch Site Data"):
             "Count",
             "Threat Classification Distribution"
 )
-        st.write("**Endpoint Occurrences (Top affected endpoints)**")
+        st.write("**Endpoint Occurrences**")
         st.dataframe(summary["df_threat_endpoints"])
         render_pie_chart(
             summary["df_threat_endpoints"],
@@ -1074,7 +1073,7 @@ if st.button("🚀 Fetch Site Data"):
         st.dataframe(summary["df_vuln_apps"])
         st.write("**Top vulnerable endpoints (by occurrences)**")
         st.dataframe(summary["df_vuln_eps"])
-        st.write("**Severity (normalized)**")
+        st.write("**Severity**")
         st.dataframe(style_severity_dataframe(summary["df_vuln_sev"]))
 
         with st.expander("See Detailed Vulnerability List (Endpoints per App)"):
