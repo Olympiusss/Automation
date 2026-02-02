@@ -421,49 +421,36 @@ def process_agent_stats(endpoints):
 # --------------------
 def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None): 
     """
-    Fetch blocklisted hashes (restrictions) for a site within a date range.
-    Uses the /restrictions endpoint with date filtering on 'updatedAt'.
-    Includes items scoped to the site, account, or global (tenant) level.
+    Fetch blocklisted hashes (restrictions) within a date range.
+    Uses the /restrictions endpoint and filters by updatedAt client-side.
+    Fetches ALL restrictions including account/global level ones.
     """
     try:
-        # Build query parameters
+        # Fetch ALL restrictions (no siteIds filter to include account-level restrictions)
+        # Account-level restrictions apply to all sites but are excluded when filtering by siteIds
         params = {
-            "limit": 1000,
-            "siteIds": site_id,
-            "tenant": "false"  # Get site-level restrictions
+            "limit": 1000
         }
         
-        # Add date range filtering if provided
-        if start_iso:
-            params["updatedAt__gte"] = start_iso
-        if end_iso:
-            params["updatedAt__lte"] = end_iso
+        # Fetch all restrictions
+        all_data = fetch_all_with_cursor("restrictions", params)
         
-        # Fetch restrictions for this site
-        site_data = fetch_all_with_cursor("restrictions", params)
-        
-        # Also fetch account-level restrictions that apply to this site
-        account_params = {
-            "limit": 1000,
-            "includeChildren": "true"
-        }
+        # Parse date range for client-side filtering
+        start_dt = None
+        end_dt = None
         if start_iso:
-            account_params["updatedAt__gte"] = start_iso
+            try:
+                start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+            except:
+                pass
         if end_iso:
-            account_params["updatedAt__lte"] = end_iso
-            
-        # Merge both result sets, avoiding duplicates
-        all_data = []
+            try:
+                end_dt = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+            except:
+                pass
+        rows = []
         seen_hashes = set()
         
-        for item in site_data:
-            if not isinstance(item, dict):
-                continue
-            sha256 = item.get("sha256Value") or item.get("value")
-            if sha256 and sha256 not in seen_hashes:
-                seen_hashes.add(sha256)
-                all_data.append(item)
-        rows = []
         for item in all_data:
             if not isinstance(item, dict):
                 continue
@@ -472,11 +459,30 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
             if not sha256:
                 continue
             
+            # Skip duplicates
+            if sha256 in seen_hashes:
+                continue
+            seen_hashes.add(sha256)
+            
+            # Get updated date for client-side filtering
+            updated_at_str = item.get("updatedAt", "")
+            
+            # Client-side date filtering on updatedAt
+            if start_dt or end_dt:
+                if updated_at_str:
+                    try:
+                        updated_dt = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+                        if start_dt and updated_dt < start_dt:
+                            continue
+                        if end_dt and updated_dt > end_dt:
+                            continue
+                    except:
+                        pass  # If date parsing fails, include the item
+            
             # Get other fields
             os_type = item.get("osType", "Unknown")
             description = item.get("description", "")
             source = item.get("source", "Unknown")
-            updated_at = item.get("updatedAt", "")
             created_at = item.get("createdAt", "")
             scope_name = item.get("scopeName", "")
             user_name = item.get("userName", "")
@@ -488,7 +494,7 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
                 "OS Type": os_type,
                 "Description": description,
                 "Source": source,
-                "Last Updated": updated_at,
+                "Last Updated": updated_at_str,
                 "Created At": created_at,
                 "Scope": scope_name,
                 "User": user_name,
@@ -513,10 +519,6 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
             .size()
             .reset_index(name="Count")
         )
-        
-        # Add summary rows for Source distribution
-        source_summary = df_hashes.groupby("Source").size().reset_index(name="Count")
-        source_summary.columns = ["Source Type", "Count"]
         
         # Total row
         df_hash_summary.loc[len(df_hash_summary.index)] = [
