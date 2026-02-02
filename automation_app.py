@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import pandas as pd
@@ -11,8 +10,6 @@ import matplotlib.pyplot as plt
 import pyotp
 import qrcode
 import base64
-
-
 # --------------------
 # CONFIG
 # --------------------
@@ -22,7 +19,6 @@ HEADERS = {
     "Authorization": f"ApiToken {API_TOKEN}",
     "Content-Type": "application/json"
 }
-
 # --------------------
 # SITE PIN CONFIGURATION
 # --------------------
@@ -38,10 +34,8 @@ SITE_PINS = {
     "Cybervergent": "Decipher111$",
     "eTranzact": "Decipher333$"
 }
-
 # Session timeout in minutes (set to 0 to require re-authentication after each fetch)
 SESSION_TIMEOUT_MINUTES = 0  # Change this to set timeout duration
-
 # --------------------
 # TOTP (Google Authenticator) CONFIGURATION
 # --------------------
@@ -52,7 +46,6 @@ SESSION_TIMEOUT_MINUTES = 0  # Change this to set timeout duration
 TOTP_SECRET = st.secrets["general"]["totp_secret"]
 TOTP_APP_NAME = "SentinelOne Dashboard"
 TOTP_ISSUER = "Esentry Security"  # Your organization name
-
 # --------------------
 # Helper: Cursor Pagination
 # --------------------
@@ -86,7 +79,6 @@ def fetch_all_with_cursor(endpoint, params=None, timeout=30):
             break
         time.sleep(0.05)
     return all_items
-
 # --------------------
 # Fetch functions
 # --------------------
@@ -99,13 +91,11 @@ def fetch_sites():
     except Exception as e:
         st.error(f"Error fetching sites: {e}")
         return []
-
 def fetch_endpoints_for_site(site_id):
     try:
         return fetch_all_with_cursor("agents", {"siteIds": site_id, "limit": 1000})
     except:
         return []
-
 def fetch_threats_for_site(site_id, start_iso, end_iso):
     try:
         return fetch_all_with_cursor("threats", {
@@ -118,7 +108,6 @@ def fetch_threats_for_site(site_id, start_iso, end_iso):
         })
     except:
         return []
-
 def fetch_risks_for_site(site_id, start_iso, end_iso):
     try:
         return fetch_all_with_cursor("application-management/risks", {
@@ -131,7 +120,6 @@ def fetch_risks_for_site(site_id, start_iso, end_iso):
         })
     except:
         return []
-
         
 def render_pie_chart(df, label_col, value_col, title):
     if label_col not in df.columns or value_col not in df.columns:
@@ -201,7 +189,6 @@ def render_pie_chart(df, label_col, value_col, title):
     plt.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
-
 def render_pie_chart_wide(df, label_col, value_col, title):
     """Wide landscape pie chart specifically for Threat File Distribution to prevent overlap."""
     if label_col not in df.columns or value_col not in df.columns:
@@ -260,7 +247,6 @@ def render_pie_chart_wide(df, label_col, value_col, title):
     plt.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
-
 def render_bar_chart(df, label_col, value_col, title, color="#5A4FCF"):
     if df.empty:
         st.info(f"No data for {title}")
@@ -272,8 +258,6 @@ def render_bar_chart(df, label_col, value_col, title, color="#5A4FCF"):
     ax.set_ylabel("Count")
     plt.xticks(rotation=45, ha='right')
     st.pyplot(fig)
-
-
 # --------------------
 # Styling Helper Functions
 # --------------------
@@ -293,7 +277,6 @@ def style_dataframe_with_gradient(df, value_col="Count"):
         vmax=df[df.iloc[:, 0] != "Total Occurrences"][value_col].max() if len(df) > 1 else 1
     )
     return styled
-
 def style_severity_dataframe(df):
     """
     Applies severity-based colors ONLY to the Count column.
@@ -323,7 +306,6 @@ def style_severity_dataframe(df):
         return colors
     
     return df.style.apply(highlight_count_by_severity, subset=["Count"])
-
 def style_mitigation_dataframe(df):
     """
     Applies color coding ONLY to the Count column based on mitigation status.
@@ -352,7 +334,6 @@ def style_mitigation_dataframe(df):
         return colors
     
     return df.style.apply(highlight_count_by_status, subset=["Count"])
-
 def style_threat_classification_dataframe(df):
     """
     Applies color coding ONLY to the Count column based on threat classification.
@@ -387,9 +368,6 @@ def style_threat_classification_dataframe(df):
         return colors
     
     return df.style.apply(highlight_count_by_threat_type, subset=["Count"])
-
-
-
 def process_agent_stats(endpoints):
     # --- Agent Version Coverage ---
     versions = [e.get("agentVersion", "Unknown") for e in endpoints]
@@ -398,7 +376,6 @@ def process_agent_stats(endpoints):
     
     # Get top 20 versions
     df_versions = pd.DataFrame(Counter(versions).most_common(20), columns=["Agent Version", "Count"])
-
     # --- Agents Requiring Attention ---
     # Categories: Missing permission, Attention needed, Agent suppressed, Unprotected, Incompatible OS
     attention_counts = Counter()
@@ -412,13 +389,11 @@ def process_agent_stats(endpoints):
             # We assume a single primary status per agent for the chart, but an agent could have multiple issues.
             # Prioritizing in order of severity/commonality.
             continue 
-
         # 2. Incompatible OS
         ua = e.get("userActionsNeeded")
         if ua == "incompatible_os":
              attention_counts["Incompatible OS"] += 1
              continue
-
         # 3. Unprotected
         # 'protectionEnabled' is false or ua is unprotected
         if ua == "unprotected" or e.get("isProtected") is False:
@@ -441,111 +416,123 @@ def process_agent_stats(endpoints):
     df_attention = pd.DataFrame(attention_counts.items(), columns=["Category", "Count"])
     
     return df_versions, df_attention
-
-
-
 # --------------------
 # Robust Blocklisted Hashes
 # --------------------
-def fetch_blocklisted_hashes_for_site(site_id): 
+def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None): 
+    """
+    Fetch blocklisted hashes (restrictions) for a site within a date range.
+    Uses the /restrictions endpoint with date filtering on 'updatedAt'.
+    Includes items scoped to the site, account, or global (tenant) level.
+    """
     try:
-        # Pass siteIds to filter on the server side
-        data = fetch_all_with_cursor(
-            "restrictions",
-            {"limit": 1000, "siteIds": site_id}
-        )
-
-        rows = []
-
-        for item in data:
+        # Build query parameters
+        params = {
+            "limit": 1000,
+            "siteIds": site_id,
+            "tenant": "false"  # Get site-level restrictions
+        }
+        
+        # Add date range filtering if provided
+        if start_iso:
+            params["updatedAt__gte"] = start_iso
+        if end_iso:
+            params["updatedAt__lte"] = end_iso
+        
+        # Fetch restrictions for this site
+        site_data = fetch_all_with_cursor("restrictions", params)
+        
+        # Also fetch account-level restrictions that apply to this site
+        account_params = {
+            "limit": 1000,
+            "includeChildren": "true"
+        }
+        if start_iso:
+            account_params["updatedAt__gte"] = start_iso
+        if end_iso:
+            account_params["updatedAt__lte"] = end_iso
+            
+        # Merge both result sets, avoiding duplicates
+        all_data = []
+        seen_hashes = set()
+        
+        for item in site_data:
             if not isinstance(item, dict):
                 continue
-
-            # Only hash restrictions
-            sha256 = item.get("sha256Value")
+            sha256 = item.get("sha256Value") or item.get("value")
+            if sha256 and sha256 not in seen_hashes:
+                seen_hashes.add(sha256)
+                all_data.append(item)
+        rows = []
+        for item in all_data:
+            if not isinstance(item, dict):
+                continue
+            # Get hash value (could be sha256Value or value field)
+            sha256 = item.get("sha256Value") or item.get("value")
             if not sha256:
                 continue
-
-            # ----------------------------------------
-            # Client-side filtering (Robust)
-            # ----------------------------------------
-            # The API might ignore siteIds param, so we filter manually.
-            scope = item.get("scope", {})
             
-            # Check for Site IDs
-            # API might return ["id1", "id2"] or [{"id": "id1"}, ...]
-            raw_site_ids = scope.get("siteIds", [])
-            if not isinstance(raw_site_ids, list):
-                raw_site_ids = []
-
-            # Normalize to list of strings
-            valid_site_ids = []
-            for s in raw_site_ids:
-                if isinstance(s, dict):
-                    sid = s.get("id")
-                    if sid:
-                        valid_site_ids.append(str(sid))
-                else:
-                    valid_site_ids.append(str(s))
+            # Get other fields
+            os_type = item.get("osType", "Unknown")
+            description = item.get("description", "")
+            source = item.get("source", "Unknown")
+            updated_at = item.get("updatedAt", "")
+            created_at = item.get("createdAt", "")
+            scope_name = item.get("scopeName", "")
+            user_name = item.get("userName", "")
+            imported = item.get("imported", False)
+            not_recommended = item.get("notRecommended", "")
             
-            # Check if our site_id is in the allowed list
-            # Note: If valid_site_ids is empty, it might be a global/account restriction.
-            # However, user wants "strictly for a specific client".
-            # Usually strict means: listed in siteIds.
-            # If it's a global ban, it applies to the site too, but the user might only want site-level blocks?
-            # actually, if the hash is blocklisted for the site, it should appear.
-            # If the scope is Account or Global, it effectively applies to the site. 
-            # But the UI "Blocklisted Hashes" usually separates explicit site blocks.
-            # Let's check matching logic:
-            # If site_id is in valid_site_ids -> MATCH.
-            # If scope is "tenant" (global)? -> checks 'tenant': True usually.
-            
-            is_match = str(site_id) in valid_site_ids
-            
-            # If not explicitly matched by site ID, check if it's a global/tenant scope which would include this site?
-            # The user complained about "total blocklisted hash for all clients" (502).
-            # This implies they see hashes from OTHER sites.
-            # So we should be STRICT. Only include if site_id is explicitly in siteIds.
-            
-            if is_match:
-                rows.append({
-                    "Hash Value": sha256,
-                    "OS Type": item.get("osType", "Unknown")
-                })
-
-        df_hashes = pd.DataFrame(rows, columns=["Hash Value", "OS Type"])
-
+            rows.append({
+                "Hash Value": sha256,
+                "OS Type": os_type,
+                "Description": description,
+                "Source": source,
+                "Last Updated": updated_at,
+                "Created At": created_at,
+                "Scope": scope_name,
+                "User": user_name,
+                "Imported": "Yes" if imported else "No",
+                "Not Recommended": not_recommended if not_recommended else "N/A"
+            })
+        df_hashes = pd.DataFrame(rows)
+        
         if df_hashes.empty:
+            df_hashes = pd.DataFrame(columns=[
+                "Hash Value", "OS Type", "Description", "Source", 
+                "Last Updated", "Created At", "Scope", "User", "Imported", "Not Recommended"
+            ])
             return (
                 df_hashes,
                 pd.DataFrame(columns=["OS Type", "Count"])
             )
-
-        # OS distribution
+        # OS distribution summary
         df_hash_summary = (
             df_hashes
             .groupby("OS Type")
             .size()
             .reset_index(name="Count")
         )
-
+        
+        # Add summary rows for Source distribution
+        source_summary = df_hashes.groupby("Source").size().reset_index(name="Count")
+        source_summary.columns = ["Source Type", "Count"]
+        
         # Total row
         df_hash_summary.loc[len(df_hash_summary.index)] = [
             "Total",
             len(df_hashes)
         ]
-
         return df_hashes, df_hash_summary
-
     except Exception as e:
         st.error(f"Error fetching blocklisted hashes: {e}")
         return (
-            pd.DataFrame(columns=["Hash Value", "OS Type"]),
+            pd.DataFrame(columns=[
+                "Hash Value", "OS Type", "Description", "Source",
+                "Last Updated", "Created At", "Scope", "User", "Imported", "Not Recommended"
+            ]),
             pd.DataFrame(columns=["OS Type", "Count"])
         )
-
-
-
 # --------------------
 # Vulnerability helpers
 # --------------------
@@ -584,7 +571,6 @@ def _normalize_severity(raw_sev, base_score=None, nvd_score=None):
         if score > 0.0: return "Low"
         return "None"
     return "Unknown"
-
 def process_vulnerabilities(risks):
     app_versions, endpoints, severities = [], [], []
     for r in risks:
@@ -602,18 +588,13 @@ def process_vulnerabilities(risks):
         base_score = r.get("baseScore") or r.get("riskScore")
         normalized = _normalize_severity(raw_sev, base_score=base_score, nvd_score=nvd_score)
         if normalized: severities.append(normalized)
-
     df_app_versions = pd.DataFrame(Counter(app_versions).most_common(50), columns=["Application + Version", "Count"])
     df_app_versions.loc[len(df_app_versions.index)] = ["Total Occurrences", sum(Counter(app_versions).values())]
-
     df_endpoints = pd.DataFrame(Counter(endpoints).most_common(50), columns=["Endpoint Name", "Count"])
     df_endpoints.loc[len(df_endpoints.index)] = ["Total Occurrences", sum(Counter(endpoints).values())]
-
     df_severity = pd.DataFrame(Counter(severities).most_common(50), columns=["Severity", "Count"])
     df_severity.loc[len(df_severity.index)] = ["Total Occurrences", sum(Counter(severities).values())]
-
     unique_vuln_endpoints = len(set(endpoints))
-
     # New detailed list calculation
     details_rows = []
     for r in risks:
@@ -625,7 +606,6 @@ def process_vulnerabilities(risks):
         nvd_score = r.get("nvdBaseScore") or r.get("nvdCvssVersion")
         base_score = r.get("baseScore") or r.get("riskScore")
         normalized = _normalize_severity(raw_sev, base_score=base_score, nvd_score=nvd_score)
-
         if app_name and ep:
              details_rows.append({
                  "Application": app_name,
@@ -637,27 +617,21 @@ def process_vulnerabilities(risks):
     df_vuln_details = pd.DataFrame(details_rows, columns=["Application", "Version", "Endpoint Name", "Severity"])
     if not df_vuln_details.empty:
         df_vuln_details = df_vuln_details.sort_values(by=["Application", "Endpoint Name"])
-
     return df_vuln_details, df_app_versions, df_endpoints, df_severity, unique_vuln_endpoints
-
 # --------------------
 # Summary builder
 # --------------------
 def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_summary):
     # Process agent stats (Versions, Attention)
     df_agent_versions, df_agent_attention = process_agent_stats(endpoints)
-
     threat_endpoints = [t.get("agentRealtimeInfo", {}).get("agentComputerName", "N/A") for t in threats]
     threat_classifications = [t.get("threatInfo", {}).get("classification", "N/A") for t in threats]
     threat_mitigations = [t.get("threatInfo", {}).get("mitigationStatusDescription", "N/A") for t in threats]
-
     df_threat_class = pd.DataFrame(Counter(threat_classifications).most_common(30), columns=["Threat Classification", "Count"])
     df_threat_class.loc[len(df_threat_class.index)] = ["Total Occurrences", sum(Counter(threat_classifications).values())]
-
     df_threat_endpoints = pd.DataFrame(Counter(threat_endpoints).most_common(30), columns=["Endpoint", "Count"])
     df_threat_mit = pd.DataFrame(Counter(threat_mitigations).most_common(30), columns=["Mitigation Status", "Count"])
     df_threat_mit.loc[len(df_threat_mit.index)] = ["Total Occurrences", sum(Counter(threat_mitigations).values())]
-
     # --- New Detailed Threat List Calculation ---
     detailed_threats = []
     for t in threats:
@@ -691,7 +665,6 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
         created_at_raw = ti.get("createdAt")
         updated_at_raw = ti.get("updatedAt")
         agent_version = ari.get("agentVersion", "N/A")
-
         # Format Dates
         reported_time = "N/A"
         updated_time = "N/A"
@@ -709,7 +682,6 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
                 updated_time = dt_u.strftime(f'%b {day}{sfx} %Y • %H:%M:%S')
         except Exception:
             pass
-
         detailed_threats.append({
             "ENDPOINT": endpoint,
             "REPORTED TIME": reported_time,
@@ -721,7 +693,6 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
             "THREAT RESOLUTION STATUS": resolution,
             "ANALYST VERDICT": verdict
         })
-
     df_detailed_threats = pd.DataFrame(detailed_threats)
     
     # Group by all columns (except count) and count occurrences
@@ -746,9 +717,7 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
     df_threat_files = pd.DataFrame(Counter(threat_files).most_common(50), columns=["Threat File", "Count"])
     if not df_threat_files.empty:
         df_threat_files.loc[len(df_threat_files.index)] = ["Total Occurrences", sum(Counter(threat_files).values())]
-
     df_vuln_details, df_vuln_apps, df_vuln_eps, df_vuln_sev, unique_vuln_endpoints = process_vulnerabilities(risks)
-
     df_hash_summary = pd.DataFrame(
         [{"Total Blocklisted Hashes": len(df_hashes)}]
 )
@@ -756,17 +725,14 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
     ep_names = [e.get("computerName") for e in endpoints if e.get("computerName")]
     os_names = [e.get("osType") for e in endpoints if e.get("osType")]
     unique_os = sorted(set(os_names))
-
     df_sentinel_summary = pd.DataFrame([{
         "Total endpoints discovered": len(ep_names),
         "Total OS entries": len(unique_os),
         "OS Types": ", ".join(unique_os)
     }])
-
     df_endpoints_list = pd.DataFrame(ep_names, columns=["Endpoint Name"])
     os_table = Counter([(o if o is not None else "Unknown") for o in os_names])
     df_os_table = pd.DataFrame(os_table.items(), columns=["OS Type", "Count"])
-
     return {
         "site_name": site_name,
         "df_threat_class": df_threat_class,
@@ -793,7 +759,6 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
             "unique_vuln_endpoints": unique_vuln_endpoints
         }
     }
-
 # --------------------
 # Streamlit UI
 # --------------------
@@ -809,14 +774,12 @@ st.markdown(
     "Enter a date range and click **Fetch**. The app will query Threats, Vulnerabilities, Agents & Restrictions "
     "from SentinelOne, summarize them, and let you download a full Excel report."
 )
-
 # ========================================
 # TOTP AUTHENTICATION GATE (Layer 1 Security)
 # ========================================
 # Initialize TOTP authentication state
 if "totp_authenticated" not in st.session_state:
     st.session_state.totp_authenticated = False
-
 # Check if user has authenticated with TOTP
 if not st.session_state.totp_authenticated:
     # Auth Header with Logo (Using HTML Flexbox for perfect alignment)
@@ -830,7 +793,6 @@ if not st.session_state.totp_authenticated:
         <h1 style="margin: 0; padding: 0;">🔐 SentinelOne Dashboard - Authentication Required</h1>
     </div>
     """, unsafe_allow_html=True)
-
     
     
     # Create TOTP object
@@ -899,11 +861,9 @@ if not st.session_state.totp_authenticated:
             st.warning("⚠️ Please enter a 6-digit code.")
     
     st.stop()  # Stop execution here if not authenticated
-
 # ========================================
 # MAIN DASHBOARD (Only accessible after TOTP authentication)
 # ========================================
-
 col1, col2 = st.columns(2)
 with col1:
     start_date = st.date_input("📅 Start Date", value=datetime.now(timezone.utc).date().replace(day=1))
@@ -911,36 +871,29 @@ with col1:
 with col2:
     end_date = st.date_input("📅 End Date", value=datetime.now(timezone.utc).date())
     end_time_str = st.text_input("🕒 End Time (HH:MM)", value="23:59", placeholder="23:59")
-
 # Parse time strings
 try:
     start_time = datetime.strptime(start_time_str, "%H:%M").time()
 except ValueError:
     st.error("Invalid start time format. Please use HH:MM (e.g., 09:30)")
     st.stop()
-
 try:
     end_time = datetime.strptime(end_time_str, "%H:%M").time()
 except ValueError:
     st.error("Invalid end time format. Please use HH:MM (e.g., 23:59)")
     st.stop()
-
 # Validate start < end (combining date + time)
 start_dt = datetime.combine(start_date, start_time)
 end_dt = datetime.combine(end_date, end_time)
-
 if start_dt > end_dt:
     st.error("Start date/time must be before or equal to End date/time.")
     st.stop()
-
 sites = fetch_sites()
 site_options = {s.get("name"): s.get("id") for s in sites}
 selected = st.multiselect("Select site(s)", options=list(site_options.keys()), default=list(site_options.keys())[:2])
-
 if not selected:
     st.info("Please select at least one site.")
     st.stop()
-
 # Initialize session state for authenticated sites with timestamps
 if "authenticated_sites" not in st.session_state:
     st.session_state.authenticated_sites = {}
@@ -948,7 +901,6 @@ if "auth_timestamps" not in st.session_state:
     st.session_state.auth_timestamps = {}
 if "data_fetched" not in st.session_state:
     st.session_state.data_fetched = False
-
 # Check for timeout and clear expired authentications
 from datetime import datetime, timedelta
 current_time = datetime.now()
@@ -958,21 +910,17 @@ for site_name, auth_time in st.session_state.auth_timestamps.items():
         time_diff = (current_time - auth_time).total_seconds() / 60
         if time_diff > SESSION_TIMEOUT_MINUTES:
             expired_sites.append(site_name)
-
 # Clear expired authentications
 for site_name in expired_sites:
     if site_name in st.session_state.authenticated_sites:
         del st.session_state.authenticated_sites[site_name]
     if site_name in st.session_state.auth_timestamps:
         del st.session_state.auth_timestamps[site_name]
-
 if expired_sites:
     st.warning(f"⏰ Authentication expired for: {', '.join(expired_sites)}. Please re-authenticate.")
-
 # PIN Authentication Section
 st.subheader("🔐 Site Authentication")
 st.write("Enter PIN for each selected site to access data:")
-
 all_authenticated = True
 for site_name in selected:
     # Check if site requires a PIN
@@ -1007,19 +955,16 @@ for site_name in selected:
         st.info(f"ℹ️ {site_name}: No PIN required")
         st.session_state.authenticated_sites[site_name] = True
         st.session_state.auth_timestamps[site_name] = datetime.now()
-
 # Clear authentication for deselected sites
 for auth_site in list(st.session_state.authenticated_sites.keys()):
     if auth_site not in selected:
         del st.session_state.authenticated_sites[auth_site]
         if auth_site in st.session_state.auth_timestamps:
             del st.session_state.auth_timestamps[auth_site]
-
 # Only show fetch button if all sites are authenticated
 if not all_authenticated:
     st.warning("⚠️ You need to authenticate sites before fetching data.")
     st.stop()
-
 if st.button("🚀 Fetch Site Data"):
     # Convert to UTC ISO format
     # We treat the input time as local/naive but user wants UTC ideally or we assume system local?
@@ -1031,21 +976,17 @@ if st.button("🚀 Fetch Site Data"):
     
     start_iso = start_dt.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
     end_iso = end_dt.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-
     for site_name in selected:
         site_id = site_options[site_name]
         # Create columns for Header (Left) and Download Button (Right)
         col_header, col_download = st.columns([3, 1])
         with col_header:
             st.header(f"🔹 {site_name}")
-
         with st.spinner(f"Fetching {site_name}..."):
             endpoints = fetch_endpoints_for_site(site_id)
             threats = fetch_threats_for_site(site_id, start_iso, end_iso)
             risks = fetch_risks_for_site(site_id, start_iso, end_iso)
-            df_hashes, df_hash_summary = fetch_blocklisted_hashes_for_site(site_id)
-
-
+            df_hashes, df_hash_summary = fetch_blocklisted_hashes_for_site(site_id, start_iso, end_iso)
         summary = build_site_summary(
           site_name,
           threats,
@@ -1054,8 +995,6 @@ if st.button("🚀 Fetch Site Data"):
           df_hashes,
           df_hash_summary
 )
-
-
         st.subheader("🧨Threats Summary")
         st.write("**Threat Classifications by Frequency**")
         st.dataframe(style_threat_classification_dataframe(summary["df_threat_class"]))
@@ -1081,7 +1020,6 @@ if st.button("🚀 Fetch Site Data"):
             value_col="Count",
             title="Mitigation Status"
 )
-
         # Threat File Counts
         st.write("**Threat File Occurrences**")
         st.dataframe(summary["df_threat_files"])
@@ -1091,7 +1029,6 @@ if st.button("🚀 Fetch Site Data"):
             value_col="Count",
             title="Threat File Distribution"
         )
-
         # Added Detailed Threat List
         with st.expander("See Detailed Threat List", expanded=True):
              st.dataframe(summary["df_grouped_threats"])
@@ -1105,16 +1042,11 @@ if st.button("🚀 Fetch Site Data"):
         st.dataframe(summary["df_vuln_eps"])
         st.write("**Severity (normalized)**")
         st.dataframe(style_severity_dataframe(summary["df_vuln_sev"]))
-
         with st.expander("See Detailed Vulnerability List (Endpoints per App)"):
             st.dataframe(summary["df_vuln_details"])
-
-
         st.subheader("🧩 Blocklisted Hashes")
         st.write(f"Total blocklisted hashes: {summary['raw_counts']['total_hashes']}")
         st.dataframe(summary["df_hashes"])
-
-
         st.subheader("🤖 Agent Health & Coverage")
         col_cov1, col_cov2 = st.columns(2)
         
@@ -1128,7 +1060,6 @@ if st.button("🚀 Fetch Site Data"):
                 color="#4B0082" # Indigo-like
             )
             st.dataframe(summary["df_agent_attention"])
-
         with col_cov2:
             st.write("**Agent Version Coverage**")
             render_bar_chart(
@@ -1139,7 +1070,6 @@ if st.button("🚀 Fetch Site Data"):
                 color="#6A5ACD" # SlateBlue
             )
             st.dataframe(summary["df_agent_versions"])
-
         st.subheader("🧭 Sentinels Summary")
         st.write(f"Total endpoints discovered: {summary['raw_counts']['total_endpoints']}")
         st.subheader("OS Types Distribution")
@@ -1150,11 +1080,9 @@ if st.button("🚀 Fetch Site Data"):
             value_col="Count",
             title="OS Distribution"
 )
-
         st.write("List of endpoints:")
         st.dataframe(summary["df_endpoints_list"])
     
-
         output = BytesIO()
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
             summary["df_threat_class"].to_excel(writer, sheet_name="Threat_Class", index=False)
@@ -1171,7 +1099,6 @@ if st.button("🚀 Fetch Site Data"):
             summary["df_sentinel_summary"].to_excel(writer, sheet_name="Sentinel_Summary", index=False)
             summary["df_os_table"].to_excel(writer, sheet_name="OS_Types", index=False)
             summary["df_endpoints_list"].to_excel(writer, sheet_name="Endpoint_List", index=False)
-
         with col_download:
             st.download_button(
                 label=f"⬇️ Download Data for {site_name}",
