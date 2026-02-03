@@ -422,18 +422,22 @@ def process_agent_stats(endpoints):
 def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None): 
     """
     Fetch blocklisted hashes (restrictions) within a date range.
-    Uses the /restrictions endpoint and filters by updatedAt client-side.
+    Uses the /restrictions endpoint with type=black_hash for hash items.
     Fetches ALL restrictions including account/global level ones.
     """
     try:
-        # Fetch ALL restrictions (no siteIds filter to include account-level restrictions)
-        # Account-level restrictions apply to all sites but are excluded when filtering by siteIds
+        # Fetch ALL hash restrictions (type=black_hash for hash blocklist items)
+        # No siteIds filter to include account-level restrictions
         params = {
-            "limit": 1000
+            "limit": 1000,
+            "type": "black_hash"  # Filter for hash blocklist items only
         }
         
-        # Fetch all restrictions
+        # Fetch all hash restrictions
         all_data = fetch_all_with_cursor("restrictions", params)
+        
+        # Debug: Show how many items were returned from API
+        st.info(f"📊 Debug: API returned {len(all_data)} total hash restrictions")
         
         # Parse date range for client-side filtering
         start_dt = None
