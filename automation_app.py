@@ -466,10 +466,15 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
             if not sha256:
                 continue
             
-            # Skip duplicates
-            if sha256 in seen_hashes:
+            # Get OS type for deduplication key (same hash can exist for different OS types)
+            os_type = item.get("osType", "Unknown")
+            
+            # Skip duplicates - but allow same hash for different OS types
+            # UI shows hash+OS as separate entries (e.g., same hash for Windows, MacOS, Linux = 3 entries)
+            dedup_key = f"{sha256}|{os_type}"
+            if dedup_key in seen_hashes:
                 continue
-            seen_hashes.add(sha256)
+            seen_hashes.add(dedup_key)
             
             # Get updated date for client-side filtering
             updated_at_str = item.get("updatedAt", "")
@@ -486,8 +491,7 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
                     except:
                         pass  # If date parsing fails, include the item
             
-            # Get other fields
-            os_type = item.get("osType", "Unknown")
+            # Get other fields (os_type already fetched above for dedup key)
             description = item.get("description", "")
             source = item.get("source", "Unknown")
             created_at = item.get("createdAt", "")
