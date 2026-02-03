@@ -423,27 +423,48 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
     """
     Fetch blocklisted hashes (restrictions) for a specific site within a date range.
     Uses the /restrictions endpoint with type=black_hash for hash items.
-    Returns restrictions that apply to this specific site.
+    Returns site-specific restrictions PLUS inherited group/account level restrictions.
     """
     try:
         # Fetch hash restrictions for this specific site
-        # Note: siteIds returns restrictions scoped TO this site
-        # Account-level restrictions that apply to all sites are also included automatically
+        # siteIds = filter to this site
+        # includeParents = also get group/account level restrictions that apply to this site
         params = {
             "limit": 1000,
             "type": "black_hash",      # Filter for hash blocklist items only
-            "siteIds": site_id         # Filter to restrictions for this specific site
+            "siteIds": site_id,        # Filter to this specific site
+            "includeParents": "true"   # Include inherited group/account level restrictions
         }
         
-        # Fetch restrictions for this site
+        # Fetch restrictions for this site (including inherited ones)
         all_data = fetch_all_with_cursor("restrictions", params)
         
-        # Debug: Show raw count
-        st.info(f"📊 Debug: API returned {len(all_data)} items for site")
+        # Debug: Analyze the raw API data
+        st.info(f"📊 Debug: API returned {len(all_data)} total items")
         
-        # Use unique restriction ID for deduplication (each blocklist entry has unique id)
-        # This preserves same hash with different OS types as separate entries
-        seen_ids = set()
+        # Count occurrences of each hash to see if API returns duplicates
+        hash_os_counts = {}
+        for item in all_data:
+            if isinstance(item, dict):
+                h = item.get("sha256Value") or item.get("value") or "no_hash"
+                os = item.get("osType", "unknown")
+                key = f"{h[:20]}... ({os})"
+                hash_os_counts[key] = hash_os_counts.get(key, 0) + 1
+        
+        # Show hashes that appear multiple times
+        duplicates = {k: v for k, v in hash_os_counts.items() if v > 1}
+        if duplicates:
+            st.warning(f"� Debug: Found duplicate hash+OS entries: {duplicates}")
+        
+        # Count unique hash+OS combinations in raw data
+        unique_combos = set()
+        for item in all_data:
+            if isinstance(item, dict):
+                h = item.get("sha256Value") or item.get("value")
+                os = item.get("osType", "unknown")
+                if h:
+                    unique_combos.add(f"{h}|{os}")
+        st.info(f"📊 Debug: {len(unique_combos)} unique hash+OS combinations in API response")
         
         # Parse date range for client-side filtering
         start_dt = None
@@ -472,13 +493,12 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
             # Get OS type for deduplication key (same hash can exist for different OS types)
             os_type = item.get("osType", "Unknown")
             
-            # Use unique item ID from API - each blocklist entry is unique
-            # Do NOT deduplicate by hash+OS - the same hash can have multiple entries
-            item_id = item.get("id", "")
-            if item_id in seen_hashes:
-                continue  # Skip only true duplicates (same API record)
-            if item_id:
-                seen_hashes.add(item_id)
+            # Skip duplicates - but allow same hash for different OS types
+            # UI shows hash+OS as separate entries (e.g., same hash for Windows, MacOS, Linux = 3 entries)
+            dedup_key = f"{sha256}|{os_type}"
+            if dedup_key in seen_hashes:
+                continue
+            seen_hashes.add(dedup_key)
             
             # Get updated date for client-side filtering
             updated_at_str = item.get("updatedAt", "")
