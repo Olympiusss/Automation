@@ -421,24 +421,26 @@ def process_agent_stats(endpoints):
 # --------------------
 def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None): 
     """
-    Fetch blocklisted hashes (restrictions) within a date range.
+    Fetch blocklisted hashes (restrictions) for a specific site within a date range.
     Uses the /restrictions endpoint with type=black_hash for hash items.
-    Fetches ALL restrictions including account/global level ones.
+    Returns site-specific restrictions PLUS inherited group/account level restrictions.
     """
     try:
-        # Fetch ALL hash restrictions including account/tenant level
-        # tenant=true gets the full blocklist inventory shown in the UI
+        # Fetch hash restrictions for this specific site
+        # siteIds = filter to this site
+        # includeParents = also get group/account level restrictions that apply to this site
         params = {
             "limit": 1000,
-            "type": "black_hash",  # Filter for hash blocklist items only
-            "tenant": "true"       # Include account/tenant level restrictions (the 140 items shown in UI)
+            "type": "black_hash",      # Filter for hash blocklist items only
+            "siteIds": site_id,        # Filter to this specific site
+            "includeParents": "true"   # Include inherited group/account level restrictions
         }
         
-        # Fetch all hash restrictions at tenant/account level
+        # Fetch restrictions for this site (including inherited ones)
         all_data = fetch_all_with_cursor("restrictions", params)
         
         # Debug: Show how many items were returned from API
-        st.info(f"📊 Debug: API returned {len(all_data)} total hash restrictions (tenant level)")
+        st.info(f"📊 Debug: API returned {len(all_data)} hash restrictions for site")
         
         # Parse date range for client-side filtering
         start_dt = None
