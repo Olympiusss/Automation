@@ -426,18 +426,19 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
     Fetches ALL restrictions including account/global level ones.
     """
     try:
-        # Fetch ALL hash restrictions (type=black_hash for hash blocklist items)
-        # No siteIds filter to include account-level restrictions
+        # Fetch ALL hash restrictions including account/tenant level
+        # tenant=true gets the full blocklist inventory shown in the UI
         params = {
             "limit": 1000,
-            "type": "black_hash"  # Filter for hash blocklist items only
+            "type": "black_hash",  # Filter for hash blocklist items only
+            "tenant": "true"       # Include account/tenant level restrictions (the 140 items shown in UI)
         }
         
-        # Fetch all hash restrictions
+        # Fetch all hash restrictions at tenant/account level
         all_data = fetch_all_with_cursor("restrictions", params)
         
         # Debug: Show how many items were returned from API
-        st.info(f"📊 Debug: API returned {len(all_data)} total hash restrictions")
+        st.info(f"📊 Debug: API returned {len(all_data)} total hash restrictions (tenant level)")
         
         # Parse date range for client-side filtering
         start_dt = None
