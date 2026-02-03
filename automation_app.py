@@ -439,8 +439,32 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
         # Fetch restrictions for this site (including inherited ones)
         all_data = fetch_all_with_cursor("restrictions", params)
         
-        # Debug: Show how many items were returned from API
-        st.info(f"📊 Debug: API returned {len(all_data)} hash restrictions for site")
+        # Debug: Analyze the raw API data
+        st.info(f"📊 Debug: API returned {len(all_data)} total items")
+        
+        # Count occurrences of each hash to see if API returns duplicates
+        hash_os_counts = {}
+        for item in all_data:
+            if isinstance(item, dict):
+                h = item.get("sha256Value") or item.get("value") or "no_hash"
+                os = item.get("osType", "unknown")
+                key = f"{h[:20]}... ({os})"
+                hash_os_counts[key] = hash_os_counts.get(key, 0) + 1
+        
+        # Show hashes that appear multiple times
+        duplicates = {k: v for k, v in hash_os_counts.items() if v > 1}
+        if duplicates:
+            st.warning(f"� Debug: Found duplicate hash+OS entries: {duplicates}")
+        
+        # Count unique hash+OS combinations in raw data
+        unique_combos = set()
+        for item in all_data:
+            if isinstance(item, dict):
+                h = item.get("sha256Value") or item.get("value")
+                os = item.get("osType", "unknown")
+                if h:
+                    unique_combos.add(f"{h}|{os}")
+        st.info(f"📊 Debug: {len(unique_combos)} unique hash+OS combinations in API response")
         
         # Parse date range for client-side filtering
         start_dt = None
