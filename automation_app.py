@@ -421,50 +421,24 @@ def process_agent_stats(endpoints):
 # --------------------
 def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None): 
     """
-    Fetch blocklisted hashes (restrictions) for a specific site within a date range.
+    Fetch blocklisted hashes (restrictions) across all scopes: account, global, and site.
     Uses the /restrictions endpoint with type=black_hash for hash items.
-    Returns site-specific restrictions PLUS inherited group/account level restrictions.
+    Includes duplicate entries (same hash for different OS types).
     """
     try:
-        # Fetch hash restrictions for this specific site
-        # siteIds = filter to this site
-        # includeParents = also get group/account level restrictions that apply to this site
+        # Fetch ALL hash restrictions across account, global, and site scopes
+        # tenant=true gets all restrictions including account/global level
         params = {
             "limit": 1000,
-            "type": "black_hash",      # Filter for hash blocklist items only
-            "siteIds": site_id,        # Filter to this specific site
-            "includeParents": "true"   # Include inherited group/account level restrictions
+            "type": "black_hash",  # Filter for hash blocklist items only
+            "tenant": "true"       # Include account/global/site level restrictions
         }
         
-        # Fetch restrictions for this site (including inherited ones)
+        # Fetch all restrictions across all scopes
         all_data = fetch_all_with_cursor("restrictions", params)
         
-        # Debug: Analyze the raw API data
-        st.info(f"📊 Debug: API returned {len(all_data)} total items")
-        
-        # Count occurrences of each hash to see if API returns duplicates
-        hash_os_counts = {}
-        for item in all_data:
-            if isinstance(item, dict):
-                h = item.get("sha256Value") or item.get("value") or "no_hash"
-                os = item.get("osType", "unknown")
-                key = f"{h[:20]}... ({os})"
-                hash_os_counts[key] = hash_os_counts.get(key, 0) + 1
-        
-        # Show hashes that appear multiple times
-        duplicates = {k: v for k, v in hash_os_counts.items() if v > 1}
-        if duplicates:
-            st.warning(f"� Debug: Found duplicate hash+OS entries: {duplicates}")
-        
-        # Count unique hash+OS combinations in raw data
-        unique_combos = set()
-        for item in all_data:
-            if isinstance(item, dict):
-                h = item.get("sha256Value") or item.get("value")
-                os = item.get("osType", "unknown")
-                if h:
-                    unique_combos.add(f"{h}|{os}")
-        st.info(f"📊 Debug: {len(unique_combos)} unique hash+OS combinations in API response")
+        # Debug info
+        st.info(f"📊 Debug: API returned {len(all_data)} total restrictions (all scopes)")
         
         # Parse date range for client-side filtering
         start_dt = None
@@ -480,25 +454,23 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
             except:
                 pass
         rows = []
-        seen_hashes = set()
+        # Use unique restriction ID to preserve ALL entries (including same hash for different OS)
+        seen_ids = set()
         
         for item in all_data:
             if not isinstance(item, dict):
                 continue
+            # Use the unique ID from API - each blocklist entry has its own ID
+            # This preserves duplicate hashes with different OS types
+            item_id = item.get("id", "")
+            if item_id and item_id in seen_ids:
+                continue
+            if item_id:
+                seen_ids.add(item_id)
             # Get hash value (could be sha256Value or value field)
             sha256 = item.get("sha256Value") or item.get("value")
             if not sha256:
                 continue
-            
-            # Get OS type for deduplication key (same hash can exist for different OS types)
-            os_type = item.get("osType", "Unknown")
-            
-            # Skip duplicates - but allow same hash for different OS types
-            # UI shows hash+OS as separate entries (e.g., same hash for Windows, MacOS, Linux = 3 entries)
-            dedup_key = f"{sha256}|{os_type}"
-            if dedup_key in seen_hashes:
-                continue
-            seen_hashes.add(dedup_key)
             
             # Get updated date for client-side filtering
             updated_at_str = item.get("updatedAt", "")
@@ -515,7 +487,8 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
                     except:
                         pass  # If date parsing fails, include the item
             
-            # Get other fields (os_type already fetched above for dedup key)
+            # Get all fields
+            os_type = item.get("osType", "Unknown")
             description = item.get("description", "")
             source = item.get("source", "Unknown")
             created_at = item.get("createdAt", "")
@@ -537,6 +510,9 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
                 "Not Recommended": not_recommended if not_recommended else "N/A"
             })
         df_hashes = pd.DataFrame(rows)
+        
+        # Debug: Show final count after date filtering
+        st.info(f"📊 Debug: {len(df_hashes)} items after date filtering")
         
         if df_hashes.empty:
             df_hashes = pd.DataFrame(columns=[
