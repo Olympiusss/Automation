@@ -421,24 +421,43 @@ def process_agent_stats(endpoints):
 # --------------------
 def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None): 
     """
-    Fetch blocklisted hashes (restrictions) across all scopes: account, global, and site.
-    Uses the /restrictions endpoint with type=black_hash for hash items.
+    Fetch blocklisted hashes (restrictions) across all scopes: Global, Account, and Site.
+    Makes separate API calls for each scope level and combines results.
     Includes duplicate entries (same hash for different OS types).
     """
     try:
-        # Fetch ALL hash restrictions across account, global, and site scopes
-        # tenant=true gets all restrictions including account/global level
-        params = {
+        all_data = []
+        
+        # 1. Fetch GLOBAL/TENANT level restrictions
+        global_params = {
             "limit": 1000,
-            "type": "black_hash",  # Filter for hash blocklist items only
-            "tenant": "true"       # Include account/global/site level restrictions
+            "type": "black_hash",
+            "tenant": "true"
         }
+        global_data = fetch_all_with_cursor("restrictions", global_params)
+        st.info(f"📊 Debug: Global scope returned {len(global_data)} items")
+        all_data.extend(global_data)
         
-        # Fetch all restrictions across all scopes
-        all_data = fetch_all_with_cursor("restrictions", params)
+        # 2. Fetch ACCOUNT level restrictions (no tenant filter, no siteIds)
+        account_params = {
+            "limit": 1000,
+            "type": "black_hash"
+        }
+        account_data = fetch_all_with_cursor("restrictions", account_params)
+        st.info(f"📊 Debug: Account scope returned {len(account_data)} items")
+        all_data.extend(account_data)
         
-        # Debug info
-        st.info(f"📊 Debug: API returned {len(all_data)} total restrictions (all scopes)")
+        # 3. Fetch SITE level restrictions (with siteIds)
+        site_params = {
+            "limit": 1000,
+            "type": "black_hash",
+            "siteIds": site_id
+        }
+        site_data = fetch_all_with_cursor("restrictions", site_params)
+        st.info(f"📊 Debug: Site scope returned {len(site_data)} items")
+        all_data.extend(site_data)
+        
+        st.info(f"📊 Debug: Total combined = {len(all_data)} items (before dedup)")
         
         # Parse date range for client-side filtering
         start_dt = None
@@ -455,13 +474,14 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
                 pass
         rows = []
         # Use unique restriction ID to preserve ALL entries (including same hash for different OS)
+        # This also deduplicates entries that appear in multiple API calls
         seen_ids = set()
         
         for item in all_data:
             if not isinstance(item, dict):
                 continue
             # Use the unique ID from API - each blocklist entry has its own ID
-            # This preserves duplicate hashes with different OS types
+            # This preserves duplicate hashes with different OS types but removes true duplicates
             item_id = item.get("id", "")
             if item_id and item_id in seen_ids:
                 continue
@@ -493,6 +513,7 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
             source = item.get("source", "Unknown")
             created_at = item.get("createdAt", "")
             scope_name = item.get("scopeName", "")
+            scope_level = item.get("scope", "")  # This shows Global/Account/Site
             user_name = item.get("userName", "")
             imported = item.get("imported", False)
             not_recommended = item.get("notRecommended", "")
@@ -504,7 +525,7 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
                 "Source": source,
                 "Last Updated": updated_at_str,
                 "Created At": created_at,
-                "Scope": scope_name,
+                "Scope": scope_name if scope_name else scope_level,
                 "User": user_name,
                 "Imported": "Yes" if imported else "No",
                 "Not Recommended": not_recommended if not_recommended else "N/A"
@@ -512,7 +533,7 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
         df_hashes = pd.DataFrame(rows)
         
         # Debug: Show final count after date filtering
-        st.info(f"📊 Debug: {len(df_hashes)} items after date filtering")
+        st.info(f"📊 Debug: {len(df_hashes)} unique items after dedup and date filtering")
         
         if df_hashes.empty:
             df_hashes = pd.DataFrame(columns=[
