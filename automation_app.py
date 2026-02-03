@@ -421,43 +421,26 @@ def process_agent_stats(endpoints):
 # --------------------
 def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None): 
     """
-    Fetch blocklisted hashes (restrictions) across all scopes: Global, Account, and Site.
-    Makes separate API calls for each scope level and combines results.
-    Includes duplicate entries (same hash for different OS types).
+    Fetch blocklisted hashes (restrictions) for a specific site within a date range.
+    Uses the /restrictions endpoint with type=black_hash for hash items.
+    Returns site-specific restrictions PLUS inherited group/account level restrictions.
     """
     try:
-        all_data = []
-        
-        # 1. Fetch GLOBAL/TENANT level restrictions
-        global_params = {
+        # Fetch hash restrictions for this specific site
+        # siteIds = filter to this site
+        # includeParents = also get group/account level restrictions that apply to this site
+        params = {
             "limit": 1000,
-            "type": "black_hash",
-            "tenant": "true"
+            "type": "black_hash",      # Filter for hash blocklist items only
+            "siteIds": site_id,        # Filter to this specific site
+            "includeParents": "true"   # Include inherited group/account level restrictions
         }
-        global_data = fetch_all_with_cursor("restrictions", global_params)
-        st.info(f"📊 Debug: Global scope returned {len(global_data)} items")
-        all_data.extend(global_data)
         
-        # 2. Fetch ACCOUNT level restrictions (no tenant filter, no siteIds)
-        account_params = {
-            "limit": 1000,
-            "type": "black_hash"
-        }
-        account_data = fetch_all_with_cursor("restrictions", account_params)
-        st.info(f"📊 Debug: Account scope returned {len(account_data)} items")
-        all_data.extend(account_data)
+        # Fetch restrictions for this site (including inherited ones)
+        all_data = fetch_all_with_cursor("restrictions", params)
         
-        # 3. Fetch SITE level restrictions (with siteIds)
-        site_params = {
-            "limit": 1000,
-            "type": "black_hash",
-            "siteIds": site_id
-        }
-        site_data = fetch_all_with_cursor("restrictions", site_params)
-        st.info(f"📊 Debug: Site scope returned {len(site_data)} items")
-        all_data.extend(site_data)
-        
-        st.info(f"📊 Debug: Total combined = {len(all_data)} items (before dedup)")
+        # Debug: Show how many items were returned from API
+        st.info(f"📊 Debug: API returned {len(all_data)} hash restrictions for site")
         
         # Parse date range for client-side filtering
         start_dt = None
@@ -473,24 +456,20 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
             except:
                 pass
         rows = []
-        # Use unique restriction ID to preserve ALL entries (including same hash for different OS)
-        # This also deduplicates entries that appear in multiple API calls
-        seen_ids = set()
+        seen_hashes = set()
         
         for item in all_data:
             if not isinstance(item, dict):
                 continue
-            # Use the unique ID from API - each blocklist entry has its own ID
-            # This preserves duplicate hashes with different OS types but removes true duplicates
-            item_id = item.get("id", "")
-            if item_id and item_id in seen_ids:
-                continue
-            if item_id:
-                seen_ids.add(item_id)
             # Get hash value (could be sha256Value or value field)
             sha256 = item.get("sha256Value") or item.get("value")
             if not sha256:
                 continue
+            
+            # Skip duplicates
+            if sha256 in seen_hashes:
+                continue
+            seen_hashes.add(sha256)
             
             # Get updated date for client-side filtering
             updated_at_str = item.get("updatedAt", "")
@@ -507,13 +486,12 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
                     except:
                         pass  # If date parsing fails, include the item
             
-            # Get all fields
+            # Get other fields
             os_type = item.get("osType", "Unknown")
             description = item.get("description", "")
             source = item.get("source", "Unknown")
             created_at = item.get("createdAt", "")
             scope_name = item.get("scopeName", "")
-            scope_level = item.get("scope", "")  # This shows Global/Account/Site
             user_name = item.get("userName", "")
             imported = item.get("imported", False)
             not_recommended = item.get("notRecommended", "")
@@ -525,15 +503,12 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
                 "Source": source,
                 "Last Updated": updated_at_str,
                 "Created At": created_at,
-                "Scope": scope_name if scope_name else scope_level,
+                "Scope": scope_name,
                 "User": user_name,
                 "Imported": "Yes" if imported else "No",
                 "Not Recommended": not_recommended if not_recommended else "N/A"
             })
         df_hashes = pd.DataFrame(rows)
-        
-        # Debug: Show final count after date filtering
-        st.info(f"📊 Debug: {len(df_hashes)} unique items after dedup and date filtering")
         
         if df_hashes.empty:
             df_hashes = pd.DataFrame(columns=[
