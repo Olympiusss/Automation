@@ -5,6 +5,7 @@ This module handles the connection to Google Gemini for natural language process
 
 import json
 import os
+import time
 from typing import Dict, Any, List, Optional
 
 # Gemini imports
@@ -15,6 +16,11 @@ except ImportError:
     GEMINI_AVAILABLE = False
 
 from agent_tools import AGENT_TOOLS, execute_tool, format_tool_result_for_display
+
+
+# Rate limiting configuration
+MAX_RETRIES = 3
+RETRY_DELAY_SECONDS = 5  # Wait 5 seconds between retries
 
 
 # System prompt for the agent
@@ -90,6 +96,46 @@ def get_gemini_model(model_name: str = "gemini-2.0-flash"):
         return None
 
 
+def _call_gemini_with_retry(model, prompt: str, max_retries: int = MAX_RETRIES) -> tuple:
+    """
+    Call Gemini API with retry logic for rate limits.
+    
+    Args:
+        model: Gemini model instance
+        prompt: The prompt to send
+        max_retries: Maximum number of retries
+    
+    Returns:
+        Tuple of (success: bool, response_text: str or error_message: str)
+    """
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(prompt)
+            return True, response.text.strip()
+        
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # Check if it's a rate limit error (429)
+            if "429" in str(e) or "quota" in error_str or "rate" in error_str:
+                if attempt < max_retries - 1:
+                    wait_time = RETRY_DELAY_SECONDS * (attempt + 1)  # Exponential backoff
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    return False, "⏳ Rate limit reached. The free tier has 15 requests/minute. Please wait a moment and try again."
+            
+            # Check for API key errors
+            elif "api key" in error_str or "invalid" in error_str or "401" in str(e):
+                return False, "🔑 Invalid API key. Please check your Gemini API key in Streamlit secrets."
+            
+            # Other errors
+            else:
+                return False, f"❌ Error: {str(e)}"
+    
+    return False, "❌ Failed after multiple retries. Please try again later."
+
+
 def process_user_query(
     user_query: str,
     chat_history: List[Dict[str, str]],
@@ -137,67 +183,66 @@ def process_user_query(
             "data": None
         }
     
-    try:
-        # Build the system prompt
-        tools_json = json.dumps(AGENT_TOOLS, indent=2)
-        system_prompt = SYSTEM_PROMPT.format(
-            tools=tools_json,
-            current_date=current_date
-        )
-        
-        # Build conversation context
-        conversation = [system_prompt]
-        
-        # Add chat history (last 10 messages for context)
-        for msg in chat_history[-10:]:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            conversation.append(f"{role.upper()}: {content}")
-        
-        # Add current query
-        conversation.append(f"USER: {user_query}")
-        
-        # Generate response
-        response = model.generate_content("\n\n".join(conversation))
-        response_text = response.text.strip()
-        
-        # Check if response is a tool call (JSON)
-        if response_text.startswith("{") and "tool" in response_text:
-            try:
-                tool_call = json.loads(response_text)
-                tool_name = tool_call.get("tool")
-                params = tool_call.get("params", {})
-                
-                # Execute the tool
-                result = execute_tool(tool_name, params, sites_data, fetch_functions)
-                
-                # Format result for display
-                formatted_result = format_tool_result_for_display(result, tool_name)
-                
-                return {
-                    "success": True,
-                    "response": formatted_result,
-                    "data": result,
-                    "tool_used": tool_name
-                }
-            except json.JSONDecodeError:
-                # Not valid JSON, treat as conversational response
-                pass
-        
-        # Conversational response
-        return {
-            "success": True,
-            "response": response_text,
-            "data": None,
-            "tool_used": None
-        }
+    # Build the system prompt
+    tools_json = json.dumps(AGENT_TOOLS, indent=2)
+    system_prompt = SYSTEM_PROMPT.format(
+        tools=tools_json,
+        current_date=current_date
+    )
     
-    except Exception as e:
+    # Build conversation context
+    conversation = [system_prompt]
+    
+    # Add chat history (last 10 messages for context)
+    for msg in chat_history[-10:]:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        conversation.append(f"{role.upper()}: {content}")
+    
+    # Add current query
+    conversation.append(f"USER: {user_query}")
+    
+    # Call Gemini with retry logic
+    prompt = "\n\n".join(conversation)
+    success, response_text = _call_gemini_with_retry(model, prompt)
+    
+    if not success:
         return {
             "success": False,
-            "response": f"❌ Error processing query: {str(e)}",
+            "response": response_text,  # Contains the error message
             "data": None
         }
+    
+    # Check if response is a tool call (JSON)
+    if response_text.startswith("{") and "tool" in response_text:
+        try:
+            tool_call = json.loads(response_text)
+            tool_name = tool_call.get("tool")
+            params = tool_call.get("params", {})
+            
+            # Execute the tool
+            result = execute_tool(tool_name, params, sites_data, fetch_functions)
+            
+            # Format result for display
+            formatted_result = format_tool_result_for_display(result, tool_name)
+            
+            return {
+                "success": True,
+                "response": formatted_result,
+                "data": result,
+                "tool_used": tool_name
+            }
+        except json.JSONDecodeError:
+            # Not valid JSON, treat as conversational response
+            pass
+    
+    # Conversational response
+    return {
+        "success": True,
+        "response": response_text,
+        "data": None,
+        "tool_used": None
+    }
 
 
 def get_quick_suggestions() -> List[str]:
