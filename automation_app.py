@@ -10,6 +10,15 @@ import matplotlib.pyplot as plt
 import pyotp
 import qrcode
 import base64
+
+# AI Agent imports (optional - graceful fallback if not available)
+try:
+    from agent_tools import AGENT_TOOLS, execute_tool, format_tool_result_for_display, get_site_id_by_name
+    from agent_llm import process_user_query, get_quick_suggestions, GEMINI_AVAILABLE
+    AGENT_ENABLED = True
+except ImportError:
+    AGENT_ENABLED = False
+    GEMINI_AVAILABLE = False
 # --------------------
 # CONFIG
 # --------------------
@@ -1083,3 +1092,119 @@ if st.button("🚀 Fetch Site Data"):
     st.session_state.authenticated_sites = {}
     st.session_state.auth_timestamps = {}
     st.info("🔒 Authentication cleared. Please re-authenticate to fetch data again.")
+
+# ========================================
+# AI QUERY AGENT - SIDEBAR CHAT PANEL
+# ========================================
+if AGENT_ENABLED and st.session_state.get("totp_authenticated", False):
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("### 🤖 AI Query Agent")
+        st.caption("Ask questions about your SentinelOne data")
+        
+        # Check for Gemini API key
+        gemini_api_key = st.secrets.get("general", {}).get("gemini_api_key", "")
+        
+        if not gemini_api_key:
+            st.warning("⚠️ Gemini API key not configured. Add `gemini_api_key` to your secrets.")
+            st.code("""
+# .streamlit/secrets.toml
+[general]
+gemini_api_key = "your-api-key-here"
+            """, language="toml")
+        elif not GEMINI_AVAILABLE:
+            st.warning("⚠️ Gemini library not installed.")
+            st.code("pip install google-generativeai", language="bash")
+        else:
+            # Initialize agent chat history
+            if "agent_messages" not in st.session_state:
+                st.session_state.agent_messages = []
+            
+            # Get sites data for agent
+            if "agent_sites_data" not in st.session_state:
+                st.session_state.agent_sites_data = fetch_sites()
+            
+            # Quick suggestions
+            with st.expander("💡 Example queries"):
+                suggestions = get_quick_suggestions()
+                for suggestion in suggestions[:4]:
+                    if st.button(suggestion, key=f"sugg_{hash(suggestion)}", use_container_width=True):
+                        st.session_state.agent_input = suggestion
+                        st.rerun()
+            
+            # Chat history display
+            chat_container = st.container(height=300)
+            with chat_container:
+                if not st.session_state.agent_messages:
+                    st.info("👋 Hi! Ask me anything about your SentinelOne data.")
+                
+                for msg in st.session_state.agent_messages:
+                    if msg["role"] == "user":
+                        st.markdown(f"**You:** {msg['content']}")
+                    else:
+                        st.markdown(f"**Agent:** {msg['content']}")
+            
+            # Chat input
+            user_input = st.text_input(
+                "Ask a question...",
+                key="agent_chat_input",
+                value=st.session_state.get("agent_input", ""),
+                placeholder="e.g., Show blocklisted hashes on Etranzact"
+            )
+            
+            col_send, col_clear = st.columns(2)
+            with col_send:
+                if st.button("🚀 Send", use_container_width=True) and user_input:
+                    # Add user message
+                    st.session_state.agent_messages.append({
+                        "role": "user",
+                        "content": user_input
+                    })
+                    
+                    # Clear input
+                    st.session_state.agent_input = ""
+                    
+                    # Build fetch functions dictionary
+                    fetch_functions = {
+                        "fetch_blocklisted_hashes_for_site": fetch_blocklisted_hashes_for_site,
+                        "fetch_threats_for_site": fetch_threats_for_site,
+                        "fetch_vulnerabilities_for_site": lambda site_id: process_vulnerabilities(
+                            fetch_risks_for_site(site_id, None, None)
+                        ),
+                        "fetch_endpoints_for_site": fetch_endpoints_for_site,
+                        "fetch_agent_health_for_site": lambda site_id: process_agent_stats(
+                            fetch_all_with_cursor("agents", {"siteIds": site_id})
+                        )
+                    }
+                    
+                    # Process query
+                    with st.spinner("🔍 Querying SentinelOne..."):
+                        result = process_user_query(
+                            user_query=user_input,
+                            chat_history=st.session_state.agent_messages,
+                            sites_data=st.session_state.agent_sites_data,
+                            fetch_functions=fetch_functions,
+                            api_key=gemini_api_key,
+                            current_date=datetime.now().strftime("%Y-%m-%d")
+                        )
+                    
+                    # Add agent response
+                    st.session_state.agent_messages.append({
+                        "role": "assistant",
+                        "content": result.get("response", "Sorry, I couldn't process that query.")
+                    })
+                    
+                    st.rerun()
+            
+            with col_clear:
+                if st.button("🗑️ Clear", use_container_width=True):
+                    st.session_state.agent_messages = []
+                    st.session_state.agent_input = ""
+                    st.rerun()
+
+elif not AGENT_ENABLED and st.session_state.get("totp_authenticated", False):
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("### 🤖 AI Query Agent")
+        st.info("Agent modules not found. Ensure `agent_tools.py` and `agent_llm.py` are in the same directory.")
+
