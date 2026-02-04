@@ -439,9 +439,6 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
         # Fetch restrictions for this site (including inherited ones)
         all_data = fetch_all_with_cursor("restrictions", params)
         
-        # Debug: Show how many items were returned from API
-        st.info(f"📊 Debug: API returned {len(all_data)} hash restrictions for site")
-        
         # Parse date range for client-side filtering
         start_dt = None
         end_dt = None
@@ -456,7 +453,6 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
             except:
                 pass
         rows = []
-        seen_hashes = set()
         
         for item in all_data:
             if not isinstance(item, dict):
@@ -465,11 +461,6 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
             sha256 = item.get("sha256Value") or item.get("value")
             if not sha256:
                 continue
-            
-            # Skip duplicates
-            if sha256 in seen_hashes:
-                continue
-            seen_hashes.add(sha256)
             
             # Get updated date for client-side filtering
             updated_at_str = item.get("updatedAt", "")
