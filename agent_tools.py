@@ -4,6 +4,7 @@ This module defines the tools available to the AI agent and executes them.
 """
 
 import json
+import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any, Tuple, Optional
 
@@ -209,15 +210,32 @@ def execute_tool(
         
         # Execute based on tool name
         if tool_name == "get_blocklisted_hashes":
-            start_iso, end_iso = parse_date_range(params["start_date"], params["end_date"])
             fetch_fn = fetch_functions.get("fetch_blocklisted_hashes_for_site")
             if fetch_fn:
-                df_hashes, df_summary = fetch_fn(site_id, start_iso, end_iso)
+                df_hashes, df_summary = fetch_fn(site_id)
+                
+                # Client-side date filtering if dates provided
+                start_date = params.get("start_date")
+                end_date = params.get("end_date")
+                
+                if start_date and end_date and not df_hashes.empty and "Created At" in df_hashes.columns:
+                    try:
+                        # Convert to datetime for comparison
+                        df_hashes["Created At"] = pd.to_datetime(df_hashes["Created At"], errors="coerce")
+                        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                        df_hashes = df_hashes[
+                            (df_hashes["Created At"] >= start_dt) & 
+                            (df_hashes["Created At"] <= end_dt)
+                        ]
+                    except Exception:
+                        pass  # If date filtering fails, return all data
+                
                 return {
                     "success": True,
                     "total_count": len(df_hashes),
-                    "data": df_hashes.head(50).to_dict(orient="records"),  # Limit to 50 for display
-                    "summary": df_summary.to_dict(orient="records"),
+                    "data": df_hashes.head(50).to_dict(orient="records"),
+                    "summary": df_summary.to_dict(orient="records") if not df_summary.empty else [],
                     "message": f"Found {len(df_hashes)} blocklisted hashes for {site_name}."
                 }
         
