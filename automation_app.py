@@ -1120,16 +1120,61 @@ gemini_api_key = "your-api-key-here"
             if "agent_messages" not in st.session_state:
                 st.session_state.agent_messages = []
             
+            # Initialize pending query (for auto-send from suggestions)
+            if "agent_pending_query" not in st.session_state:
+                st.session_state.agent_pending_query = None
+            
             # Get sites data for agent
             if "agent_sites_data" not in st.session_state:
                 st.session_state.agent_sites_data = fetch_sites()
             
+            # Build fetch functions dictionary
+            fetch_functions = {
+                "fetch_blocklisted_hashes_for_site": fetch_blocklisted_hashes_for_site,
+                "fetch_threats_for_site": fetch_threats_for_site,
+                "fetch_vulnerabilities_for_site": lambda site_id: process_vulnerabilities(
+                    fetch_risks_for_site(site_id, None, None)
+                ),
+                "fetch_endpoints_for_site": fetch_endpoints_for_site,
+                "fetch_agent_health_for_site": lambda site_id: process_agent_stats(
+                    fetch_all_with_cursor("agents", {"siteIds": site_id})
+                )
+            }
+            
+            # Process pending query (from quick suggestions)
+            if st.session_state.agent_pending_query:
+                query_to_process = st.session_state.agent_pending_query
+                st.session_state.agent_pending_query = None
+                
+                # Add user message
+                st.session_state.agent_messages.append({
+                    "role": "user",
+                    "content": query_to_process
+                })
+                
+                # Process query
+                with st.spinner("🔍 Querying SentinelOne..."):
+                    result = process_user_query(
+                        user_query=query_to_process,
+                        chat_history=st.session_state.agent_messages,
+                        sites_data=st.session_state.agent_sites_data,
+                        fetch_functions=fetch_functions,
+                        api_key=gemini_api_key,
+                        current_date=datetime.now().strftime("%Y-%m-%d")
+                    )
+                
+                # Add agent response
+                st.session_state.agent_messages.append({
+                    "role": "assistant",
+                    "content": result.get("response", "Sorry, I couldn't process that query.")
+                })
+            
             # Quick suggestions
-            with st.expander("💡 Example queries"):
+            with st.expander("💡 Example queries", expanded=False):
                 suggestions = get_quick_suggestions()
                 for suggestion in suggestions[:4]:
                     if st.button(suggestion, key=f"sugg_{hash(suggestion)}", use_container_width=True):
-                        st.session_state.agent_input = suggestion
+                        st.session_state.agent_pending_query = suggestion
                         st.rerun()
             
             # Chat history display
@@ -1148,58 +1193,19 @@ gemini_api_key = "your-api-key-here"
             user_input = st.text_input(
                 "Ask a question...",
                 key="agent_chat_input",
-                value=st.session_state.get("agent_input", ""),
                 placeholder="e.g., Show blocklisted hashes on Etranzact"
             )
             
             col_send, col_clear = st.columns(2)
             with col_send:
                 if st.button("🚀 Send", use_container_width=True) and user_input:
-                    # Add user message
-                    st.session_state.agent_messages.append({
-                        "role": "user",
-                        "content": user_input
-                    })
-                    
-                    # Clear input
-                    st.session_state.agent_input = ""
-                    
-                    # Build fetch functions dictionary
-                    fetch_functions = {
-                        "fetch_blocklisted_hashes_for_site": fetch_blocklisted_hashes_for_site,
-                        "fetch_threats_for_site": fetch_threats_for_site,
-                        "fetch_vulnerabilities_for_site": lambda site_id: process_vulnerabilities(
-                            fetch_risks_for_site(site_id, None, None)
-                        ),
-                        "fetch_endpoints_for_site": fetch_endpoints_for_site,
-                        "fetch_agent_health_for_site": lambda site_id: process_agent_stats(
-                            fetch_all_with_cursor("agents", {"siteIds": site_id})
-                        )
-                    }
-                    
-                    # Process query
-                    with st.spinner("🔍 Querying SentinelOne..."):
-                        result = process_user_query(
-                            user_query=user_input,
-                            chat_history=st.session_state.agent_messages,
-                            sites_data=st.session_state.agent_sites_data,
-                            fetch_functions=fetch_functions,
-                            api_key=gemini_api_key,
-                            current_date=datetime.now().strftime("%Y-%m-%d")
-                        )
-                    
-                    # Add agent response
-                    st.session_state.agent_messages.append({
-                        "role": "assistant",
-                        "content": result.get("response", "Sorry, I couldn't process that query.")
-                    })
-                    
+                    st.session_state.agent_pending_query = user_input
                     st.rerun()
             
             with col_clear:
                 if st.button("🗑️ Clear", use_container_width=True):
                     st.session_state.agent_messages = []
-                    st.session_state.agent_input = ""
+                    st.session_state.agent_pending_query = None
                     st.rerun()
 
 elif not AGENT_ENABLED and st.session_state.get("totp_authenticated", False):
