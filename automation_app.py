@@ -423,20 +423,32 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
     """
     Fetch blocklisted hashes (restrictions) for a specific site within a date range.
     Uses the /restrictions endpoint with type=black_hash for hash items.
-    Returns site-specific restrictions PLUS inherited group/account level restrictions.
+    Returns restrictions for all scopes: Site, Group, Account, and Global.
     """
     try:
-        # Fetch hash restrictions for this specific site
-        # siteIds = filter to this site
-        # includeParents = also get group/account level restrictions that apply to this site
+        # First, get the site info to retrieve its group ID
+        site_info = fetch_all_with_cursor("sites", {"siteIds": site_id})
+        group_id = None
+        if site_info and isinstance(site_info, list) and len(site_info) > 0:
+            # Get the first group ID from the site's groups
+            groups = site_info[0].get("groupIds") or []
+            if groups:
+                group_id = groups[0] if isinstance(groups, list) else groups
+        
+        # Fetch hash restrictions including all scope levels:
+        # Site, Group, Account, Global
         params = {
             "limit": 1000,
             "type": "black_hash",      # Filter for hash blocklist items only
             "siteIds": site_id,        # Filter to this specific site
-            "includeParents": "true"   # Include inherited group/account level restrictions
+            "includeParents": "true"   # Include inherited group/account/global level restrictions
         }
         
-        # Fetch restrictions for this site (including inherited ones)
+        # Add groupIds if we found the group
+        if group_id:
+            params["groupIds"] = group_id
+        
+        # Fetch restrictions for this site (including all parent scopes)
         all_data = fetch_all_with_cursor("restrictions", params)
         
         # Parse date range for client-side filtering
