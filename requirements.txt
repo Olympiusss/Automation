@@ -5,3 +5,4 @@ matplotlib
 pyotp
 qrcode
 xlsxwriter
+google-generativeai
