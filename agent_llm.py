@@ -40,35 +40,48 @@ MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
 
 
-# System prompt for the agent
-SYSTEM_PROMPT = """You are a SentinelOne security data assistant. You help users query security data from the SentinelOne platform.
+# System prompt for the agent - AUTONOMOUS MODE
+SYSTEM_PROMPT = """You are an AUTONOMOUS SentinelOne security data assistant. You EXECUTE queries immediately without explanation.
 
-You have access to the following tools to fetch data:
-
+AVAILABLE TOOLS:
 {tools}
 
-INSTRUCTIONS:
-1. When the user asks for security data, identify which tool to use based on their request.
-2. Extract the required parameters from their query (site name, dates, etc.).
-3. For dates, convert natural language to YYYY-MM-DD format:
-   - "January 5th, 2025" → "2025-01-05"
-   - "last week" → calculate the actual dates
-   - "this month" → from the 1st to today
-4. If you're unsure about the site name or dates, ask for clarification.
-5. If the user doesn't specify a site, use list_available_sites first to show them options.
+AVAILABLE SITES: Etranzact, MU, Qore, Upfront, RoutePay, Interswitch, NIBSS, Leadway, Default site
+(Use list_available_sites to get the current list if unsure)
 
-RESPONSE FORMAT:
-When you need to call a tool, respond with ONLY a JSON object like this:
-{{"tool": "tool_name", "params": {{"param1": "value1", "param2": "value2"}}}}
+RULES - FOLLOW EXACTLY:
+1. NEVER explain what you're going to do - just DO IT
+2. NEVER narrate your actions or thinking
+3. Respond with ONLY a valid JSON object - no text before or after
+4. If date range not specified, use last 30 days from today
+5. If site not specified but context is clear, make best guess
+6. Convert all dates to YYYY-MM-DD format automatically
+7. Today's date is: {current_date}
 
-When you need to ask a clarifying question or respond conversationally, just respond in plain text.
+DATE CONVERSION EXAMPLES:
+- "last week" = 7 days ago to today
+- "this month" = 1st of current month to today
+- "January 2025" = 2025-01-01 to 2025-01-31
+- "yesterday" = yesterday's date
+- No date mentioned = last 30 days
 
-IMPORTANT:
-- Always confirm the site name matches an available site
-- Always ensure dates are in YYYY-MM-DD format
-- Be helpful and explain what data you're fetching
+OUTPUT FORMAT - ALWAYS USE THIS EXACT FORMAT:
+{{"tool": "tool_name", "params": {{"param1": "value1"}}}}
 
-Current date: {current_date}
+EXAMPLES:
+User: "Show threats on Etranzact"
+{{"tool": "get_threats", "params": {{"site_name": "Etranzact", "start_date": "2026-01-05", "end_date": "2026-02-04"}}}}
+
+User: "Critical vulns on Qore"
+{{"tool": "get_vulnerabilities", "params": {{"site_name": "Qore", "severity": "Critical"}}}}
+
+User: "What sites are available"
+{{"tool": "list_available_sites", "params": {{}}}}
+
+User: "Blocklisted hashes on MU from Jan to Feb 2025"
+{{"tool": "get_blocklisted_hashes", "params": {{"site_name": "MU", "start_date": "2025-01-01", "end_date": "2025-02-28"}}}}
+
+CRITICAL: Output ONLY the JSON object. No explanations. No commentary. Just JSON.
 """
 
 
@@ -260,10 +273,11 @@ def process_user_query(
     if not success:
         return {"success": False, "response": response_text, "data": None}
     
-    # Check if response is a tool call (JSON)
-    if response_text.startswith("{") and "tool" in response_text:
+    # Try to extract and execute a tool call from response
+    # Look for JSON anywhere in the response (LLM might add some text)
+    if "{" in response_text and "tool" in response_text:
         try:
-            # Extract JSON if there's extra text
+            # Find and extract JSON object
             json_start = response_text.find("{")
             json_end = response_text.rfind("}") + 1
             json_str = response_text[json_start:json_end]
@@ -272,22 +286,23 @@ def process_user_query(
             tool_name = tool_call.get("tool")
             params = tool_call.get("params", {})
             
-            # Execute the tool
-            result = execute_tool(tool_name, params, sites_data, fetch_functions)
-            
-            # Format result for display
-            formatted_result = format_tool_result_for_display(result, tool_name)
-            
-            return {
-                "success": True,
-                "response": formatted_result,
-                "data": result,
-                "tool_used": tool_name
-            }
+            if tool_name:
+                # Execute the tool
+                result = execute_tool(tool_name, params, sites_data, fetch_functions)
+                
+                # Format result for display
+                formatted_result = format_tool_result_for_display(result, tool_name)
+                
+                return {
+                    "success": True,
+                    "response": formatted_result,
+                    "data": result,
+                    "tool_used": tool_name
+                }
         except json.JSONDecodeError:
             pass
     
-    # Conversational response
+    # Conversational response (only if no tool was executed)
     return {
         "success": True,
         "response": response_text,
