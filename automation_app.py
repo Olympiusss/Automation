@@ -14,10 +14,11 @@ import base64
 # AI Agent imports (optional - graceful fallback if not available)
 try:
     from agent_tools import AGENT_TOOLS, execute_tool, format_tool_result_for_display, get_site_id_by_name
-    from agent_llm import process_user_query, get_quick_suggestions, GEMINI_AVAILABLE
+    from agent_llm import process_user_query, get_quick_suggestions, get_available_provider, GROQ_AVAILABLE, GEMINI_AVAILABLE
     AGENT_ENABLED = True
 except ImportError:
     AGENT_ENABLED = False
+    GROQ_AVAILABLE = False
     GEMINI_AVAILABLE = False
 # --------------------
 # CONFIG
@@ -1102,20 +1103,22 @@ if AGENT_ENABLED and st.session_state.get("totp_authenticated", False):
         st.markdown("### 🤖 AI Query Agent")
         st.caption("Ask questions about your SentinelOne data")
         
-        # Check for Gemini API key
-        gemini_api_key = st.secrets.get("general", {}).get("gemini_api_key", "")
+        # Auto-detect available provider
+        provider, api_key = get_available_provider(st.secrets)
         
-        if not gemini_api_key:
-            st.warning("⚠️ Gemini API key not configured. Add `gemini_api_key` to your secrets.")
+        if provider is None:
+            st.warning(f"⚠️ {api_key}")  # api_key contains the error message
             st.code("""
 # .streamlit/secrets.toml
 [general]
-gemini_api_key = "your-api-key-here"
+groq_api_key = "your-groq-key"
+# OR
+gemini_api_key = "your-gemini-key"
             """, language="toml")
-        elif not GEMINI_AVAILABLE:
-            st.warning("⚠️ Gemini library not installed.")
-            st.code("pip install google-generativeai", language="bash")
+            st.info("💡 Get free Groq API key at: console.groq.com")
         else:
+            st.caption(f"Using: {provider.upper()}")
+            
             # Initialize agent chat history
             if "agent_messages" not in st.session_state:
                 st.session_state.agent_messages = []
@@ -1141,7 +1144,7 @@ gemini_api_key = "your-api-key-here"
                 )
             }
             
-            # Process pending query (from quick suggestions)
+            # Process pending query (from quick suggestions or send button)
             if st.session_state.agent_pending_query:
                 query_to_process = st.session_state.agent_pending_query
                 st.session_state.agent_pending_query = None
@@ -1159,8 +1162,9 @@ gemini_api_key = "your-api-key-here"
                         chat_history=st.session_state.agent_messages,
                         sites_data=st.session_state.agent_sites_data,
                         fetch_functions=fetch_functions,
-                        api_key=gemini_api_key,
-                        current_date=datetime.now().strftime("%Y-%m-%d")
+                        api_key=api_key,
+                        current_date=datetime.now().strftime("%Y-%m-%d"),
+                        provider=provider
                     )
                 
                 # Add agent response
@@ -1213,4 +1217,5 @@ elif not AGENT_ENABLED and st.session_state.get("totp_authenticated", False):
         st.markdown("---")
         st.markdown("### 🤖 AI Query Agent")
         st.info("Agent modules not found. Ensure `agent_tools.py` and `agent_llm.py` are in the same directory.")
+
 

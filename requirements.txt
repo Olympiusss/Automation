@@ -6,3 +6,4 @@ pyotp
 qrcode
 xlsxwriter
 google-generativeai
+groq

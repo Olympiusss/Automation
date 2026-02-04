@@ -1,26 +1,43 @@
 """
-SentinelOne AI Query Agent - LLM Integration (Gemini)
-This module handles the connection to Google Gemini for natural language processing.
+SentinelOne AI Query Agent - LLM Integration (Multi-Provider)
+This module handles the connection to LLM providers for natural language processing.
+Supports: Groq (default), Gemini, OpenAI
 """
 
 import json
 import os
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
-# Gemini imports
+# Provider imports
+GROQ_AVAILABLE = False
+GEMINI_AVAILABLE = False
+OPENAI_AVAILABLE = False
+
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    pass
+
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
 except ImportError:
-    GEMINI_AVAILABLE = False
+    pass
+
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    pass
 
 from agent_tools import AGENT_TOOLS, execute_tool, format_tool_result_for_display
 
 
 # Rate limiting configuration
 MAX_RETRIES = 3
-RETRY_DELAY_SECONDS = 5  # Wait 5 seconds between retries
+RETRY_DELAY_SECONDS = 2
 
 
 # System prompt for the agent
@@ -55,85 +72,129 @@ Current date: {current_date}
 """
 
 
-def configure_gemini(api_key: str) -> bool:
-    """
-    Configure the Gemini API client.
+def _call_groq(api_key: str, prompt: str, system_prompt: str) -> Tuple[bool, str]:
+    """Call Groq API with retry logic."""
+    try:
+        client = Groq(api_key=api_key)
+        
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",  # Fast and capable
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=2048
+                )
+                return True, response.choices[0].message.content.strip()
+            
+            except Exception as e:
+                error_str = str(e).lower()
+                if "rate" in error_str or "429" in str(e) or "limit" in error_str:
+                    if attempt < MAX_RETRIES - 1:
+                        time.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
+                        continue
+                    return False, "⏳ Rate limit reached. Please wait a moment and try again."
+                elif "api" in error_str and "key" in error_str:
+                    return False, "🔑 Invalid Groq API key. Please check your API key."
+                else:
+                    return False, f"❌ Error: {str(e)}"
+        
+        return False, "❌ Failed after retries."
     
-    Args:
-        api_key: Google Gemini API key
-    
-    Returns:
-        True if configuration successful, False otherwise
-    """
-    if not GEMINI_AVAILABLE:
-        return False
-    
+    except Exception as e:
+        return False, f"❌ Error initializing Groq: {str(e)}"
+
+
+def _call_gemini(api_key: str, prompt: str, system_prompt: str) -> Tuple[bool, str]:
+    """Call Gemini API with retry logic."""
     try:
         genai.configure(api_key=api_key)
-        return True
-    except Exception as e:
-        print(f"Error configuring Gemini: {e}")
-        return False
-
-
-def get_gemini_model(model_name: str = "gemini-2.0-flash"):
-    """
-    Get a Gemini generative model instance.
-    
-    Args:
-        model_name: Name of the model to use
-    
-    Returns:
-        GenerativeModel instance or None if unavailable
-    """
-    if not GEMINI_AVAILABLE:
-        return None
-    
-    try:
-        return genai.GenerativeModel(model_name)
-    except Exception as e:
-        print(f"Error getting Gemini model: {e}")
-        return None
-
-
-def _call_gemini_with_retry(model, prompt: str, max_retries: int = MAX_RETRIES) -> tuple:
-    """
-    Call Gemini API with retry logic for rate limits.
-    
-    Args:
-        model: Gemini model instance
-        prompt: The prompt to send
-        max_retries: Maximum number of retries
-    
-    Returns:
-        Tuple of (success: bool, response_text: str or error_message: str)
-    """
-    for attempt in range(max_retries):
-        try:
-            response = model.generate_content(prompt)
-            return True, response.text.strip()
+        model = genai.GenerativeModel("gemini-2.0-flash")
         
-        except Exception as e:
-            error_str = str(e).lower()
+        full_prompt = f"{system_prompt}\n\n{prompt}"
+        
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = model.generate_content(full_prompt)
+                return True, response.text.strip()
             
-            # Check if it's a rate limit error (429)
-            if "429" in str(e) or "quota" in error_str or "rate" in error_str:
-                if attempt < max_retries - 1:
-                    wait_time = RETRY_DELAY_SECONDS * (attempt + 1)  # Exponential backoff
-                    time.sleep(wait_time)
-                    continue
+            except Exception as e:
+                error_str = str(e).lower()
+                if "429" in str(e) or "quota" in error_str or "rate" in error_str:
+                    if attempt < MAX_RETRIES - 1:
+                        time.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
+                        continue
+                    return False, "⏳ Rate limit reached. Please wait a moment and try again."
                 else:
-                    return False, "⏳ Rate limit reached. The free tier has 15 requests/minute. Please wait a moment and try again."
-            
-            # Check for API key errors
-            elif "api key" in error_str or "invalid" in error_str or "401" in str(e):
-                return False, "🔑 Invalid API key. Please check your Gemini API key in Streamlit secrets."
-            
-            # Other errors
-            else:
-                return False, f"❌ Error: {str(e)}"
+                    return False, f"❌ Error: {str(e)}"
+        
+        return False, "❌ Failed after retries."
     
-    return False, "❌ Failed after multiple retries. Please try again later."
+    except Exception as e:
+        return False, f"❌ Error: {str(e)}"
+
+
+def _call_openai(api_key: str, prompt: str, system_prompt: str) -> Tuple[bool, str]:
+    """Call OpenAI API with retry logic."""
+    try:
+        client = OpenAI(api_key=api_key)
+        
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=2048
+                )
+                return True, response.choices[0].message.content.strip()
+            
+            except Exception as e:
+                error_str = str(e).lower()
+                if "rate" in error_str or "429" in str(e):
+                    if attempt < MAX_RETRIES - 1:
+                        time.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
+                        continue
+                    return False, "⏳ Rate limit reached. Please wait a moment and try again."
+                else:
+                    return False, f"❌ Error: {str(e)}"
+        
+        return False, "❌ Failed after retries."
+    
+    except Exception as e:
+        return False, f"❌ Error: {str(e)}"
+
+
+def get_available_provider(secrets: dict) -> Tuple[str, str]:
+    """
+    Determine which LLM provider to use based on available API keys and libraries.
+    
+    Returns:
+        Tuple of (provider_name, api_key) or (None, error_message)
+    """
+    general = secrets.get("general", {})
+    
+    # Priority: Groq > Gemini > OpenAI
+    if GROQ_AVAILABLE and general.get("groq_api_key"):
+        return "groq", general.get("groq_api_key")
+    
+    if GEMINI_AVAILABLE and general.get("gemini_api_key"):
+        return "gemini", general.get("gemini_api_key")
+    
+    if OPENAI_AVAILABLE and general.get("openai_api_key"):
+        return "openai", general.get("openai_api_key")
+    
+    # No provider available - return helpful error
+    if not GROQ_AVAILABLE and not GEMINI_AVAILABLE and not OPENAI_AVAILABLE:
+        return None, "No LLM library installed. Run: pip install groq"
+    
+    return None, "No API key configured. Add groq_api_key to secrets."
 
 
 def process_user_query(
@@ -142,7 +203,8 @@ def process_user_query(
     sites_data: list,
     fetch_functions: Dict[str, callable],
     api_key: str,
-    current_date: str
+    current_date: str,
+    provider: str = "groq"
 ) -> Dict[str, Any]:
     """
     Process a user query through the AI agent.
@@ -152,37 +214,13 @@ def process_user_query(
         chat_history: Previous messages in the conversation
         sites_data: List of available sites
         fetch_functions: Dictionary of fetch functions from automation_app
-        api_key: Gemini API key
+        api_key: LLM API key
         current_date: Current date for context
+        provider: Which LLM provider to use (groq, gemini, openai)
     
     Returns:
         Dictionary with response and any data fetched
     """
-    # Check if Gemini is available
-    if not GEMINI_AVAILABLE:
-        return {
-            "success": False,
-            "response": "❌ Gemini library not installed. Please run: pip install google-generativeai",
-            "data": None
-        }
-    
-    # Configure Gemini
-    if not configure_gemini(api_key):
-        return {
-            "success": False,
-            "response": "❌ Failed to configure Gemini API. Check your API key.",
-            "data": None
-        }
-    
-    # Get model
-    model = get_gemini_model()
-    if not model:
-        return {
-            "success": False,
-            "response": "❌ Failed to initialize Gemini model.",
-            "data": None
-        }
-    
     # Build the system prompt
     tools_json = json.dumps(AGENT_TOOLS, indent=2)
     system_prompt = SYSTEM_PROMPT.format(
@@ -190,33 +228,47 @@ def process_user_query(
         current_date=current_date
     )
     
-    # Build conversation context
-    conversation = [system_prompt]
-    
-    # Add chat history (last 10 messages for context)
+    # Build conversation context for the user prompt
+    conversation_parts = []
     for msg in chat_history[-10:]:
         role = msg.get("role", "user")
         content = msg.get("content", "")
-        conversation.append(f"{role.upper()}: {content}")
+        conversation_parts.append(f"{role.upper()}: {content}")
     
-    # Add current query
-    conversation.append(f"USER: {user_query}")
+    conversation_parts.append(f"USER: {user_query}")
+    prompt = "\n\n".join(conversation_parts)
     
-    # Call Gemini with retry logic
-    prompt = "\n\n".join(conversation)
-    success, response_text = _call_gemini_with_retry(model, prompt)
+    # Call the appropriate provider
+    if provider == "groq":
+        if not GROQ_AVAILABLE:
+            return {"success": False, "response": "❌ Groq library not installed. Run: pip install groq", "data": None}
+        success, response_text = _call_groq(api_key, prompt, system_prompt)
+    
+    elif provider == "gemini":
+        if not GEMINI_AVAILABLE:
+            return {"success": False, "response": "❌ Gemini library not installed.", "data": None}
+        success, response_text = _call_gemini(api_key, prompt, system_prompt)
+    
+    elif provider == "openai":
+        if not OPENAI_AVAILABLE:
+            return {"success": False, "response": "❌ OpenAI library not installed.", "data": None}
+        success, response_text = _call_openai(api_key, prompt, system_prompt)
+    
+    else:
+        return {"success": False, "response": f"❌ Unknown provider: {provider}", "data": None}
     
     if not success:
-        return {
-            "success": False,
-            "response": response_text,  # Contains the error message
-            "data": None
-        }
+        return {"success": False, "response": response_text, "data": None}
     
     # Check if response is a tool call (JSON)
     if response_text.startswith("{") and "tool" in response_text:
         try:
-            tool_call = json.loads(response_text)
+            # Extract JSON if there's extra text
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
+            json_str = response_text[json_start:json_end]
+            
+            tool_call = json.loads(json_str)
             tool_name = tool_call.get("tool")
             params = tool_call.get("params", {})
             
@@ -233,7 +285,6 @@ def process_user_query(
                 "tool_used": tool_name
             }
         except json.JSONDecodeError:
-            # Not valid JSON, treat as conversational response
             pass
     
     # Conversational response
@@ -246,12 +297,7 @@ def process_user_query(
 
 
 def get_quick_suggestions() -> List[str]:
-    """
-    Get a list of quick query suggestions for the user.
-    
-    Returns:
-        List of example queries
-    """
+    """Get a list of quick query suggestions for the user."""
     return [
         "What sites are available?",
         "Show me blocklisted hashes on Etranzact from Jan 1 to Jan 31, 2025",
