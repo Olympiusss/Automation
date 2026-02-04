@@ -423,32 +423,19 @@ def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None):
     """
     Fetch blocklisted hashes (restrictions) for a specific site within a date range.
     Uses the /restrictions endpoint with type=black_hash for hash items.
-    Returns restrictions for all scopes: Site, Group, Account, and Global.
+    Returns restrictions for all scopes: Site, Group, and Account.
     """
     try:
-        # First, get the site info to retrieve its group ID
-        site_info = fetch_all_with_cursor("sites", {"siteIds": site_id})
-        group_id = None
-        if site_info and isinstance(site_info, list) and len(site_info) > 0:
-            # Get the first group ID from the site's groups
-            groups = site_info[0].get("groupIds") or []
-            if groups:
-                group_id = groups[0] if isinstance(groups, list) else groups
-        
-        # Fetch hash restrictions including all scope levels:
-        # Site, Group, Account, Global
+        # Single API call to fetch hash restrictions for Site, Group, and Account scopes
         params = {
             "limit": 1000,
-            "type": "black_hash",      # Filter for hash blocklist items only
-            "siteIds": site_id,        # Filter to this specific site
-            "includeParents": "true"   # Include inherited group/account/global level restrictions
+            "type": "black_hash",        # Filter for hash blocklist items only
+            "siteIds": site_id,          # Site scope
+            "includeParents": "true",    # Include Group and Account scope restrictions
+            "includeChildren": "true"    # Include child restrictions
         }
         
-        # Add groupIds if we found the group
-        if group_id:
-            params["groupIds"] = group_id
-        
-        # Fetch restrictions for this site (including all parent scopes)
+        # Fetch all restrictions in one call
         all_data = fetch_all_with_cursor("restrictions", params)
         
         # Parse date range for client-side filtering
