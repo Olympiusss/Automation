@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -10,16 +11,6 @@ import matplotlib.pyplot as plt
 import pyotp
 import qrcode
 import base64
-
-# AI Agent imports (optional - graceful fallback if not available)
-try:
-    from agent_tools import AGENT_TOOLS, execute_tool, format_tool_result_for_display, get_site_id_by_name
-    from agent_llm import process_user_query, get_quick_suggestions, get_available_provider, GROQ_AVAILABLE, GEMINI_AVAILABLE
-    AGENT_ENABLED = True
-except ImportError:
-    AGENT_ENABLED = False
-    GROQ_AVAILABLE = False
-    GEMINI_AVAILABLE = False
 # --------------------
 # CONFIG
 # --------------------
@@ -429,79 +420,104 @@ def process_agent_stats(endpoints):
 # --------------------
 # Robust Blocklisted Hashes
 # --------------------
-def fetch_blocklisted_hashes_for_site(site_id): 
+def fetch_blocklisted_hashes_for_site(site_id, start_iso=None, end_iso=None): 
+    """
+    Fetch blocklisted hashes (restrictions) for a specific site within a date range.
+    Uses the /restrictions endpoint with type=black_hash for hash items.
+    Returns restrictions for all scopes: Site, Group, and Account.
+    """
     try:
-        # Pass siteIds to filter on the server side
-        data = fetch_all_with_cursor(
-            "restrictions",
-            {"limit": 1000, "siteIds": site_id}
-        )
+        # Single API call to fetch hash restrictions for Site, Group, and Account scopes
+        params = {
+            "limit": 1000,
+            "type": "black_hash",        # Filter for hash blocklist items only
+            "siteIds": site_id,          # Site scope
+            "includeParents": "true",    # Include Group and Account scope restrictions
+            "includeChildren": "true"    # Include child restrictions
+        }
+        
+        # Fetch all restrictions in one call
+        all_data = fetch_all_with_cursor("restrictions", params)
+        
+        # Parse date range for client-side filtering
+        start_dt = None
+        end_dt = None
+        if start_iso:
+            try:
+                start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+            except:
+                pass
+        if end_iso:
+            try:
+                end_dt = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+            except:
+                pass
         rows = []
-        for item in data:
+        
+        for item in all_data:
             if not isinstance(item, dict):
                 continue
-            # Only hash restrictions
-            sha256 = item.get("sha256Value")
+            # Get hash value (could be sha256Value or value field)
+            sha256 = item.get("sha256Value") or item.get("value")
             if not sha256:
                 continue
-            # ----------------------------------------
-            # Client-side filtering (Robust)
-            # ----------------------------------------
-            # The API might ignore siteIds param, so we filter manually.
-            scope = item.get("scope", {})
             
-            # Check for Site IDs
-            # API might return ["id1", "id2"] or [{"id": "id1"}, ...]
-            raw_site_ids = scope.get("siteIds", [])
-            if not isinstance(raw_site_ids, list):
-                raw_site_ids = []
-            # Normalize to list of strings
-            valid_site_ids = []
-            for s in raw_site_ids:
-                if isinstance(s, dict):
-                    sid = s.get("id")
-                    if sid:
-                        valid_site_ids.append(str(sid))
-                else:
-                    valid_site_ids.append(str(s))
+            # Get updated date for client-side filtering
+            updated_at_str = item.get("updatedAt", "")
             
-            # Check if our site_id is in the allowed list
-            # Note: If valid_site_ids is empty, it might be a global/account restriction.
-            # However, user wants "strictly for a specific client".
-            # Usually strict means: listed in siteIds.
-            # If it's a global ban, it applies to the site too, but the user might only want site-level blocks?
-            # actually, if the hash is blocklisted for the site, it should appear.
-            # If the scope is Account or Global, it effectively applies to the site. 
-            # But the UI "Blocklisted Hashes" usually separates explicit site blocks.
-            # Let's check matching logic:
-            # If site_id is in valid_site_ids -> MATCH.
-            # If scope is "tenant" (global)? -> checks 'tenant': True usually.
+            # Client-side date filtering on updatedAt
+            if start_dt or end_dt:
+                if updated_at_str:
+                    try:
+                        updated_dt = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+                        if start_dt and updated_dt < start_dt:
+                            continue
+                        if end_dt and updated_dt > end_dt:
+                            continue
+                    except:
+                        pass  # If date parsing fails, include the item
             
-            is_match = str(site_id) in valid_site_ids
+            # Get other fields
+            os_type = item.get("osType", "Unknown")
+            description = item.get("description", "")
+            source = item.get("source", "Unknown")
+            created_at = item.get("createdAt", "")
+            scope_name = item.get("scopeName", "")
+            user_name = item.get("userName", "")
+            imported = item.get("imported", False)
+            not_recommended = item.get("notRecommended", "")
             
-            # If not explicitly matched by site ID, check if it's a global/tenant scope which would include this site?
-            # The user complained about "total blocklisted hash for all clients" (502).
-            # This implies they see hashes from OTHER sites.
-            # So we should be STRICT. Only include if site_id is explicitly in siteIds.
-            
-            if is_match:
-                rows.append({
-                    "Hash Value": sha256,
-                    "OS Type": item.get("osType", "Unknown")
-                })
-        df_hashes = pd.DataFrame(rows, columns=["Hash Value", "OS Type"])
+            rows.append({
+                "Hash Value": sha256,
+                "OS Type": os_type,
+                "Description": description,
+                "Source": source,
+                "Last Updated": updated_at_str,
+                "Created At": created_at,
+                "Scope": scope_name,
+                "User": user_name,
+                "Imported": "Yes" if imported else "No",
+                "Not Recommended": not_recommended if not_recommended else "N/A"
+            })
+        df_hashes = pd.DataFrame(rows)
+        
         if df_hashes.empty:
+            df_hashes = pd.DataFrame(columns=[
+                "Hash Value", "OS Type", "Description", "Source", 
+                "Last Updated", "Created At", "Scope", "User", "Imported", "Not Recommended"
+            ])
             return (
                 df_hashes,
                 pd.DataFrame(columns=["OS Type", "Count"])
             )
-        # OS distribution
+        # OS distribution summary
         df_hash_summary = (
             df_hashes
             .groupby("OS Type")
             .size()
             .reset_index(name="Count")
         )
+        
         # Total row
         df_hash_summary.loc[len(df_hash_summary.index)] = [
             "Total",
@@ -511,7 +527,10 @@ def fetch_blocklisted_hashes_for_site(site_id):
     except Exception as e:
         st.error(f"Error fetching blocklisted hashes: {e}")
         return (
-            pd.DataFrame(columns=["Hash Value", "OS Type"]),
+            pd.DataFrame(columns=[
+                "Hash Value", "OS Type", "Description", "Source",
+                "Last Updated", "Created At", "Scope", "User", "Imported", "Not Recommended"
+            ]),
             pd.DataFrame(columns=["OS Type", "Count"])
         )
 # --------------------
@@ -967,7 +986,7 @@ if st.button("🚀 Fetch Site Data"):
             endpoints = fetch_endpoints_for_site(site_id)
             threats = fetch_threats_for_site(site_id, start_iso, end_iso)
             risks = fetch_risks_for_site(site_id, start_iso, end_iso)
-            df_hashes, df_hash_summary = fetch_blocklisted_hashes_for_site(site_id)
+            df_hashes, df_hash_summary = fetch_blocklisted_hashes_for_site(site_id, start_iso, end_iso)
         summary = build_site_summary(
           site_name,
           threats,
@@ -1093,129 +1112,3 @@ if st.button("🚀 Fetch Site Data"):
     st.session_state.authenticated_sites = {}
     st.session_state.auth_timestamps = {}
     st.info("🔒 Authentication cleared. Please re-authenticate to fetch data again.")
-
-# ========================================
-# AI QUERY AGENT - SIDEBAR CHAT PANEL
-# ========================================
-if AGENT_ENABLED and st.session_state.get("totp_authenticated", False):
-    with st.sidebar:
-        st.markdown("---")
-        st.markdown("### 🤖 AI Query Agent")
-        st.caption("Ask questions about your SentinelOne data")
-        
-        # Auto-detect available provider
-        provider, api_key = get_available_provider(st.secrets)
-        
-        if provider is None:
-            st.warning(f"⚠️ {api_key}")  # api_key contains the error message
-            st.code("""
-# .streamlit/secrets.toml
-[general]
-groq_api_key = "your-groq-key"
-# OR
-gemini_api_key = "your-gemini-key"
-            """, language="toml")
-            st.info("💡 Get free Groq API key at: console.groq.com")
-        else:
-            st.caption(f"Using: {provider.upper()}")
-            
-            # Initialize agent chat history
-            if "agent_messages" not in st.session_state:
-                st.session_state.agent_messages = []
-            
-            # Initialize pending query (for auto-send from suggestions)
-            if "agent_pending_query" not in st.session_state:
-                st.session_state.agent_pending_query = None
-            
-            # Get sites data for agent
-            if "agent_sites_data" not in st.session_state:
-                st.session_state.agent_sites_data = fetch_sites()
-            
-            # Build fetch functions dictionary
-            fetch_functions = {
-                "fetch_blocklisted_hashes_for_site": fetch_blocklisted_hashes_for_site,
-                "fetch_threats_for_site": fetch_threats_for_site,
-                "fetch_vulnerabilities_for_site": lambda site_id: process_vulnerabilities(
-                    fetch_risks_for_site(site_id, None, None)
-                ),
-                "fetch_endpoints_for_site": fetch_endpoints_for_site,
-                "fetch_agent_health_for_site": lambda site_id: process_agent_stats(
-                    fetch_all_with_cursor("agents", {"siteIds": site_id})
-                )
-            }
-            
-            # Process pending query (from quick suggestions or send button)
-            if st.session_state.agent_pending_query:
-                query_to_process = st.session_state.agent_pending_query
-                st.session_state.agent_pending_query = None
-                
-                # Add user message
-                st.session_state.agent_messages.append({
-                    "role": "user",
-                    "content": query_to_process
-                })
-                
-                # Process query
-                with st.spinner("🔍 Querying SentinelOne..."):
-                    result = process_user_query(
-                        user_query=query_to_process,
-                        chat_history=st.session_state.agent_messages,
-                        sites_data=st.session_state.agent_sites_data,
-                        fetch_functions=fetch_functions,
-                        api_key=api_key,
-                        current_date=datetime.now().strftime("%Y-%m-%d"),
-                        provider=provider
-                    )
-                
-                # Add agent response
-                st.session_state.agent_messages.append({
-                    "role": "assistant",
-                    "content": result.get("response", "Sorry, I couldn't process that query.")
-                })
-            
-            # Quick suggestions
-            with st.expander("💡 Example queries", expanded=False):
-                suggestions = get_quick_suggestions()
-                for suggestion in suggestions[:4]:
-                    if st.button(suggestion, key=f"sugg_{hash(suggestion)}", use_container_width=True):
-                        st.session_state.agent_pending_query = suggestion
-                        st.rerun()
-            
-            # Chat history display
-            chat_container = st.container(height=300)
-            with chat_container:
-                if not st.session_state.agent_messages:
-                    st.info("👋 Hi! Ask me anything about your SentinelOne data.")
-                
-                for msg in st.session_state.agent_messages:
-                    if msg["role"] == "user":
-                        st.markdown(f"**You:** {msg['content']}")
-                    else:
-                        st.markdown(f"**Agent:** {msg['content']}")
-            
-            # Chat input
-            user_input = st.text_input(
-                "Ask a question...",
-                key="agent_chat_input",
-                placeholder="e.g., Show blocklisted hashes on Etranzact"
-            )
-            
-            col_send, col_clear = st.columns(2)
-            with col_send:
-                if st.button("🚀 Send", use_container_width=True) and user_input:
-                    st.session_state.agent_pending_query = user_input
-                    st.rerun()
-            
-            with col_clear:
-                if st.button("🗑️ Clear", use_container_width=True):
-                    st.session_state.agent_messages = []
-                    st.session_state.agent_pending_query = None
-                    st.rerun()
-
-elif not AGENT_ENABLED and st.session_state.get("totp_authenticated", False):
-    with st.sidebar:
-        st.markdown("---")
-        st.markdown("### 🤖 AI Query Agent")
-        st.info("Agent modules not found. Ensure `agent_tools.py` and `agent_llm.py` are in the same directory.")
-
-
