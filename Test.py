@@ -431,11 +431,15 @@ def process_agent_stats(endpoints):
 # --------------------
 def fetch_blocklisted_hashes_for_site(site_id): 
     try:
-        # Pass siteIds to filter on the server side
-        data = fetch_all_with_cursor(
-            "restrictions",
-            {"limit": 1000, "siteIds": site_id}
-        )
+        # Single API call to fetch hash restrictions for Site, Group, and Account scopes
+        params = {
+            "limit": 1000,
+            "type": "black_hash",        # Filter for hash blocklist items only
+            "siteIds": site_id,          # Site scope
+            "includeParents": "true",    # Include Group and Account scope restrictions
+            "includeChildren": "true"    # Include child restrictions
+        }
+        data = fetch_all_with_cursor("restrictions", params)
         rows = []
         for item in data:
             if not isinstance(item, dict):
@@ -1204,6 +1208,9 @@ gemini_api_key = "your-gemini-key"
             with col_send:
                 if st.button("🚀 Send", use_container_width=True) and user_input:
                     st.session_state.agent_pending_query = user_input
+                    # Clear the input field by deleting its session state key
+                    if "agent_chat_input" in st.session_state:
+                        del st.session_state["agent_chat_input"]
                     st.rerun()
             
             with col_clear:

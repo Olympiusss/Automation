@@ -12,7 +12,7 @@ from typing import Dict, Any, Tuple, Optional
 AGENT_TOOLS = [
     {
         "name": "get_blocklisted_hashes",
-        "description": "Fetch blocklisted hash restrictions for a specific site within a date range. Returns hash values, OS types, descriptions, scopes, and creation dates.",
+        "description": "Fetch blocklisted hash restrictions for a specific site. Use count_only=true to get just the total count.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -20,21 +20,17 @@ AGENT_TOOLS = [
                     "type": "string",
                     "description": "Name of the site (e.g., 'Etranzact', 'MU', 'Qore', 'Upfront')"
                 },
-                "start_date": {
-                    "type": "string",
-                    "description": "Start date in YYYY-MM-DD format (e.g., '2025-01-05')"
-                },
-                "end_date": {
-                    "type": "string",
-                    "description": "End date in YYYY-MM-DD format (e.g., '2025-05-19')"
+                "count_only": {
+                    "type": "boolean",
+                    "description": "If true, return only the count, not the list of hashes. Use for 'how many' questions."
                 }
             },
-            "required": ["site_name", "start_date", "end_date"]
+            "required": ["site_name"]
         }
     },
     {
         "name": "get_threats",
-        "description": "Fetch threat data for a specific site within a date range. Returns threat classifications, affected endpoints, mitigation status, and analyst verdicts.",
+        "description": "Fetch threat data for a specific site within a date range. Use count_only=true to get just the total count.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -49,6 +45,10 @@ AGENT_TOOLS = [
                 "end_date": {
                     "type": "string",
                     "description": "End date in YYYY-MM-DD format"
+                },
+                "count_only": {
+                    "type": "boolean",
+                    "description": "If true, return only the count, not the list of threats. Use for 'how many' questions."
                 }
             },
             "required": ["site_name", "start_date", "end_date"]
@@ -213,6 +213,17 @@ def execute_tool(
             fetch_fn = fetch_functions.get("fetch_blocklisted_hashes_for_site")
             if fetch_fn:
                 df_hashes, df_summary = fetch_fn(site_id)
+                total_count = len(df_hashes)
+                
+                # Check if count_only mode
+                count_only = params.get("count_only", False)
+                if count_only:
+                    return {
+                        "success": True,
+                        "total_count": total_count,
+                        "count_only": True,
+                        "message": f"There are {total_count} blocklisted hashes on {site_name}."
+                    }
                 
                 # Client-side date filtering if dates provided
                 start_date = params.get("start_date")
@@ -233,22 +244,41 @@ def execute_tool(
                 
                 return {
                     "success": True,
-                    "total_count": len(df_hashes),
+                    "total_count": total_count,
                     "data": df_hashes.head(50).to_dict(orient="records"),
                     "summary": df_summary.to_dict(orient="records") if not df_summary.empty else [],
-                    "message": f"Found {len(df_hashes)} blocklisted hashes for {site_name}."
+                    "message": f"Found {total_count} blocklisted hashes for {site_name}."
                 }
         
         elif tool_name == "get_threats":
             start_iso, end_iso = parse_date_range(params["start_date"], params["end_date"])
             fetch_fn = fetch_functions.get("fetch_threats_for_site")
             if fetch_fn:
-                df_threats, _ = fetch_fn(site_id, start_iso, end_iso)
+                # fetch_threats_for_site returns a list, not a tuple
+                threats_data = fetch_fn(site_id, start_iso, end_iso)
+                total_count = len(threats_data) if isinstance(threats_data, list) else 0
+                
+                # Check if count_only mode
+                count_only = params.get("count_only", False)
+                if count_only:
+                    return {
+                        "success": True,
+                        "total_count": total_count,
+                        "count_only": True,
+                        "message": f"There are {total_count} threats on {site_name} from {params['start_date']} to {params['end_date']}."
+                    }
+                
+                # Convert list to dataframe for display
+                if isinstance(threats_data, list) and threats_data:
+                    df_threats = pd.DataFrame(threats_data)
+                else:
+                    df_threats = pd.DataFrame()
+                
                 return {
                     "success": True,
-                    "total_count": len(df_threats),
-                    "data": df_threats.head(50).to_dict(orient="records"),
-                    "message": f"Found {len(df_threats)} threats for {site_name}."
+                    "total_count": total_count,
+                    "data": df_threats.head(50).to_dict(orient="records") if not df_threats.empty else [],
+                    "message": f"Found {total_count} threats for {site_name}."
                 }
         
         elif tool_name == "get_vulnerabilities":
