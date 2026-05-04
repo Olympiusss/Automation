@@ -1,13 +1,22 @@
 """
 SentinelOne AI Query Agent - LLM Integration (Multi-Provider)
 This module handles the connection to LLM providers for natural language processing.
-Supports: Groq (default), Gemini, OpenAI
+Supports: Groq (default), Gemini, OpenAI, OpenRouter (free models)
 """
 
 import json
 import os
 import time
+import requests
 from typing import Dict, Any, List, Optional, Tuple
+from agent_tools import AGENT_TOOLS, execute_tool, format_tool_result_for_display
+
+# Multi-agent orchestration
+try:
+    from soc_agents import AGENT_REGISTRY, ROUTER_SYSTEM_PROMPT, build_agent_prompt
+    AGENTS_AVAILABLE = True
+except ImportError:
+    AGENTS_AVAILABLE = False
 
 # Provider imports
 GROQ_AVAILABLE = False
@@ -32,7 +41,17 @@ try:
 except ImportError:
     pass
 
-from agent_tools import AGENT_TOOLS, execute_tool, format_tool_result_for_display
+
+# OpenRouter — free models via OpenAI-compatible API (uses requests, no extra lib)
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_FREE_MODELS = [
+    {"id": "meta-llama/llama-3.3-70b-instruct:free",       "name": "Llama 3.3 70B (Free)",      "tier": "high"},
+    {"id": "google/gemma-3-27b-it:free",                   "name": "Gemma 3 27B (Free)",        "tier": "high"},
+    {"id": "deepseek/deepseek-chat-v3-0324:free",          "name": "DeepSeek V3 (Free)",        "tier": "high"},
+    {"id": "deepseek/deepseek-r1-0528:free",               "name": "DeepSeek R1 (Free)",        "tier": "high"},
+    {"id": "qwen/qwen3-32b:free",                          "name": "Qwen 3 32B (Free)",         "tier": "medium"},
+    {"id": "mistralai/mistral-small-3.1-24b-instruct:free","name": "Mistral Small 3.1 (Free)",  "tier": "medium"},
+]
 
 
 # Rate limiting configuration
@@ -40,97 +59,120 @@ MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
 
 
-# System prompt for the agent - INTELLIGENT CONTEXT-AWARE MODE
-SYSTEM_PROMPT = """You are an INTELLIGENT SentinelOne security data assistant. You understand context and can explain your reasoning.
+# System prompt for the agent - AGENTIC ReAct MODE
+SYSTEM_PROMPT = """You are an AGENTIC SentinelOne security analyst. You can reason through complex queries step-by-step, calling multiple tools to investigate and compile reports.
 
 AVAILABLE TOOLS:
 {tools}
 
-AVAILABLE SITES: Etranzact, MU, Qore, Upfront, RoutePay, Interswitch, NIBSS, Leadway, Infoprive Systems, Default site
+KNOWN SITES (from SentinelOne platform): {known_sites}
 
 TODAY'S DATE: {current_date}
 
-QUERY CLASSIFICATION - Identify the type of query FIRST:
+HOW YOU WORK (ReAct Pattern):
+You operate in a loop. Each turn you EITHER:
+  A) Call a tool by outputting JSON: {{"tool": "tool_name", "params": {{...}}}}
+  B) Give a final answer in plain text (when you have all the info you need)
 
-TYPE 1: DATA QUERIES (need tool execution)
-- "Show threats on Etranzact" → Execute tool
-- "How many blocklisted hashes on MU?" → Execute with count_only=true
-- "List vulnerabilities on Qore" → Execute tool
+After each tool call, you will receive the result as an OBSERVATION. You then decide whether to call another tool or give a final answer.
 
-TYPE 2: META/FOLLOW-UP QUESTIONS (answer conversationally, NO tool)
-- "How did you know?" → Explain based on previous response
-- "Where did you get this data?" → Explain you queried the SentinelOne API
-- "Why?" / "Explain" → Provide reasoning from context
-- "What does that mean?" → Explain the result
-- "Can you elaborate?" → Expand on previous answer
+IMPORTANT: Output ONLY ONE thing per turn — either a single tool call JSON or a plain text answer. Never both.
 
-TYPE 3: GENERAL QUESTIONS (answer directly, NO tool)
-- "Is Infoprive a site?" → Check against known sites list and answer
-- "What can you do?" → Explain your capabilities
-- "Hello" → Greet and offer help
+QUERY TYPES:
 
-CRITICAL RULES:
+1. SIMPLE DATA QUERIES → Call the right tool:
+   - "What sites are available?" → {{"tool": "list_available_sites", "params": {{}}}}
+   - "Show threats on Etranzact this month" → {{"tool": "get_threats", "params": {{...}}}}
+   - "Show alerts on MU" → {{"tool": "get_alerts", "params": {{...}}}}
 
-1. FOR "HOW MANY" QUESTIONS - Use count_only=true:
-   - "How many threats?" → {{"tool": "get_threats", "params": {{"site_name": "X", "start_date": "Y", "end_date": "Z", "count_only": true}}}}
-   - "How many blocklisted hashes?" → {{"tool": "get_blocklisted_hashes", "params": {{"site_name": "X", "count_only": true}}}}
+2. "HOW MANY" QUERIES → Use count_only=true:
+   - {{"tool": "get_threats", "params": {{"site_name": "X", "start_date": "Y", "end_date": "Z", "count_only": true}}}}
 
-2. FOR META QUESTIONS - Answer conversationally:
-   - Look at the CHAT HISTORY to understand context
-   - Explain HOW you knew something (e.g., "I checked the available sites list")
-   - Explain WHERE data came from (e.g., "I queried the SentinelOne API")
-   - Do NOT call a tool - just respond in plain text
+3. SITE OVERVIEW → Use get_site_overview for holistic status:
+   - "How is Etranzact doing?" → {{"tool": "get_site_overview", "params": {{"site_name": "Etranzact"}}}}
 
-3. FOR SIMPLE KNOWLEDGE QUESTIONS - Answer directly:
-   - "Is X a site?" → Check against the sites list above and answer
-   - No need to call list_available_sites if you already know
+4. CROSS-SITE COMPARISON → Use compare_sites:
+   - "Compare all sites" → {{"tool": "compare_sites", "params": {{"site_names": "all"}}}}
+   - "Compare Etranzact and MU" → {{"tool": "compare_sites", "params": {{"site_names": "Etranzact, MU"}}}}
 
-4. FOR DATA QUERIES WITHOUT DATES - Ask for time range:
-   - Threats and blocklisted hashes are time-sensitive
-   - Ask: "What time range would you like? (e.g., 'last 7 days', 'January 2025')"
+5. INVESTIGATION CHAINS → Call multiple tools across turns:
+   Example: "Investigate critical threats on Default site"
+   Turn 1: {{"tool": "get_threats", "params": {{"site_name": "Default site", "start_date": "...", "end_date": "..."}}}}
+   (You receive threat data — find a critical threat ID)
+   Turn 2: {{"tool": "get_threat_forensics", "params": {{"threat_id": "THREAT_ID_HERE"}}}}
+   (You receive forensic data — MITRE, indicators, file paths)
+   Turn 3: {{"tool": "get_endpoint_details", "params": {{"endpoint_name": "AFFECTED-HOST", "site_name": "Default site"}}}}
+   (You receive endpoint info)
+   Turn 4: Final plain text report summarizing all findings.
 
-OUTPUT FORMAT:
-- For tool calls: {{"tool": "tool_name", "params": {{...}}}}
-- For conversational responses: Just write your response in plain text
+6. AUDIT TRAIL → Use get_activities:
+   - "What happened on Etranzact last week?" → {{"tool": "get_activities", "params": {{"site_name": "Etranzact", "start_date": "...", "end_date": "..."}}}}
+
+7. EXCLUSIONS → Use get_exclusions:
+   - "What exclusions are on MU?" → {{"tool": "get_exclusions", "params": {{"site_name": "MU"}}}}
+
+8. META / FOLLOW-UP QUESTIONS → Answer from chat history (NO tool):
+   - "How did you know?" → Explain your reasoning
+   - "Where did you get this data?" → "I queried the SentinelOne API."
+
+9. GREETINGS → Answer directly (NO tool):
+   - "Hello" → Greet and offer help
+
+PROACTIVE ANALYSIS:
+- When you find Critical threats, always flag them prominently with ⚠️
+- When giving site overviews, highlight any concerning metrics
+- When comparing sites, point out the site with the most risk
+- If threats are found, suggest next investigation steps
+
+RULES:
+- ANY question asking for DATA must use a tool (never recite from memory).
+- If dates are needed but not provided, ask the user.
+- If site is not specified, ask the user OR use get_site_overview/compare_sites.
+- For investigations, chain tools: get data → analyze → dig deeper → report.
+- After finding threats, offer to investigate forensics with get_threat_forensics.
 
 DATE CONVERSION:
 - "last week" = 7 days ago to today
 - "this month" = 1st of current month to today
-- "January 2025" = 2025-01-01 to 2025-01-31
+- "last month" = 1st of previous month to last day of previous month
+- "last quarter" = 3 months ago to today
+- "this year" / "year-to-date" = January 1st of current year to today
 
 EXAMPLES:
 
-User: "How many threats on Etranzact from last week?"
-{{"tool": "get_threats", "params": {{"site_name": "Etranzact", "start_date": "2026-01-29", "end_date": "2026-02-05", "count_only": true}}}}
+User: "Give me an overview of Etranzact"
+{{"tool": "get_site_overview", "params": {{"site_name": "Etranzact"}}}}
 
-User: "How did you know?"
-I determined this by querying the SentinelOne threats API for the specified site and date range. The API returned the threat count directly.
+User: "Compare threats across all sites"
+{{"tool": "compare_sites", "params": {{"site_names": "all"}}}}
 
-User: "Is Infoprive a site?"
-Yes, "Infoprive Systems" is one of the available sites in your SentinelOne environment.
+User: "Investigate threat 12345"
+{{"tool": "get_threat_forensics", "params": {{"threat_id": "12345"}}}}
 
-User: "Where did you get that data from?"
-I retrieved this data from the SentinelOne API. The API provides real-time access to security data including threats, vulnerabilities, endpoints, and blocklisted hashes across all your managed sites.
+User: "Show critical alerts on MU this week"
+{{"tool": "get_alerts", "params": {{"site_name": "MU", "start_date": "...", "end_date": "...", "severity": "Critical"}}}}
 
-User: "How many blocklisted hashes on MU?"
-{{"tool": "get_blocklisted_hashes", "params": {{"site_name": "MU", "count_only": true}}}}
-
-BE INTELLIGENT: Read the conversation history carefully. If a question is about a previous response, answer based on context without calling a tool.
+User: "What activity happened on Qore yesterday?"
+{{"tool": "get_activities", "params": {{"site_name": "Qore", "start_date": "...", "end_date": "..."}}}}
 """
 
 
-def _call_groq(api_key: str, prompt: str, system_prompt: str) -> Tuple[bool, str]:
-    """Call Groq API with retry logic."""
+def _call_groq(api_key: str, prompt: str, system_prompt: str, image_data: bytes = None) -> Tuple[bool, str]:
+    """Call Groq API with retry logic. (No vision support — image_data is ignored.)"""
     try:
         client = Groq(api_key=api_key)
+        
+        user_content = prompt
+        if image_data:
+            user_content = "[User attached an image, but this provider does not support vision. Responding to text only.]\n\n" + prompt
         
         for attempt in range(MAX_RETRIES):
             try:
                 response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",  # Fast and capable
+                    model="llama-3.3-70b-versatile",
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
+                        {"role": "user", "content": user_content}
                     ],
                     temperature=0.1,
                     max_tokens=2048
@@ -155,17 +197,28 @@ def _call_groq(api_key: str, prompt: str, system_prompt: str) -> Tuple[bool, str
         return False, f"❌ Error initializing Groq: {str(e)}"
 
 
-def _call_gemini(api_key: str, prompt: str, system_prompt: str) -> Tuple[bool, str]:
-    """Call Gemini API with retry logic."""
+def _call_gemini(api_key: str, prompt: str, system_prompt: str, image_data: bytes = None) -> Tuple[bool, str]:
+    """Call Gemini API with retry logic. Supports vision when image_data is provided."""
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-2.0-flash")
         
         full_prompt = f"{system_prompt}\n\n{prompt}"
         
+        # Build content parts for multimodal
+        content_parts = [full_prompt]
+        if image_data:
+            try:
+                from PIL import Image as PILImage
+                from io import BytesIO
+                img = PILImage.open(BytesIO(image_data))
+                content_parts = [full_prompt, img]
+            except Exception:
+                content_parts = [full_prompt + "\n\n[User attached an image but it could not be processed.]"]
+        
         for attempt in range(MAX_RETRIES):
             try:
-                response = model.generate_content(full_prompt)
+                response = model.generate_content(content_parts)
                 return True, response.text.strip()
             
             except Exception as e:
@@ -184,10 +237,21 @@ def _call_gemini(api_key: str, prompt: str, system_prompt: str) -> Tuple[bool, s
         return False, f"❌ Error: {str(e)}"
 
 
-def _call_openai(api_key: str, prompt: str, system_prompt: str) -> Tuple[bool, str]:
-    """Call OpenAI API with retry logic."""
+def _call_openai(api_key: str, prompt: str, system_prompt: str, image_data: bytes = None) -> Tuple[bool, str]:
+    """Call OpenAI API with retry logic. Supports vision when image_data is provided."""
     try:
         client = OpenAI(api_key=api_key)
+        
+        # Build user content (text or multimodal)
+        if image_data:
+            import base64
+            b64_img = base64.b64encode(image_data).decode()
+            user_content = [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}}
+            ]
+        else:
+            user_content = prompt
         
         for attempt in range(MAX_RETRIES):
             try:
@@ -195,7 +259,7 @@ def _call_openai(api_key: str, prompt: str, system_prompt: str) -> Tuple[bool, s
                     model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
+                        {"role": "user", "content": user_content}
                     ],
                     temperature=0.1,
                     max_tokens=2048
@@ -237,112 +301,279 @@ def get_available_provider(secrets: dict) -> Tuple[str, str]:
     if OPENAI_AVAILABLE and general.get("openai_api_key"):
         return "openai", general.get("openai_api_key")
     
+    # OpenRouter as fallback (uses requests, always available)
+    if general.get("openrouter_api_key"):
+        return "openrouter", general.get("openrouter_api_key")
+    
     # No provider available - return helpful error
     if not GROQ_AVAILABLE and not GEMINI_AVAILABLE and not OPENAI_AVAILABLE:
-        return None, "No LLM library installed. Run: pip install groq"
+        return None, "No LLM library installed. Run: pip install groq, or add openrouter_api_key to secrets."
     
-    return None, "No API key configured. Add groq_api_key to secrets."
+    return None, "No API key configured. Add groq_api_key or openrouter_api_key to secrets."
+
+
+def _call_openrouter(api_key: str, prompt: str, system_prompt: str, model_id: str = None, image_data: bytes = None) -> Tuple[bool, str]:
+    """Call OpenRouter API with free models. Supports vision for compatible models.
+    Automatically falls back to other models if selected model is unavailable."""
+    if not model_id:
+        model_id = OPENROUTER_FREE_MODELS[0]["id"]
+    
+    # Build fallback list: selected model first, then all others
+    fallback_ids = [model_id]
+    for m in OPENROUTER_FREE_MODELS:
+        if m["id"] != model_id:
+            fallback_ids.append(m["id"])
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://sentinelone-agent.streamlit.app",
+        "X-Title": "SentinelOne AI Agent",
+    }
+    
+    # Build user content (text or multimodal)
+    if image_data:
+        import base64
+        b64_img = base64.b64encode(image_data).decode()
+        user_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}}
+        ]
+    else:
+        user_content = prompt
+    
+    last_error = ""
+    for mid in fallback_ids:
+        payload = {
+            "model": mid,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            "temperature": 0.1,
+            "max_tokens": 2048,
+        }
+        
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = requests.post(OPENROUTER_BASE_URL, headers=headers, json=payload, timeout=60)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    return True, content.strip()
+                elif resp.status_code == 429:
+                    if attempt < MAX_RETRIES - 1:
+                        time.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
+                        continue
+                    last_error = "⏳ Rate limit reached. Please wait a moment and try again."
+                    break  # Try next model
+                else:
+                    error_msg = resp.json().get("error", {}).get("message", resp.text)
+                    # If model is unavailable, try next one
+                    if "no endpoints" in error_msg.lower() or "not found" in error_msg.lower() or resp.status_code == 404:
+                        last_error = f"Model {mid} unavailable, trying next..."
+                        break  # Try next model
+                    return False, f"❌ OpenRouter error: {error_msg}"
+            except requests.exceptions.Timeout:
+                if attempt < MAX_RETRIES - 1:
+                    continue
+                last_error = "⏳ Request timed out."
+                break  # Try next model
+            except Exception as e:
+                return False, f"❌ Error: {str(e)}"
+    
+    return False, f"❌ All models unavailable. Last error: {last_error}"
+
+
+def _call_llm(provider: str, api_key: str, prompt: str, system_prompt: str, image_data: bytes = None, model_id: str = None):
+    """Route to the correct LLM provider."""
+    if provider == "groq":
+        if not GROQ_AVAILABLE:
+            return False, "❌ Groq library not installed. Run: pip install groq"
+        return _call_groq(api_key, prompt, system_prompt, image_data=image_data)
+    elif provider == "gemini":
+        if not GEMINI_AVAILABLE:
+            return False, "❌ Gemini library not installed."
+        return _call_gemini(api_key, prompt, system_prompt, image_data=image_data)
+    elif provider == "openai":
+        if not OPENAI_AVAILABLE:
+            return False, "❌ OpenAI library not installed."
+        return _call_openai(api_key, prompt, system_prompt, image_data=image_data)
+    elif provider == "openrouter":
+        return _call_openrouter(api_key, prompt, system_prompt, model_id=model_id, image_data=image_data)
+    else:
+        return False, f"❌ Unknown provider: {provider}"
+
+
+def _extract_tool_call(response_text: str):
+    """Extract a JSON tool call from LLM response text. Returns (tool_call_dict, None) or (None, plain_text)."""
+    if "{" in response_text and "tool" in response_text:
+        try:
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
+            json_str = response_text[json_start:json_end]
+            tool_call = json.loads(json_str)
+            if tool_call.get("tool"):
+                return tool_call, None
+        except json.JSONDecodeError:
+            pass
+    return None, response_text
+
+
+MAX_REACT_STEPS = 8
+
+
+def _route_query(user_query: str, provider: str, api_key: str, model_id: str = None) -> str:
+    """Route a user query to the best specialist agent. Returns agent key."""
+    if not AGENTS_AVAILABLE:
+        return "triage"
+    agents_list = "\n".join(
+        f"- {key}: {cfg['name']} — {cfg['role']}"
+        for key, cfg in AGENT_REGISTRY.items()
+    )
+    router_prompt = ROUTER_SYSTEM_PROMPT.format(agents_list=agents_list)
+    success, response = _call_llm(provider, api_key, user_query, router_prompt, model_id=model_id)
+    if success:
+        agent_key = response.strip().lower().replace('"', '').replace("'", "").strip()
+        if agent_key in AGENT_REGISTRY:
+            return agent_key
+    return "triage"
 
 
 def process_user_query(
     user_query: str,
     chat_history: List[Dict[str, str]],
     sites_data: list,
-    fetch_functions: Dict[str, callable],
     api_key: str,
     current_date: str,
-    provider: str = "groq"
+    provider: str = "groq",
+    image_data: bytes = None,
+    model_id: str = None
 ) -> Dict[str, Any]:
     """
-    Process a user query through the AI agent.
-    
-    Args:
-        user_query: The user's natural language query
-        chat_history: Previous messages in the conversation
-        sites_data: List of available sites
-        fetch_functions: Dictionary of fetch functions from automation_app
-        api_key: LLM API key
-        current_date: Current date for context
-        provider: Which LLM provider to use (groq, gemini, openai)
-    
-    Returns:
-        Dictionary with response and any data fetched
+    Process a user query through the AI agent using a ReAct loop.
+    The agent can call multiple tools in sequence to investigate complex queries.
+    Now includes multi-agent routing via the 13-agent swarm orchestrator.
     """
-    # Build the system prompt
+    # Route query to the best specialist agent
+    agent_key = _route_query(user_query, provider, api_key, model_id=model_id)
+    agent_name = AGENT_REGISTRY.get(agent_key, {}).get("name", "Triage Agent") if AGENTS_AVAILABLE else "General Agent"
+
+    # Build system prompt with dynamic site names from SentinelOne
     tools_json = json.dumps(AGENT_TOOLS, indent=2)
-    system_prompt = SYSTEM_PROMPT.format(
-        tools=tools_json,
-        current_date=current_date
-    )
-    
-    # Build conversation context for the user prompt
+    site_names = [s.get("name", "Unknown") for s in sites_data if isinstance(s, dict)] if sites_data else []
+    known_sites_str = ", ".join(site_names) if site_names else "(use list_available_sites to discover)"
+
+    # Use agent-specific prompt if available, else fall back to generic
+    if AGENTS_AVAILABLE:
+        system_prompt = build_agent_prompt(agent_key, current_date, known_sites_str, tools_json)
+    else:
+        system_prompt = SYSTEM_PROMPT.format(
+            tools=tools_json,
+            current_date=current_date,
+            known_sites=known_sites_str
+        )
+
+    # Build initial conversation context
     conversation_parts = []
     for msg in chat_history[-10:]:
         role = msg.get("role", "user")
         content = msg.get("content", "")
         conversation_parts.append(f"{role.upper()}: {content}")
-    
     conversation_parts.append(f"USER: {user_query}")
-    prompt = "\n\n".join(conversation_parts)
-    
-    # Call the appropriate provider
-    if provider == "groq":
-        if not GROQ_AVAILABLE:
-            return {"success": False, "response": "❌ Groq library not installed. Run: pip install groq", "data": None}
-        success, response_text = _call_groq(api_key, prompt, system_prompt)
-    
-    elif provider == "gemini":
-        if not GEMINI_AVAILABLE:
-            return {"success": False, "response": "❌ Gemini library not installed.", "data": None}
-        success, response_text = _call_gemini(api_key, prompt, system_prompt)
-    
-    elif provider == "openai":
-        if not OPENAI_AVAILABLE:
-            return {"success": False, "response": "❌ OpenAI library not installed.", "data": None}
-        success, response_text = _call_openai(api_key, prompt, system_prompt)
-    
-    else:
-        return {"success": False, "response": f"❌ Unknown provider: {provider}", "data": None}
-    
-    if not success:
-        return {"success": False, "response": response_text, "data": None}
-    
-    # Try to extract and execute a tool call from response
-    # Look for JSON anywhere in the response (LLM might add some text)
-    if "{" in response_text and "tool" in response_text:
-        try:
-            # Find and extract JSON object
-            json_start = response_text.find("{")
-            json_end = response_text.rfind("}") + 1
-            json_str = response_text[json_start:json_end]
-            
-            tool_call = json.loads(json_str)
-            tool_name = tool_call.get("tool")
-            params = tool_call.get("params", {})
-            
-            if tool_name:
-                # Execute the tool
-                result = execute_tool(tool_name, params, sites_data, fetch_functions)
-                
-                # Format result for display
-                formatted_result = format_tool_result_for_display(result, tool_name)
-                
+
+    # Scratchpad tracks tool calls and observations within this query
+    scratchpad = []
+    all_tool_results = []
+
+    for step in range(MAX_REACT_STEPS):
+        # Build prompt: conversation + scratchpad
+        prompt = "\n\n".join(conversation_parts)
+        if scratchpad:
+            prompt += "\n\n--- INVESTIGATION SCRATCHPAD ---\n" + "\n".join(scratchpad)
+            prompt += "\n\nBased on the observations above, decide: call another tool for more info, or give your final answer in plain text."
+
+        # Call LLM (pass image only on first step)
+        step_image = image_data if step == 0 else None
+        success, response_text = _call_llm(provider, api_key, prompt, system_prompt, image_data=step_image, model_id=model_id)
+        if not success:
+            return {"success": False, "response": response_text, "data": None}
+
+        # Check if response is a tool call or a final answer
+        tool_call, plain_text = _extract_tool_call(response_text)
+
+        if tool_call is None:
+            # Final answer — if we used tools, prepend a summary header
+            final_response = plain_text
+            if all_tool_results:
                 return {
                     "success": True,
-                    "response": formatted_result,
-                    "data": result,
-                    "tool_used": tool_name
+                    "response": final_response,
+                    "data": all_tool_results,
+                    "tool_used": "investigation",
+                    "steps": len(scratchpad),
+                    "agent_name": agent_name
                 }
-        except json.JSONDecodeError:
-            pass
-    
-    # Conversational response (only if no tool was executed)
-    return {
-        "success": True,
-        "response": response_text,
-        "data": None,
-        "tool_used": None
-    }
+            else:
+                return {
+                    "success": True,
+                    "response": final_response,
+                    "data": None,
+                    "tool_used": None,
+                    "agent_name": agent_name
+                }
+
+        # It's a tool call — execute it
+        tool_name = tool_call.get("tool")
+        params = tool_call.get("params", {})
+        result = execute_tool(tool_name, params, sites_data)
+        all_tool_results.append({"tool": tool_name, "params": params, "result": result})
+
+        # If this is a simple single-step query (step 0) and the result is straightforward,
+        # return it directly without re-prompting the LLM
+        if step == 0 and result.get("success"):
+            # Check if the original query is simple (not an investigation/complex query)
+            query_lower = user_query.lower()
+            is_complex = any(word in query_lower for word in [
+                "investigate", "analyze", "analyse", "deep dive", "look into",
+                "lateral", "correlate", "cross-reference", "check the host",
+                "more details", "dig deeper", "what happened"
+            ])
+            if not is_complex:
+                # Simple query — return result directly
+                formatted = format_tool_result_for_display(result, tool_name)
+                return {
+                    "success": True,
+                    "response": formatted,
+                    "data": result,
+                    "tool_used": tool_name,
+                    "agent_name": agent_name
+                }
+
+        # Complex query — add observation to scratchpad and loop
+        observation = json.dumps(result, indent=2, default=str)
+        # Truncate large observations to avoid token overflow
+        if len(observation) > 3000:
+            observation = observation[:3000] + "\n... (truncated)"
+        scratchpad.append(f"TOOL CALL (Step {step + 1}): {tool_name}({json.dumps(params)})")
+        scratchpad.append(f"OBSERVATION: {observation}")
+
+    # If we exhausted all steps, compile whatever we have
+    if all_tool_results:
+        # Format all results
+        parts = [f"🔍 **Investigation completed ({len(all_tool_results)} steps):**\n"]
+        for tr in all_tool_results:
+            formatted = format_tool_result_for_display(tr["result"], tr["tool"])
+            parts.append(formatted)
+        return {
+            "success": True,
+            "response": "\n\n".join(parts),
+            "data": all_tool_results,
+            "tool_used": "investigation",
+            "agent_name": agent_name
+        }
+
+    return {"success": False, "response": "❌ Could not process the query.", "data": None}
 
 
 def get_quick_suggestions() -> List[str]:
@@ -351,7 +582,8 @@ def get_quick_suggestions() -> List[str]:
         "What sites are available?",
         "Show me blocklisted hashes on Etranzact from Jan 1 to Jan 31, 2025",
         "How many threats were detected on MU last week?",
-        "List critical vulnerabilities on Qore",
+        "Investigate threats on Default site from last week",
         "Show me agent health for Upfront",
         "Get all endpoints for Etranzact"
     ]
+

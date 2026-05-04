@@ -15,7 +15,7 @@ import base64
 # CONFIG
 # --------------------
 BASE_URL = "https://euce1-exclusive.sentinelone.net/web/api/v2.1"
-API_TOKEN = st.secrets["general"]["api_token"]
+API_TOKEN = st.secrets.get("general", {}).get("api_token", "")
 HEADERS = {
     "Authorization": f"ApiToken {API_TOKEN}",
     "Content-Type": "application/json"
@@ -44,7 +44,7 @@ SESSION_TIMEOUT_MINUTES = 0  # Change this to set timeout duration
 # IMPORTANT: Keep this secret secure and do not share it
 # This is a PERMANENT secret - do not change it or users will need to re-scan QR code
 # Base32 only allows: A-Z and 2-7 (no 0, 1, 8, 9)
-TOTP_SECRET = st.secrets["general"]["totp_secret"]
+TOTP_SECRET = st.secrets.get("general", {}).get("totp_secret", "")
 TOTP_APP_NAME = "SentinelOne Dashboard"
 TOTP_ISSUER = "Esentry Security"  # Your organization name
 # --------------------
@@ -763,34 +763,81 @@ def build_site_summary(site_name, threats, risks, endpoints, df_hashes, df_hash_
 # Streamlit UI
 # --------------------
 st.set_page_config(page_title="SentinelOne Dashboard", layout="wide")
-# Header with Logo
-col_logo, col_title = st.columns([1, 15])
-with col_logo:
-    # SentinelOne Purple Logo
-    st.image("s1_logo.png", width=100)
-with col_title:
-    st.title("SentinelOne - Reporting Visualization")
-st.markdown(
-    "Enter a date range and click **Fetch**. The app will query Threats, Vulnerabilities, Agents & Restrictions "
-    "from SentinelOne, summarize them, and let you download a full Excel report."
-)
+
+try:
+    with open("s1_logo.png", "rb") as f:
+        data = f.read()
+        encoded_logo = base64.b64encode(data).decode()
+except:
+    encoded_logo = ""
+
+# Base CSS for Curtain and Highlights
+st.markdown("""
+<style>
+/* Curtain effect animation */
+@keyframes fadeInSlide {
+    0% { opacity: 0; transform: translateY(15px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+.curtain-container {
+    animation: fadeInSlide 0.6s ease-out forwards;
+}
+
+/* Styled info box */
+.custom-info-box {
+    background-color: #0d1117;
+    border-left: 4px solid #007BFF;
+    color: #e6edf3;
+    padding: 16px 24px;
+    border-radius: 8px;
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.highlight-cyan {
+    color: #00E5FF;
+    font-weight: bold;
+}
+.highlight-pill {
+    background-color: #007BFF;
+    color: white;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-weight: bold;
+    display: inline-block;
+    font-size: 14px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Main Header (always visible)
+st.markdown(f"""
+<div class="curtain-container">
+    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+        <div style="background-color: white; padding: 8px; border-radius: 12px; display: inline-flex; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <img src="data:image/png;base64,{encoded_logo}" width="50" style="border-radius: 4px; display: block;">
+        </div>
+        <h1 style="margin: 0; padding: 0; font-size: 2.2rem; font-weight: 700;">SentinelOne - Reporting Visualization</h1>
+    </div>
+    <div class="custom-info-box">
+        Enter a date range and click <span class="highlight-pill">Fetch</span>. Our solution will query <span class="highlight-cyan">security data</span> from SentinelOne, visualize and summarize them, letting you download a full Excel report.
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 # ========================================
 # TOTP AUTHENTICATION GATE (Layer 1 Security)
 # ========================================
 # Initialize TOTP authentication state
 if "totp_authenticated" not in st.session_state:
     st.session_state.totp_authenticated = False
+
 # Check if user has authenticated with TOTP
 if not st.session_state.totp_authenticated:
-    # Auth Header with Logo (Using HTML Flexbox for perfect alignment)
-    with open("s1_logo.png", "rb") as f:
-        data = f.read()
-        encoded = base64.b64encode(data).decode()
-    
     st.markdown(f"""
-    <div style="display: flex; align-items: center;">
-        <img src="data:image/png;base64,{encoded}" width="50" style="margin-right: 15px;">
-        <h1 style="margin: 0; padding: 0;">🔐 SentinelOne Dashboard - Authentication Required</h1>
+    <div class="curtain-container" style="display: flex; align-items: center; margin-top: 20px;">
+        <h1 style="margin: 0; padding: 0; font-size: 1.5rem;">🔐 SentinelOne Dashboard - Authentication Required</h1>
     </div>
     """, unsafe_allow_html=True)
     
@@ -861,6 +908,12 @@ if not st.session_state.totp_authenticated:
             st.warning("⚠️ Please enter a 6-digit code.")
     
     st.stop()  # Stop execution here if not authenticated
+
+# Show welcome toast once per session
+if not st.session_state.get("welcome_toast_shown", False):
+    st.toast("Security Gateway Unlocked! Welcome to the Dashboard 🚀", icon="✅")
+    st.session_state.welcome_toast_shown = True
+
 # ========================================
 # MAIN DASHBOARD (Only accessible after TOTP authentication)
 # ========================================
