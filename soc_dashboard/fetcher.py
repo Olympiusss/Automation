@@ -553,7 +553,7 @@ class DashboardAggregator:
             ]
             all_results = await asyncio.gather(
                 *s1_build_tasks,
-                self.av.fetch_alarms_per_deployment(days_back=30),
+                self.av.fetch_alarms_per_deployment(days_back=1),  # 24hr window
                 self.av.fetch_events(days_back=1),
                 return_exceptions=True,
             )
