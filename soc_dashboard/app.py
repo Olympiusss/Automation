@@ -6,6 +6,7 @@ Multi-role: admin, client, analyst.
 from __future__ import annotations
 import asyncio
 import logging
+import os
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -388,6 +389,28 @@ async def health():
         "av_configured": settings.av_configured(),
         "ws_connections": ws_manager.active_count,
     }
+
+
+@app.get("/api/debug/auth")
+async def debug_auth(request: Request):
+    """Safe auth diagnostic — shows credential counts & usernames, never passwords."""
+    if not _require_role(request, "admin"):
+        return JSONResponse({"error": "Admin only"}, status_code=403)
+    client_creds  = settings.CLIENT_CREDENTIALS
+    analyst_creds = settings.ANALYST_CREDENTIALS
+    name_map      = settings.CLIENT_NAME_MAP
+    return JSONResponse({
+        "admin_username":     settings.ADMIN_USERNAME,
+        "admin_password_set": bool(settings.ADMIN_PASSWORD),
+        "totp_configured":    settings.totp_configured(),
+        "client_count":       len(client_creds),
+        "client_usernames":   list(client_creds.keys()),
+        "client_name_map":    name_map,
+        "analyst_count":      len(analyst_creds),
+        "analyst_usernames":  list(analyst_creds.keys()),
+        "raw_analyst_env":    repr(os.getenv("ANALYST_CREDENTIALS", "NOT_SET")[:80]),
+        "raw_client_env":     repr(os.getenv("CLIENT_CREDENTIALS",  "NOT_SET")[:80]),
+    })
 
 
 @app.get("/api/debug/av")

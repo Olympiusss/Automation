@@ -6,9 +6,31 @@ All settings loaded from environment variables.
 from __future__ import annotations
 import os
 import json
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger("soc_dashboard.config")
+
+
+def _parse_json_creds(env_key: str, default: str = "{}") -> dict:
+    """Safely parse a JSON dict from an env var.
+    Strips outer quotes Railway sometimes adds: '"{}"' -> '{}'
+    """
+    raw = os.getenv(env_key, default).strip()
+    # Strip surrounding single or double quotes Railway may add
+    if (raw.startswith('"') and raw.endswith('"')) or \
+       (raw.startswith("'") and raw.endswith("'")):
+        raw = raw[1:-1]
+    try:
+        result = json.loads(raw)
+        if not isinstance(result, dict):
+            logger.error(f"{env_key}: expected JSON object, got {type(result).__name__}")
+            return {}
+        return result
+    except json.JSONDecodeError as e:
+        logger.error(f"{env_key}: JSON parse failed — {e} | raw value: {raw!r}")
+        return {}
 
 class Settings:
     """Application settings — sourced from environment variables."""
@@ -64,38 +86,18 @@ class Settings:
 
     @property
     def CLIENT_CREDENTIALS(self) -> dict[str, str]:
-        """JSON object mapping client usernames to passwords.
-        Example: {"xpresspayment":"pass1","zone-payment":"pass2"}
-        """
-        raw = os.getenv("CLIENT_CREDENTIALS", "{}")
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            return {}
+        """JSON: {"username":"password"}. One entry per client."""
+        return _parse_json_creds("CLIENT_CREDENTIALS")
 
     @property
     def CLIENT_NAME_MAP(self) -> dict[str, str]:
-        """Optional JSON mapping: login username -> exact client display name in S1/AV.
-        Use this when the username differs from the real client name (spaces, casing, etc).
-        Example: {"zone-payment":"Zone Payment Network Limited","xpress":"Xpresspayment"}
-        If a username is NOT in this map, the username itself is used as the client name.
-        """
-        raw = os.getenv("CLIENT_NAME_MAP", "{}")
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            return {}
+        """JSON: {"username":"Exact Display Name in S1/AV"}."""
+        return _parse_json_creds("CLIENT_NAME_MAP")
 
     @property
     def ANALYST_CREDENTIALS(self) -> dict[str, str]:
-        """JSON object mapping analyst usernames to passwords.
-        Example: {"soc-analyst":"secret1"}
-        """
-        raw = os.getenv("ANALYST_CREDENTIALS", "{}")
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            return {}
+        """JSON: {"username":"password"}. One entry per analyst."""
+        return _parse_json_creds("ANALYST_CREDENTIALS")
 
     @property
     def ADMIN_USERNAME(self) -> str:
