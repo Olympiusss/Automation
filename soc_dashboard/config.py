@@ -1,11 +1,14 @@
 """
 Sentrium Integrated SOC Dashboard — Configuration
 All settings loaded from environment variables.
-On Railway: env vars are injected natively — no .env file needed.
-For local dev: set variables in your shell or use a .env file manually.
 """
 
+from __future__ import annotations
 import os
+import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Settings:
     """Application settings — sourced from environment variables."""
@@ -21,7 +24,6 @@ class Settings:
     @property
     def AV_SUBDOMAIN(self) -> str:
         val = os.getenv("AV_SUBDOMAIN", "cybervergent-central.alienvault.cloud")
-        # Strip whitespace, newlines, quotes, and any accidental https:// prefix
         val = val.strip().strip('"').strip("'").replace("https://", "").replace("http://", "").rstrip("/")
         return val
 
@@ -59,6 +61,49 @@ class Settings:
     @property
     def SECRET_KEY(self) -> str:
         return os.getenv("SECRET_KEY", "sentrium-soc-dashboard-secret-key-change-me")
+
+    @property
+    def CLIENT_CREDENTIALS(self) -> dict[str, str]:
+        """JSON object mapping client usernames to passwords.
+        Example: {"xpresspayment":"pass1","zone-payment":"pass2"}
+        """
+        raw = os.getenv("CLIENT_CREDENTIALS", "{}")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+
+    @property
+    def CLIENT_NAME_MAP(self) -> dict[str, str]:
+        """Optional JSON mapping: login username -> exact client display name in S1/AV.
+        Use this when the username differs from the real client name (spaces, casing, etc).
+        Example: {"zone-payment":"Zone Payment Network Limited","xpress":"Xpresspayment"}
+        If a username is NOT in this map, the username itself is used as the client name.
+        """
+        raw = os.getenv("CLIENT_NAME_MAP", "{}")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+
+    @property
+    def ANALYST_CREDENTIALS(self) -> dict[str, str]:
+        """JSON object mapping analyst usernames to passwords.
+        Example: {"soc-analyst":"secret1"}
+        """
+        raw = os.getenv("ANALYST_CREDENTIALS", "{}")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+
+    @property
+    def ADMIN_USERNAME(self) -> str:
+        return os.getenv("ADMIN_USERNAME", "admin")
+
+    @property
+    def ADMIN_PASSWORD(self) -> str:
+        return os.getenv("ADMIN_PASSWORD", "")
 
     def s1_configured(self) -> bool:
         return bool(self.S1_API_TOKEN)

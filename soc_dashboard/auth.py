@@ -1,6 +1,6 @@
 """
 Sentrium Integrated SOC Dashboard — Authentication
-TOTP (Google Authenticator) based authentication with session management.
+Multi-role auth: Admin (TOTP), Client (password), Analyst (password).
 """
 
 from __future__ import annotations
@@ -13,47 +13,79 @@ from config import settings
 
 logger = logging.getLogger("soc_dashboard.auth")
 
-# ── In-memory session store ──────────────────────────────────
-# { token: { "created_at": float, "last_active": float } }
+# Session store: { token: { "created_at": float, "last_active": float, "role": str, "client_name": str|None } }
 _sessions: dict[str, dict] = {}
 
+# ── Password verification ──────────────────────────────────────
+
+def verify_admin_password(username: str, password: str) -> bool:
+    """Verify admin credentials."""
+    return username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD
+
+def verify_client_password(username: str, password: str) -> bool:
+    """Verify a client user's credentials."""
+    creds = settings.CLIENT_CREDENTIALS
+    stored = creds.get(username)
+    if stored and stored == password:
+        return True
+    return False
+
+def verify_analyst_password(username: str, password: str) -> bool:
+    """Verify an analyst user's credentials."""
+    creds = settings.ANALYST_CREDENTIALS
+    stored = creds.get(username)
+    if stored and stored == password:
+        return True
+    return False
+
+def resolve_client_name(username: str) -> str | None:
+    """Return the real client display name for this username.
+
+    Resolution order:
+    1. CLIENT_NAME_MAP env var  → maps login username to exact S1/AV display name
+    2. Fall back to the username itself (works when username == client name)
+    """
+    if username not in settings.CLIENT_CREDENTIALS:
+        return None
+    name_map = settings.CLIENT_NAME_MAP
+    return name_map.get(username, username)
+
+# ── TOTP ───────────────────────────────────────────────────────
 
 def verify_totp(code: str) -> bool:
     """Verify a 6-digit TOTP code against the configured secret."""
     if not settings.totp_configured():
         logger.warning("TOTP not configured — authentication bypassed")
-        return True  # Allow access if TOTP not configured (dev mode)
-
+        return True
     try:
         totp = pyotp.TOTP(settings.TOTP_SECRET)
-        return totp.verify(code, valid_window=1)  # ±30s window
+        return totp.verify(code, valid_window=1)
     except Exception as e:
         logger.error(f"TOTP verification error: {e}")
         return False
 
+# ── Session management ────────────────────────────────────────
 
-def create_session() -> str:
-    """Create a new session and return the token."""
+def create_session(role: str = "admin", client_name: str | None = None) -> str:
+    """Create a new session with role metadata."""
     token = secrets.token_urlsafe(48)
     _sessions[token] = {
         "created_at": time.time(),
         "last_active": time.time(),
+        "role": role,
+        "client_name": client_name,
     }
     _cleanup_expired()
-    logger.info(f"Session created. Active sessions: {len(_sessions)}")
+    logger.info(f"Session created: role={role}, client={client_name}. Total: {len(_sessions)}")
     return token
-
 
 def validate_session(token: Optional[str]) -> bool:
     """Check if a session token is valid and not expired."""
     if not token:
         return False
-
     session = _sessions.get(token)
     if not session:
         return False
-
-    # Check timeout
     timeout_secs = settings.SESSION_TIMEOUT_MINUTES * 60
     if timeout_secs > 0:
         elapsed = time.time() - session["last_active"]
@@ -61,11 +93,8 @@ def validate_session(token: Optional[str]) -> bool:
             _sessions.pop(token, None)
             logger.info("Session expired due to inactivity")
             return False
-
-    # Update last active
     session["last_active"] = time.time()
     return True
-
 
 def destroy_session(token: Optional[str]):
     """Destroy a session."""
@@ -73,12 +102,26 @@ def destroy_session(token: Optional[str]):
         _sessions.pop(token, None)
         logger.info(f"Session destroyed. Active sessions: {len(_sessions)}")
 
+def get_session_role(token: Optional[str]) -> str | None:
+    """Get the role associated with a session."""
+    if not token:
+        return None
+    session = _sessions.get(token)
+    return session.get("role") if session else None
+
+def get_session_client(token: Optional[str]) -> str | None:
+    """Get the client_name associated with a session."""
+    if not token:
+        return None
+    session = _sessions.get(token)
+    return session.get("client_name") if session else None
+
+# ── Internal ───────────────────────────────────────────────────
 
 def _cleanup_expired():
-    """Remove all expired sessions from memory."""
+    """Remove expired sessions."""
     if settings.SESSION_TIMEOUT_MINUTES <= 0:
         return
-
     cutoff = time.time() - (settings.SESSION_TIMEOUT_MINUTES * 60)
     expired = [k for k, v in _sessions.items() if v["last_active"] < cutoff]
     for k in expired:
