@@ -1,154 +1,69 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>{{ client_name }} — Sentrium SOC</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/dashboard.css?v=7">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=9">
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
 <style>
-/* ── Client page overrides ── */
-body{background:#0B0D17;}
-.sidebar{width:240px;background:#0D0F1C;border-right:1px solid rgba(255,255,255,0.06);padding:20px 14px;display:flex;flex-direction:column;gap:0;}
-.main-content{margin-left:240px;margin-right:40px;padding:0 28px 60px;}
-.right-strip{width:40px;}
+/* Client dashboard overrides */
+.client-dash .sidebar { width: 200px; }
+.client-dash .sidebar .nav-back { display:flex; align-items:center; gap:7px; padding:6px 10px; font-size:0.75rem; font-weight:500; color:var(--text-muted); text-decoration:none; border-radius:var(--radius-md); transition:var(--transition); margin-bottom:4px; }
+.client-dash .sidebar .nav-back:hover { background:var(--bg-hover); color:var(--text-secondary); }
+.client-dash .sidebar .nav-back svg { width:13px; height:13px; }
 
-/* Client identity block in sidebar */
-.client-identity{padding:14px 10px 16px;margin-bottom:4px;}
-.client-identity-name{font-size:.95rem;font-weight:800;color:#E8EEFF;letter-spacing:-.02em;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.client-plat-tags{display:flex;gap:5px;flex-wrap:wrap;}
-.cpill{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;}
-.cpill-s1{background:rgba(99,102,241,.18);color:#818CF8;border:1px solid rgba(99,102,241,.3);}
-.cpill-av{background:rgba(249,115,22,.15);color:#F97316;border:1px solid rgba(249,115,22,.28);}
+.client-identity { padding:12px 10px 16px; }
+.client-identity-name { font-size:0.88rem; font-weight:700; color:var(--text-primary); letter-spacing:-0.3px; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.client-plat-tags { display:flex; gap:4px; flex-wrap:wrap; }
+.cpill { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:3px; font-size:0.65rem; font-weight:600; }
+.cpill-s1 { background:rgba(90,109,255,0.12); color:var(--accent-light); }
+.cpill-av { background:rgba(249,115,22,0.1); color:#F97316; }
 
-.nav-section-label{font-size:.62rem;font-weight:700;color:#3A4A6A;text-transform:uppercase;letter-spacing:.1em;padding:12px 10px 6px;}
-.nav-divider{height:1px;background:rgba(255,255,255,0.06);margin:8px 0;}
+.nav-section-label { font-size:0.6rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; padding:10px 10px 5px; }
+.nav-divider { height:1px; background:var(--border); margin:6px 0; }
 
-.client-nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;text-decoration:none;font-size:.84rem;font-weight:600;color:#6B7A99;transition:all .18s;cursor:pointer;border:none;background:transparent;width:100%;text-align:left;font-family:inherit;position:relative;}
-.client-nav-item svg{width:17px;height:17px;flex-shrink:0;stroke-width:1.8;}
-.client-nav-item:hover{background:rgba(255,255,255,.05);color:#C8D4F0;}
-.client-nav-item.active{background:linear-gradient(135deg,rgba(99,102,241,.22),rgba(99,102,241,.1));color:#A5B4FC;border:1px solid rgba(99,102,241,.22);}
-.client-nav-item.active svg{stroke:#818CF8;}
-.nav-badge{position:absolute;right:10px;background:#F97316;color:#fff;font-size:.6rem;font-weight:800;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;}
-.nav-badge-s1{background:#6366F1;}
+.client-nav-item { display:flex; align-items:center; gap:9px; padding:8px 11px; border-radius:var(--radius-md); text-decoration:none; font-size:0.8rem; font-weight:500; color:var(--text-muted); transition:var(--transition); cursor:pointer; border:none; background:transparent; width:100%; text-align:left; font-family:inherit; position:relative; }
+.client-nav-item svg { width:15px; height:15px; flex-shrink:0; stroke-width:1.5; }
+.client-nav-item:hover { background:var(--bg-hover); color:var(--text-secondary); }
+.client-nav-item.active { background:var(--accent-dim); color:var(--accent-light); font-weight:600; border:none; }
+.client-nav-item.active svg { stroke:var(--accent-light); }
+.nav-badge { position:absolute; right:9px; background:#F97316; color:#fff; font-size:0.58rem; font-weight:700; padding:1px 5px; border-radius:8px; min-width:16px; text-align:center; }
+.nav-badge-s1 { background:var(--accent); }
 
-.nav-back{display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:.78rem;font-weight:600;color:#3A4A6A;text-decoration:none;border-radius:8px;transition:all .18s;margin-bottom:6px;}
-.nav-back:hover{color:#9BAAC8;background:rgba(255,255,255,.04);}
-.nav-back svg{width:14px;height:14px;}
+.client-section { display:none; }
+.client-section.active { display:block; }
 
-/* Sections */
-.client-section{display:none;animation:fadeIn .25s ease;}
-.client-section.active{display:block;}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+/* Override topbar for client page */
+.client-dash .topbar { border-bottom-color: var(--border); padding-bottom: 16px; margin-bottom: 24px; }
+.client-dash .main-content { padding: 0 32px 60px; }
 
-/* Topbar */
-.topbar{padding:16px 0;margin-bottom:20px;}
-.page-title{font-size:1.25rem;font-weight:800;color:#E8EEFF;}
-.page-subtitle{font-size:.76rem;color:#5A6A8A;margin-top:1px;}
-
-/* Platform strip */
-.plat-strip{display:flex;align-items:center;gap:10px;padding:10px 16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;margin-bottom:20px;flex-wrap:wrap;}
-.plat-strip-label{font-size:.66rem;font-weight:700;color:#3A4A6A;text-transform:uppercase;letter-spacing:.08em;}
-.plat-strip-right{margin-left:auto;font-size:.76rem;color:#5A6A8A;}
-.plat-strip-right strong{color:#9BAAC8;}
-
-/* KPI row */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:18px;}
-.kpi-tile{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px 16px;position:relative;overflow:hidden;transition:all .2s;}
-.kpi-tile::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
-.kpi-tile-av::before{background:linear-gradient(90deg,#F97316,#FBBF24);}
-.kpi-tile-s1::before{background:linear-gradient(90deg,#6366F1,#22D3EE);}
-.kpi-tile-red::before{background:linear-gradient(90deg,#F43F5E,#F97316);}
-.kpi-tile-teal::before{background:linear-gradient(90deg,#14B8A6,#22D3EE);}
-.kpi-tile-purple::before{background:linear-gradient(90deg,#8B5CF6,#6366F1);}
-.kpi-tile:hover{transform:translateY(-2px);background:rgba(255,255,255,.06);}
-.kpi-tile-val{font-size:1.9rem;font-weight:900;color:#E8EEFF;letter-spacing:-1.5px;line-height:1;}
-.kpi-tile-lbl{font-size:.64rem;font-weight:700;color:#4A5A7A;text-transform:uppercase;letter-spacing:.07em;margin-top:5px;}
-.kpi-tile-sub{font-size:.7rem;color:#5A6A8A;margin-top:2px;}
-
-/* Cards */
-.dash-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px;margin-bottom:14px;}
-.dash-card-title{font-size:.66rem;font-weight:700;color:#3A4A6A;text-transform:uppercase;letter-spacing:.09em;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
-.dash-card-title-dot{width:6px;height:6px;border-radius:50%;}
-.dtd-av{background:#F97316;} .dtd-s1{background:#6366F1;} .dtd-blue{background:#22D3EE;}
-
-/* Two-col */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
-@media(max-width:900px){.two-col{grid-template-columns:1fr;}}
-
-/* Section header */
-.sec-title{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
-.sec-title h2{font-size:1rem;font-weight:800;color:#E8EEFF;}
-.sec-title-badge{padding:2px 10px;border-radius:5px;font-size:.68rem;font-weight:700;}
-.stb-av{background:rgba(249,115,22,.15);color:#F97316;border:1px solid rgba(249,115,22,.25);}
-.stb-s1{background:rgba(99,102,241,.15);color:#818CF8;border:1px solid rgba(99,102,241,.25);}
-.sec-count{font-size:.76rem;color:#5A6A8A;margin-left:auto;}
-
-/* Tables */
-.data-table{width:100%;border-collapse:collapse;font-size:.82rem;}
-.data-table th{text-align:left;padding:8px 12px;font-size:.64rem;font-weight:700;color:#3A4A6A;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap;}
-.data-table td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;}
-.data-table tbody tr:last-child td{border-bottom:none;}
-.data-table tbody tr:hover{background:rgba(255,255,255,.03);}
-.data-table .empty-msg{text-align:center;padding:36px;color:#3A4A6A;font-size:.82rem;}
-
-/* Priority badges */
-.pb{display:inline-block;padding:2px 9px;border-radius:4px;font-size:.68rem;font-weight:700;}
-.pb-critical{background:rgba(244,63,94,.15);color:#F43F5E;}
-.pb-high{background:rgba(249,115,22,.15);color:#F97316;}
-.pb-medium{background:rgba(251,191,36,.12);color:#FBBF24;}
-.pb-low{background:rgba(52,211,153,.1);color:#34D399;}
-
-/* Status chips */
-.sc{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:.66rem;font-weight:700;}
-.sc-open{background:rgba(244,63,94,.12);color:#F43F5E;}
-.sc-closed{background:rgba(255,255,255,.06);color:#6B7A99;}
-.sc-review{background:rgba(251,191,36,.1);color:#FBBF24;}
-
-/* Bar for method count */
-.bar-row{display:flex;align-items:center;gap:8px;}
-.bar-bg{flex:1;height:4px;background:rgba(255,255,255,.06);border-radius:2px;}
-.bar-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,#F97316,#FBBF24);}
-.bar-fill-s1{background:linear-gradient(90deg,#6366F1,#22D3EE);}
-.bar-cnt{font-size:.76rem;font-weight:700;color:#E8EEFF;min-width:24px;text-align:right;}
-
-/* Asset count badge */
-.asset-cnt{display:inline-block;padding:2px 9px;border-radius:4px;font-size:.72rem;font-weight:800;background:rgba(249,115,22,.12);color:#F97316;}
-
-/* Live indicator */
-.live-indicator{left:calc(240px + 28px);}
-
-/* Alarm table card */
-.alarm-table-wrap{overflow-x:auto;}
-.alarm-name{font-weight:600;color:#C8D4F0;font-size:.82rem;}
-.alarm-sub{font-size:.7rem;color:#4A5A7A;margin-top:1px;}
-.alarm-time{font-size:.72rem;color:#3A4A6A;white-space:nowrap;}
-
-/* Verdict badges for S1 */
-.vb{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.66rem;font-weight:700;}
-.vb-tp{background:rgba(244,63,94,.12);color:#F43F5E;}
-.vb-fp{background:rgba(255,255,255,.06);color:#6B7A99;}
-.vb-sus{background:rgba(251,191,36,.1);color:#FBBF24;}
-.vb-pen{background:rgba(99,102,241,.1);color:#818CF8;}
-
-/* S1 confidence */
-.conf-mal{background:rgba(244,63,94,.12);color:#F43F5E;}
-.conf-sus{background:rgba(251,191,36,.1);color:#FBBF24;}
-.conf-unk{background:rgba(255,255,255,.06);color:#6B7A99;}
+@media(max-width:768px) {
+    .client-dash .main-content { padding: 0 16px 60px !important; }
+}
 </style>
 </head>
-<body>
+<body class="client-dash">
+
+<div class="notification-container" id="notification-container"></div>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
 
 <!-- ══ SIDEBAR ══ -->
 <aside class="sidebar" id="sidebar">
-  <div class="sidebar-logo">
-    <div class="logo-icon-box"><img src="/static/img/logo.png" alt="Sentrium"></div>
-  </div>
+  <div class="brand">Sentrium</div>
 
+  {% if role == "analyst" %}
+  <a href="/analyst" class="nav-back">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Analyst Portal
+  </a>
+  {% elif role == "admin" %}
   <a href="/" class="nav-back">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
     All Clients
   </a>
+  {% endif %}
+  <!-- client role: no back nav -->
 
   <div class="client-identity">
     <div class="client-identity-name" id="sidebar-client-name">{{ client_name }}</div>
@@ -179,10 +94,16 @@ body{background:#0B0D17;}
     </button>
   </nav>
 
-  <div style="margin-top:auto;padding-top:20px;">
-    <div class="live-indicator" id="live-indicator" style="position:relative;bottom:auto;left:auto;border-radius:10px;margin-top:8px;">
+  <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" style="margin-top:auto;">
+    <svg id="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+    <svg id="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <span class="tl" id="theme-label">Dark</span>
+  </button>
+
+  <div style="padding-top:14px;">
+    <div class="live-indicator" id="live-indicator" style="position:relative;bottom:auto;left:auto;margin-top:6px;border-radius:10px;">
       <span class="live-pulse"></span>
-      <span class="live-text">Updated: <span id="last-updated">–</span></span>
+      <span class="live-text">Updated <strong id="last-updated">–</strong></span>
     </div>
   </div>
 </aside>
@@ -190,111 +111,148 @@ body{background:#0B0D17;}
 <!-- ══ MAIN ══ -->
 <main class="main-content">
   <header class="topbar">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <div>
-        <h1 class="page-title">{{ client_name }}</h1>
-        <p class="page-subtitle">Security Operations Center — Client Dashboard</p>
-      </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
       <div style="display:flex;align-items:center;gap:10px;">
-        <div class="system-status" id="system-status"><span class="status-dot"></span><span class="status-text">All Systems Operational</span></div>
-        <a href="/logout" class="topbar-icon-btn user-btn" title="Sign Out">
+        <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div>
+          <div class="page-title">{{ client_name }}</div>
+          <div class="page-sub">Security Operations Center — Client Dashboard</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <a href="/logout" class="user-btn" title="Sign Out">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </a>
       </div>
-    </div>
-    <!-- Platform strip -->
-    <div class="plat-strip" style="margin-top:14px;">
-      <span class="plat-strip-label">Monitored via</span>
-      <span id="plat-pills-strip">—</span>
-      <span class="plat-strip-right" id="plat-stats-strip"></span>
     </div>
   </header>
 
   <!-- ══ OVERVIEW ══ -->
   <section id="section-overview" class="client-section active">
     <div class="kpi-grid" id="kpi-grid">
-      <div class="kpi-tile kpi-tile-av"><div class="kpi-tile-val" id="kv-alarms">—</div><div class="kpi-tile-lbl">AV Alarms (24h)</div></div>
-      <div class="kpi-tile kpi-tile-s1"><div class="kpi-tile-val" id="kv-threats">—</div><div class="kpi-tile-lbl">S1 Threats (24h)</div></div>
-      <div class="kpi-tile kpi-tile-red"><div class="kpi-tile-val" id="kv-endpoints">—</div><div class="kpi-tile-lbl">Endpoints (S1)</div></div>
-      <div class="kpi-tile kpi-tile-teal"><div class="kpi-tile-val" id="kv-blocked">—</div><div class="kpi-tile-lbl">Critical Alarms</div></div>
-      <div class="kpi-tile kpi-tile-purple"><div class="kpi-tile-val" id="kv-dfir">—</div><div class="kpi-tile-lbl">DFIR Cases</div></div>
+      <div class="kpi-tile kpi-tile-av">
+        <div class="kpi-tile-inner">
+          <div>
+            <div class="kpi-tile-val" id="kv-alarms"><span class="skeleton skeleton-value" style="width:44px;"></span></div>
+            <div class="kpi-tile-lbl">AV Alarms (24h)</div>
+          </div>
+          <div class="kpi-tile-spark" id="spark-alarms"></div>
+        </div>
+      </div>
+      <div class="kpi-tile kpi-tile-s1">
+        <div class="kpi-tile-inner">
+          <div>
+            <div class="kpi-tile-val" id="kv-threats"><span class="skeleton skeleton-value" style="width:36px;"></span></div>
+            <div class="kpi-tile-lbl">S1 Threats (24h)</div>
+          </div>
+          <div class="kpi-tile-spark" id="spark-threats"></div>
+        </div>
+      </div>
+      <div class="kpi-tile kpi-tile-red">
+        <div class="kpi-tile-inner">
+          <div>
+            <div class="kpi-tile-val" id="kv-endpoints"><span class="skeleton skeleton-value" style="width:40px;"></span></div>
+            <div class="kpi-tile-lbl">Endpoints</div>
+          </div>
+          <div class="kpi-tile-spark" id="spark-endpoints"></div>
+        </div>
+      </div>
+      <div class="kpi-tile kpi-tile-teal">
+        <div class="kpi-tile-inner">
+          <div>
+            <div class="kpi-tile-val" id="kv-blocked"><span class="skeleton skeleton-value" style="width:30px;"></span></div>
+            <div class="kpi-tile-lbl">Critical Alarms</div>
+          </div>
+          <div class="kpi-tile-spark" id="spark-blocked"></div>
+        </div>
+      </div>
+      <div class="kpi-tile kpi-tile-purple">
+        <div class="kpi-tile-inner">
+          <div>
+            <div class="kpi-tile-val" id="kv-dfir"><span class="skeleton skeleton-value" style="width:28px;"></span></div>
+            <div class="kpi-tile-lbl">DFIR Cases</div>
+          </div>
+          <div class="kpi-tile-spark" id="spark-dfir"></div>
+        </div>
+      </div>
     </div>
+
     <div class="two-col">
       <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>AV Priority Summary</div>
-        <div id="dash-prio"></div>
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Priority Breakdown</div>
+        <div id="dash-prio"><div class="skeleton skeleton-row" style="margin-bottom:6px;"></div><div class="skeleton skeleton-row" style="width:70%;"></div></div>
       </div>
       <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top Alarm Methods</div>
-        <div id="dash-methods"></div>
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top Methods</div>
+        <div id="dash-methods"><div class="skeleton skeleton-row" style="margin-bottom:6px;"></div><div class="skeleton skeleton-row" style="width:60%;"></div></div>
       </div>
     </div>
+
     <div class="dash-card">
       <div class="dash-card-title"><span class="dash-card-title-dot dtd-s1"></span>Event Activity — 24h</div>
-      <div id="event-chart" style="height:180px;"></div>
+      <div id="event-chart" style="height:170px;"></div>
     </div>
   </section>
 
-  <!-- ══ ALERTS (AV) ══ -->
+  <!-- ══ ALERTS ══ -->
   <section id="section-alerts" class="client-section">
     <div class="sec-title">
       <h2>AlienVault Alarms</h2>
-      <span class="sec-title-badge stb-av">AlienVault USM</span>
-      <span class="sec-count" id="av-total-lbl">— alarms · 24hr window</span>
+      <span class="sec-title-badge stb-av">AlienVault</span>
+      <span class="sec-count" id="av-total-lbl">— alarms · 24hr</span>
     </div>
-
     <div class="two-col">
       <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Priority &amp; Status Breakdown</div>
-        <table class="data-table"><thead><tr><th>Priority</th><th>Total</th><th>Open</th><th>Closed</th><th>In Review</th></tr></thead>
-        <tbody id="prio-tbody"><tr><td colspan="5" class="empty-msg">Loading…</td></tr></tbody></table>
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Priority &amp; Status</div>
+        <table class="data-table"><thead><tr><th>Priority</th><th>Total</th><th>Open</th><th>Closed</th><th>Review</th></tr></thead>
+        <tbody id="prio-tbody"><tr><td colspan="5" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
       </div>
       <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Alarms by Method</div>
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>By Method</div>
         <table class="data-table"><thead><tr><th>Method</th><th>Strategy</th><th>Intent</th><th style="text-align:right">Count</th></tr></thead>
-        <tbody id="meth-tbody"><tr><td colspan="4" class="empty-msg">Loading…</td></tr></tbody></table>
+        <tbody id="meth-tbody"><tr><td colspan="4" class="empty-msg"><span class="skeleton skeleton-text" style="width:60%;"></span></td></tr></tbody></table>
       </div>
     </div>
-
     <div class="two-col">
       <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Top 5 Source Assets</div>
-        <table class="data-table"><thead><tr><th>#</th><th>Asset / IP</th><th>Alarms</th><th>Top Methods</th></tr></thead>
-        <tbody id="src-tbody"><tr><td colspan="4" class="empty-msg">Loading…</td></tr></tbody></table>
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Top Sources</div>
+        <table class="data-table"><thead><tr><th>#</th><th>Asset</th><th>Alarms</th><th>Methods</th></tr></thead>
+        <tbody id="src-tbody"><tr><td colspan="4" class="empty-msg"><span class="skeleton skeleton-text" style="width:40%;"></span></td></tr></tbody></table>
       </div>
       <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Top 5 Destination Assets</div>
-        <table class="data-table"><thead><tr><th>#</th><th>Asset / IP</th><th>Alarms</th><th>Top Methods</th></tr></thead>
-        <tbody id="dst-tbody"><tr><td colspan="4" class="empty-msg">Loading…</td></tr></tbody></table>
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Top Destinations</div>
+        <table class="data-table"><thead><tr><th>#</th><th>Asset</th><th>Alarms</th><th>Methods</th></tr></thead>
+        <tbody id="dst-tbody"><tr><td colspan="4" class="empty-msg"><span class="skeleton skeleton-text" style="width:40%;"></span></td></tr></tbody></table>
       </div>
     </div>
-
     <div class="dash-card">
       <div class="dash-card-title" style="justify-content:space-between;">
         <span style="display:flex;align-items:center;gap:8px;"><span class="dash-card-title-dot dtd-av"></span>Alarm Log</span>
-        <span style="font-size:.7rem;color:#5A6A8A;font-weight:500;text-transform:none;letter-spacing:0;">Showing latest 50 of <span id="av-list-total">—</span></span>
+        <span style="font-size:0.68rem;color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0;">Latest 50 of <span id="av-list-total">—</span></span>
       </div>
       <div class="alarm-table-wrap">
         <table class="data-table">
-          <thead><tr><th>Alarm</th><th>Priority</th><th>Status</th><th>Source</th><th>Destination</th><th>Reported</th></tr></thead>
-          <tbody id="alarm-tbody"><tr><td colspan="6" class="empty-msg">Loading…</td></tr></tbody>
+          <thead><tr><th>Alarm</th><th>Priority</th><th>Status</th><th>Source</th><th>Dest</th><th>Reported</th></tr></thead>
+          <tbody id="alarm-tbody"><tr><td colspan="6" class="empty-msg"><span class="skeleton skeleton-text" style="width:70%;"></span></td></tr></tbody>
         </table>
       </div>
     </div>
   </section>
 
-  <!-- ══ EDR (S1 only) ══ -->
+  <!-- ══ EDR ══ -->
   <section id="section-edr" class="client-section">
     <div class="sec-title">
       <h2>SentinelOne — EDR</h2>
       <span class="sec-title-badge stb-s1">SentinelOne</span>
-      <span class="sec-count" id="s1-threat-lbl">— threats · 24hr window</span>
+      <span class="sec-count" id="s1-threat-lbl">— threats · 24hr</span>
     </div>
     <div class="dash-card">
       <div class="alarm-table-wrap">
         <table class="data-table">
-          <thead><tr><th>Threat</th><th>AI Confidence</th><th>Analyst Verdict</th><th>Status</th><th>Endpoint</th><th>Reported</th></tr></thead>
-          <tbody id="s1-tbody"><tr><td colspan="6" class="empty-msg">Loading…</td></tr></tbody>
+          <thead><tr><th>Threat</th><th>Confidence</th><th>Verdict</th><th>Status</th><th>Endpoint</th><th>Reported</th></tr></thead>
+          <tbody id="s1-tbody"><tr><td colspan="6" class="empty-msg"><span class="skeleton skeleton-text" style="width:60%;"></span></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -302,22 +260,19 @@ body{background:#0B0D17;}
 
   <!-- ══ SETTINGS ══ -->
   <section id="section-settings" class="client-section">
-    <div class="sec-title"><h2>Client Settings</h2></div>
+    <div class="sec-title"><h2>Settings</h2></div>
     <div class="dash-card">
-      <p style="color:#5A6A8A;font-size:.84rem;line-height:1.8;">Platform integrations, alert thresholds and notification preferences for <strong style="color:#C8D4F0;">{{ client_name }}</strong> will appear here.</p>
+      <p style="color:var(--text-muted);font-size:0.82rem;line-height:1.7;">Platform integrations, thresholds and notification preferences for <strong style="color:var(--text-primary);">{{ client_name }}</strong> will appear here.</p>
     </div>
   </section>
 </main>
 
-<aside class="right-strip">
-  <div class="strip-text"><span>Sentrium</span><span class="strip-year">SOC</span></div>
-</aside>
 <div class="reconnect-overlay" id="reconnect-overlay"><div class="reconnect-box"><div class="reconnect-spinner"></div><p>Reconnecting…</p></div></div>
 
 <script>
-const WS_URL="{{ws_url}}",CLIENT_NAME="{{client_name}}",REFRESH_INTERVAL={{refresh_interval}};
+const WS_URL="{{ws_url}}",CLIENT_NAME="{{client_name}}",REFRESH_INTERVAL={{refresh_interval}},ROLE="{{role}}";
 </script>
-<script src="/static/js/charts.js?v=7"></script>
-<script src="/static/js/dashboard.js?v=7"></script>
+<script src="/static/js/charts.js?v=9"></script>
+<script src="/static/js/dashboard.js?v=9"></script>
 </body>
 </html>

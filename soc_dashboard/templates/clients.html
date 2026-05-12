@@ -1,89 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Sentrium SOC — Client Overview</title>
 <meta name="description" content="Sentrium Integrated Security Operations Center — Client Overview">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/dashboard.css?v=7">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=9">
 <style>
-/* ── Client List ── */
-.list-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
-.list-header h2 { font-size:0.95rem; font-weight:800; color:var(--text-primary); }
-.list-header .client-count { font-size:0.78rem; font-weight:600; color:var(--text-muted); }
-
-.filter-bar { display:flex; gap:8px; margin-bottom:14px; align-items:center; flex-wrap:wrap; }
-.filter-pill {
-    padding:5px 14px; border-radius:20px; font-size:0.75rem; font-weight:600;
-    border:1px solid var(--border-card); background:var(--bg-card); color:var(--text-muted);
-    cursor:pointer; transition:var(--transition); font-family:var(--font);
-}
-.filter-pill:hover,.filter-pill.active { background:var(--accent-blue); color:#fff; border-color:var(--accent-blue); }
-.filter-pill-av.active { background:#F97316; border-color:#F97316; }
-.filter-pill-s1.active { background:#6366F1; border-color:#6366F1; }
-
-.client-list-card {
-    background:var(--bg-card); border:1px solid var(--border-card);
-    border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow-sm);
-    backdrop-filter:blur(8px);
-}
-.client-list-table { width:100%; border-collapse:collapse; }
-.client-list-table thead tr { border-bottom:1px solid var(--border-light); background:rgba(255,255,255,0.03); }
-.client-list-table th {
-    padding:10px 18px; text-align:left; font-size:0.68rem; font-weight:700;
-    color:var(--text-muted); text-transform:uppercase; letter-spacing:.07em; white-space:nowrap;
-}
-.client-list-table td { padding:13px 18px; border-bottom:1px solid var(--border-light); vertical-align:middle; }
-.client-list-table tbody tr:last-child td { border-bottom:none; }
-.client-list-table tbody tr { cursor:pointer; transition:background .15s; }
-.client-list-table tbody tr:hover { background:var(--bg-hover); }
-
-.cl-name { font-size:0.88rem; font-weight:700; color:var(--text-primary); }
-.cl-index { font-size:0.72rem; color:var(--text-muted); font-weight:500; min-width:20px; }
-
-.plat-pills { display:flex; gap:5px; }
-.plat-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:5px; font-size:0.7rem; font-weight:700; }
-.plat-pill-s1 { background:rgba(99,102,241,0.15); color:#818CF8; border:1px solid rgba(99,102,241,0.25); }
-.plat-pill-av { background:rgba(249,115,22,0.15); color:#F97316; border:1px solid rgba(249,115,22,0.25); }
-.plat-dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
-
-.cl-status { display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; font-weight:600; color:var(--text-secondary); }
-.cl-status-dot { width:7px; height:7px; border-radius:50%; background:#34D399; box-shadow:0 0 0 2px rgba(52,211,153,.2); }
-.cl-status-dot.warning  { background:#FBBF24; box-shadow:0 0 0 2px rgba(251,191,36,.2); }
-.cl-status-dot.critical { background:#F43F5E; box-shadow:0 0 0 2px rgba(244,63,94,.2); }
-
-.view-action {
-    display:inline-flex; align-items:center; gap:5px; font-size:0.78rem; font-weight:600;
-    color:var(--accent-indigo); text-decoration:none; padding:5px 12px; border-radius:7px;
-    border:1px solid rgba(99,102,241,0.2); background:rgba(99,102,241,0.06); transition:var(--transition);
-    white-space:nowrap;
-}
-.view-action:hover { background:var(--accent-blue); color:#fff; border-color:var(--accent-blue); }
-.view-action svg { width:12px; height:12px; }
-
-.loading-state { text-align:center; padding:60px 20px; color:var(--text-muted); }
-.loading-spinner { width:36px; height:36px; border:3px solid var(--border-card); border-top-color:var(--accent-blue); border-radius:50%; margin:0 auto 14px; animation:spin .8s linear infinite; }
-@keyframes spin { to { transform:rotate(360deg); } }
-
-.summary-strip { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
-.strip-item {
-    background:var(--bg-card); border:1px solid var(--border-card); border-radius:var(--radius-lg);
-    padding:14px 20px; display:flex; align-items:center; gap:12px; flex:1; min-width:140px;
-    box-shadow:var(--shadow-sm); backdrop-filter:blur(8px);
-}
-.strip-val { font-size:1.45rem; font-weight:900; color:var(--text-primary); }
-.strip-lbl { font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
-.strip-icon { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; }
-.strip-icon svg { width:17px; height:17px; }
-.si-blue   { background:rgba(99,102,241,0.15); stroke:#818CF8; }
-.si-indigo { background:rgba(129,140,248,0.12); stroke:#A78BFA; }
-.si-orange { background:rgba(249,115,22,0.12);  stroke:#F97316; }
+.clients-page .sidebar .brand { padding-bottom: 20px; }
 </style>
 </head>
-<body>
+<body class="clients-page">
+
+<div class="notification-container" id="notification-container"></div>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
 <!-- ═══ SIDEBAR ═══ -->
 <aside class="sidebar" id="sidebar">
-  <div class="sidebar-logo"><div class="logo-icon-box"><img src="/static/img/logo.png" alt="Sentrium Security"></div></div>
+  <div class="brand">Sentrium</div>
   <div class="sidebar-search">
     <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input type="text" placeholder="Search clients..." id="search-input">
@@ -93,113 +27,140 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span>Dashboard</span>
     </a>
-    <a href="#" class="nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      <span>Settings</span>
-    </a>
   </nav>
+  <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" style="margin-top:auto;">
+    <svg id="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+    <svg id="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <span class="tl" id="theme-label">Dark</span>
+  </button>
 </aside>
 
 <!-- ═══ MAIN ═══ -->
 <main class="main-content">
   <header class="topbar">
-    <div class="topbar-left">
-      <h1 class="page-title">Security Operations Center — Client Overview</h1>
-      <p class="page-subtitle">Select a client to view their environment and security data</p>
+    <div class="topbar-left" style="display:flex;align-items:center;">
+      <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div>
+        <div class="page-title">Client Overview</div>
+        <div class="page-sub">Sentrium Security Operations Center</div>
+      </div>
     </div>
     <div class="topbar-right">
-      <div class="system-status" id="system-status"><span class="status-dot"></span><span class="status-text">All System Operational</span></div>
-      <a href="/logout" class="topbar-icon-btn user-btn" title="Sign Out">
+      <a href="/logout" class="user-btn" title="Sign Out">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       </a>
     </div>
   </header>
 
-  <!-- Summary strip (counts only, no sensitive metrics) -->
+  <!-- Summary strip -->
   <div class="summary-strip" id="summary-strip">
     <div class="strip-item">
       <div class="strip-icon si-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
-      <div><div class="strip-val" id="total-clients">—</div><div class="strip-lbl">Total Clients</div></div>
+      <div><div class="strip-val" id="total-clients"><span class="skeleton skeleton-value" style="width:36px;"></span></div><div class="strip-lbl">Total Clients</div></div>
     </div>
     <div class="strip-item">
       <div class="strip-icon si-indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-      <div><div class="strip-val" id="s1-count">—</div><div class="strip-lbl">SentinelOne Clients</div></div>
+      <div><div class="strip-val" id="s1-count"><span class="skeleton skeleton-value" style="width:28px;"></span></div><div class="strip-lbl">SentinelOne</div></div>
     </div>
     <div class="strip-item">
       <div class="strip-icon si-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
-      <div><div class="strip-val" id="av-count">—</div><div class="strip-lbl">AlienVault Clients</div></div>
+      <div><div class="strip-val" id="av-count"><span class="skeleton skeleton-value" style="width:28px;"></span></div><div class="strip-lbl">AlienVault</div></div>
     </div>
   </div>
 
-  <!-- Filter pills -->
+  <!-- Filters -->
   <div class="filter-bar">
     <button class="filter-pill active" data-filter="all">All Clients</button>
-    <button class="filter-pill filter-pill-s1" data-filter="SentinelOne">SentinelOne Only</button>
-    <button class="filter-pill filter-pill-av" data-filter="AlienVault">AlienVault Only</button>
+    <button class="filter-pill filter-pill-s1" data-filter="SentinelOne">SentinelOne</button>
+    <button class="filter-pill filter-pill-av" data-filter="AlienVault">AlienVault</button>
     <button class="filter-pill" data-filter="both">Both Platforms</button>
   </div>
 
-  <!-- List header -->
+  <!-- Count -->
   <div class="list-header">
     <h2>Managed Clients</h2>
-    <span class="client-count" id="client-count">Loading...</span>
+    <span class="client-count" id="client-count"><span class="skeleton skeleton-pill"></span></span>
   </div>
 
-  <!-- Client list -->
+  <!-- Table -->
   <div class="client-list-card">
     <table class="client-list-table" id="client-list-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Client Name</th>
-          <th>Platform</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
+      <thead><tr><th>#</th><th>Client Name</th><th>Platform</th><th>Status</th><th></th></tr></thead>
       <tbody id="clients-tbody">
-        <tr><td colspan="5"><div class="loading-state"><div class="loading-spinner"></div><p>Discovering clients from SentinelOne &amp; AlienVault...</p></div></td></tr>
+        <tr><td colspan="5"><div class="loading-state" id="loading-skeleton">
+          <div style="padding:16px;">
+            <div class="skeleton skeleton-row" style="width:94%"></div>
+            <div class="skeleton skeleton-row" style="width:88%"></div>
+            <div class="skeleton skeleton-row" style="width:82%"></div>
+            <div class="skeleton skeleton-row" style="width:90%"></div>
+            <div class="skeleton skeleton-row" style="width:85%"></div>
+          </div>
+          <p style="font-size:0.74rem;color:var(--text-muted);margin-top:2px;">Loading clients…</p>
+        </div></td></tr>
       </tbody>
     </table>
   </div>
 
-  <!-- Live indicator -->
+  <!-- Live -->
   <div class="live-indicator" id="live-indicator">
     <span class="live-pulse"></span>
-    <span class="live-text">Last updated: <span id="last-updated">connecting...</span></span>
+    <span class="live-text">Updated <strong id="last-updated">connecting…</strong></span>
   </div>
 </main>
-
-<!-- Right strip -->
-<aside class="right-strip"><div class="strip-text"><span>Sentrium Security</span><span class="strip-year">SOC Dashboard</span></div></aside>
 
 <script>
 const WS_URL = "{{ ws_url }}";
 let ws = null, lastUpdateTime = null, currentFilter = 'all', allClients = [];
 
-// ── Filter pills ──
-document.querySelectorAll('.filter-pill').forEach(pill => {
-    pill.addEventListener('click', () => {
-        document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        currentFilter = pill.dataset.filter;
-        renderTable(allClients);
-    });
-});
+function getTheme() { return localStorage.getItem('soc-theme') || 'dark'; }
+function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('soc-theme', t);
+    const di = document.getElementById('theme-icon-dark');
+    const li = document.getElementById('theme-icon-light');
+    const lb = document.getElementById('theme-label');
+    if (t === 'dark') { if(di)di.style.display=''; if(li)li.style.display='none'; if(lb)lb.textContent='Dark'; }
+    else { if(di)di.style.display='none'; if(li)li.style.display=''; if(lb)lb.textContent='Light'; }
+}
+function toggleTheme() { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); }
+(function(){ setTheme(getTheme()); })();
 
-// ── Search ──
-document.getElementById('search-input').addEventListener('input', e => {
-    renderTable(allClients, e.target.value.toLowerCase().trim());
-});
+function showNotification(title, desc, type) {
+    const c = document.getElementById('notification-container'); if(!c) return;
+    const icons={success:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',error:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',warning:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',info:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'};
+    const t = document.createElement('div');
+    t.className='toast toast-'+type;
+    t.innerHTML=(icons[type]||icons.info)+'<div class="toast-content"><div class="toast-title">'+escHtml(title)+'</div>'+(desc?'<div class="toast-desc">'+escHtml(desc)+'</div>':'')+'</div><svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    c.appendChild(t);
+    t.addEventListener('click',()=>{if(!t.classList.contains('toast-out')){t.classList.add('toast-out');setTimeout(()=>t.remove(),250);}});
+    setTimeout(()=>{if(!t.classList.contains('toast-out')){t.classList.add('toast-out');setTimeout(()=>t.remove(),250);}},5000);
+}
+
+document.querySelectorAll('.filter-pill').forEach(p => p.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-pill').forEach(x=>x.classList.remove('active'));
+    p.classList.add('active'); currentFilter=p.dataset.filter; renderTable(allClients);
+}));
+document.getElementById('search-input').addEventListener('input', e => renderTable(allClients, e.target.value.toLowerCase().trim()));
+
+function toggleMobileMenu() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebar-overlay').classList.toggle('visible');
+    document.getElementById('hamburger').classList.toggle('active');
+}
+document.getElementById('sidebar-overlay').addEventListener('click', toggleMobileMenu);
 
 function connectWS() {
     ws = new WebSocket(WS_URL);
-    ws.onopen  = () => document.getElementById('live-indicator').classList.remove('disconnected');
-    ws.onmessage = e => {
-        try { handleState(JSON.parse(e.data)); lastUpdateTime = new Date(); } catch(err) {}
+    ws.onopen = () => {
+        document.getElementById('live-indicator').classList.remove('disconnected');
+        showNotification('Connected','Real-time feed active','success');
     };
+    ws.onmessage = e => { try { handleState(JSON.parse(e.data)); lastUpdateTime = new Date(); } catch(_){} };
     ws.onclose = () => {
         document.getElementById('live-indicator').classList.add('disconnected');
+        showNotification('Reconnecting','Connection lost, retrying…','warning');
         setTimeout(connectWS, 3000);
     };
     ws.onerror = () => ws.close();
@@ -207,76 +168,40 @@ function connectWS() {
 
 function handleState(state) {
     allClients = state.clients || [];
-
-    // Summary strip
+    document.getElementById('loading-skeleton')?.style.setProperty('display','none');
     document.getElementById('total-clients').textContent = allClients.length;
     document.getElementById('s1-count').textContent = allClients.filter(c => c.platforms.includes('SentinelOne')).length;
     document.getElementById('av-count').textContent = allClients.filter(c => c.platforms.includes('AlienVault')).length;
-    document.getElementById('client-count').textContent = `${allClients.length} clients monitored`;
-
-    // System status
-    const statusEl = document.getElementById('system-status');
-    statusEl.classList.remove('degraded','error');
-    const txt = statusEl.querySelector('.status-text');
-    if (state.system_status === 'degraded') { statusEl.classList.add('degraded'); txt.textContent = 'Partial Connectivity'; }
-    else if (state.system_status === 'error' || state.system_status === 'unconfigured') { statusEl.classList.add('error'); txt.textContent = 'Configuration Required'; }
-    else { txt.textContent = 'All System Operational'; }
-
-    const searchVal = document.getElementById('search-input').value.toLowerCase().trim();
-    renderTable(allClients, searchVal);
+    document.getElementById('client-count').textContent = allClients.length + ' clients monitored';
+    renderTable(allClients, document.getElementById('search-input').value.toLowerCase().trim());
 }
 
-function renderTable(clients, search = '') {
-    const tbody = document.getElementById('clients-tbody');
-
-    const filtered = clients
-        .filter(c => {
-            if (search && !c.name.toLowerCase().includes(search)) return false;
-            if (currentFilter === 'SentinelOne') return c.platforms.includes('SentinelOne') && !c.platforms.includes('AlienVault');
-            if (currentFilter === 'AlienVault')  return c.platforms.includes('AlienVault') && !c.platforms.includes('SentinelOne');
-            if (currentFilter === 'both') return c.platforms.includes('SentinelOne') && c.platforms.includes('AlienVault');
-            return true;
-        })
-        .sort((a, b) => a.name.localeCompare(b.name)); // alphabetical
-
-    if (!filtered.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted);">No clients match the current filter.</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = filtered.map((c, i) => {
-        const platforms = c.platforms || [];
-        const pills = platforms.map(p =>
-            p === 'SentinelOne'
-                ? '<span class="plat-pill plat-pill-s1"><span class="plat-dot"></span>S1</span>'
-                : '<span class="plat-pill plat-pill-av"><span class="plat-dot"></span>AV</span>'
-        ).join('');
-
-        // Status based on threat level (no number exposed, just health state)
-        let dotClass = '', statusLabel = 'Healthy';
-        if (c.total_threats > 10)     { dotClass = 'critical'; statusLabel = 'Critical'; }
-        else if (c.total_threats > 0) { dotClass = 'warning';  statusLabel = 'Alert'; }
-
-        const enc = encodeURIComponent(c.name);
-        return `<tr onclick="window.location='/client/${enc}'">
-            <td><span class="cl-index">${i + 1}</span></td>
-            <td><span class="cl-name">${escHtml(c.name)}</span></td>
-            <td><div class="plat-pills">${pills}</div></td>
-            <td><span class="cl-status"><span class="cl-status-dot ${dotClass}"></span>${statusLabel}</span></td>
-            <td style="text-align:right;"><a href="/client/${enc}" class="view-action" onclick="event.stopPropagation()">View Dashboard <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></a></td>
-        </tr>`;
+function renderTable(clients, search) {
+    const tb = document.getElementById('clients-tbody');
+    const f = clients.filter(c => {
+        if(search && !c.name.toLowerCase().includes(search)) return false;
+        if(currentFilter==='SentinelOne') return c.platforms.includes('SentinelOne')&&!c.platforms.includes('AlienVault');
+        if(currentFilter==='AlienVault') return c.platforms.includes('AlienVault')&&!c.platforms.includes('SentinelOne');
+        if(currentFilter==='both') return c.platforms.includes('SentinelOne')&&c.platforms.includes('AlienVault');
+        return true;
+    }).sort((a,b)=>a.name.localeCompare(b.name));
+    if(!f.length){ tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:36px;color:var(--text-muted);">No clients match filter.</td></tr>'; return; }
+    tb.innerHTML = f.map((c,i)=>{
+        const pills = (c.platforms||[]).map(p => p==='SentinelOne'?'<span class="plat-pill plat-pill-s1"><span class="plat-dot"></span>S1</span>':'<span class="plat-pill plat-pill-av"><span class="plat-dot"></span>AV</span>').join('');
+        let dc='',sl='Healthy';
+        if(c.total_threats>10){dc='critical';sl='Critical';}else if(c.total_threats>0){dc='warning';sl='Alert';}
+        const enc=encodeURIComponent(c.name);
+        return '<tr onclick="window.location=\'/client/'+enc+'\'"><td><span class="cl-index">'+(i+1)+'</span></td><td><span class="cl-name">'+escHtml(c.name)+'</span></td><td><div class="plat-pills">'+pills+'</div></td><td><span class="cl-status"><span class="cl-status-dot '+dc+'"></span>'+sl+'</span></td><td style="text-align:right;"><a href="/client/'+enc+'" class="view-action" onclick="event.stopPropagation()">View <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></a></td></tr>';
     }).join('');
 }
 
-// Update timer
-setInterval(() => {
-    if (!lastUpdateTime) return;
-    const s = Math.floor((Date.now() - lastUpdateTime.getTime()) / 1000);
-    document.getElementById('last-updated').textContent = s < 5 ? 'just now' : s < 60 ? `${s}s ago` : `${Math.floor(s/60)}m ago`;
-}, 1000);
+setInterval(()=>{
+    if(!lastUpdateTime) return;
+    const s=Math.floor((Date.now()-lastUpdateTime.getTime())/1000);
+    document.getElementById('last-updated').textContent = s<5?'just now':s<60?s+'s ago':Math.floor(s/60)+'m ago';
+},1000);
 
-function escHtml(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
-
+function escHtml(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
 connectWS();
 </script>
 </body>

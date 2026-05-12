@@ -5,3 +5,23 @@ builder = "NIXPACKS"
 startCommand = "uvicorn app:app --host 0.0.0.0 --port $PORT"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
+
+# ── Required Railway environment variables ──────────────
+# Set these in your Railway dashboard under Variables:
+#
+# S1_API_TOKEN           — SentinelOne API token
+# AV_SUBDOMAIN           — AlienVault subdomain
+# AV_CLIENT_ID           — AlienVault client ID
+# AV_CLIENT_SECRET       — AlienVault client secret
+# ADMIN_PASSWORD         — Admin login password
+# CLIENT_CREDENTIALS     — JSON: {"Client Name":"password"}
+# ANALYST_CREDENTIALS    — JSON: {"analyst":"password"}
+# SECRET_KEY             — Random string for session signing
+#
+# Optional:
+# S1_BASE_URL            — Default: https://euce1-exclusive.sentinelone.net/web/api/v2.1
+# TOTP_SECRET            — Base32 secret for 2FA
+# HOST                   — Default: 0.0.0.0
+# PORT                   — Set by Railway automatically
+# SESSION_TIMEOUT_MINUTES — Default: 480
+# REFRESH_INTERVAL       — Default: 30
