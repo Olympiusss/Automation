@@ -407,6 +407,21 @@ async def health():
     }
 
 
+@app.get("/api/debug/ping")
+async def debug_ping():
+    """Public — no auth needed. Shows credential config status to diagnose login failures."""
+    return JSONResponse({
+        "admin_username":      settings.ADMIN_USERNAME,
+        "admin_password_set":  bool(settings.ADMIN_PASSWORD),
+        "analyst_count":       len(settings.ANALYST_CREDENTIALS),
+        "analyst_usernames":   list(settings.ANALYST_CREDENTIALS.keys()),
+        "client_count":        len(settings.CLIENT_CREDENTIALS),
+        "client_usernames":    list(settings.CLIENT_CREDENTIALS.keys()),
+        "totp_required":       settings.totp_configured(),
+        "session_timeout_min": settings.SESSION_TIMEOUT_MINUTES,
+    })
+
+
 @app.get("/api/debug/auth")
 async def debug_auth(request: Request):
     """Safe auth diagnostic — shows credential counts & usernames, never passwords."""
