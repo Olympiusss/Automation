@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import traceback
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -84,6 +85,21 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Sentrium Integrated SOC Dashboard", version="1.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+# ── Global error handler — logs full traceback to Railway ──────
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse as _JSONResponse
+from starlette.requests import Request as _Request
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: _Request, exc: Exception):
+    tb = traceback.format_exc()
+    logger.error(f"Unhandled exception on {request.method} {request.url}:\n{tb}")
+    return _JSONResponse(
+        status_code=500,
+        content={"error": str(exc), "type": type(exc).__name__, "path": str(request.url)},
+    )
 
 
 # ════════════════════════════════════════════════════════════════
