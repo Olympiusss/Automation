@@ -1290,31 +1290,33 @@ def _merge_av_data(client: ClientSummary, alarms: list, events: list,
         for c, n in sorted(country_counter.items(), key=lambda x: -x[1])
     ][:5]
 
-    # ── Per-Sensor Alarm Summary ──────────────────────────────────
-    # Alarm's `sensors` field = list of sensor UUIDs; resolve via sensor_map
+    # -- Per-Sensor Alarm Summary --------------------------------------
+    # AV alarms carry sensor_name as a plain string (USMA-Sensor, xpresspayment etc)
     sensor_counter: dict[str, int] = {}
     _sm = sensor_map or {}
+    if alarms:
+        logger.debug(f"AV sensor fields: sensor_name={alarms[0].get('sensor_name')} "
+                     f"sensors={alarms[0].get('sensors')} source_sensor={alarms[0].get('source_sensor')}")
     for a in alarms:
-        # Try UUID list first
-        raw_sensors = a.get("sensors") or []
-        if isinstance(raw_sensors, list) and raw_sensors:
-            for uid in raw_sensors:
-                name = _sm.get(str(uid), "") or str(uid)
-                sensor_counter[name] = sensor_counter.get(name, 0) + 1
-        else:
-            # Fall back to string field names
-            name = (
-                _sm.get(str(a.get("sensor_uuid", "")), "") or
-                a.get("sensor_name", "") or
-                a.get("sensor", "") or
-                a.get("_deployment_name", "Unknown")
-            )
-            sensor_counter[name] = sensor_counter.get(name, 0) + 1
+        # 1. Plain string - what AV UI Sensors filter shows
+        name = a.get("sensor_name") or a.get("source_sensor") or ""
+        if not name:
+            # 2. UUID list resolved via sensor_map
+            raw_sensors = a.get("sensors") or []
+            if isinstance(raw_sensors, list) and raw_sensors:
+                name = _sm.get(str(raw_sensors[0]), str(raw_sensors[0]))
+        if not name:
+            # 3. Single UUID field
+            uid = str(a.get("sensor_uuid", ""))
+            name = _sm.get(uid, uid) if uid else ""
+        if not name:
+            # 4. Deployment name as last resort
+            name = a.get("_deployment_name", "Unknown")
+        sensor_counter[name] = sensor_counter.get(name, 0) + 1
     av_sensor_summary = [
         AVAssetRow(asset=s, count=n)
         for s, n in sorted(sensor_counter.items(), key=lambda x: -x[1])
     ]
-
     # ── Label Tracking ────────────────────────────────────────────
     # AV alarms carry labels like 'Closed', 'False Positive', 'No Value'
     label_counter: dict[str, int] = {}

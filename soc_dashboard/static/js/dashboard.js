@@ -159,9 +159,6 @@ function renderClient(c) {
     renderMethTable(c.av_method_summary || []);
     renderSimpleTable('strat-tbody', c.av_top_strategies || [], 2);
     renderSimpleTable('intent-tbody', c.av_top_intents || [], 2);
-    renderAssetTable('src-tbody', c.av_top_sources || []);
-    renderAssetTable('dst-tbody', c.av_top_destinations || []);
-    renderCountryTable(c.av_top_countries || []);
     renderSensorTable(c.av_sensor_summary || []);
 
     const s1a = (c.recent_alerts || []).filter(a => a.platform === 'SentinelOne');
