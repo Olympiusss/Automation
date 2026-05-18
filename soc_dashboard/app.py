@@ -188,6 +188,19 @@ async def login_submit(
         )
         # --- end debug ---
 
+        # Guard: reject blank submissions before any credential check
+        if not username or not password:
+            return templates.TemplateResponse(
+                request=request, name="login.html",
+                context={
+                    "error": "Username and password are both required.",
+                    "step": "credentials",
+                    "username": "",
+                    "totp_configured": settings.totp_configured(),
+                },
+                status_code=400,
+            )
+
         # Try admin
         if settings.ADMIN_PASSWORD and verify_admin_password(username, password):
             if settings.totp_configured():
