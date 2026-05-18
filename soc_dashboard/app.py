@@ -176,6 +176,18 @@ async def login_submit(
 
     # ── Step 1: Credentials ─────────────────────────────────
     if step == "credentials":
+        # --- TEMP DEBUG: remove after login is working ---
+        cfg_user = settings.ADMIN_USERNAME
+        cfg_pass = settings.ADMIN_PASSWORD
+        logger.warning(
+            f"[LOGIN DEBUG] submitted=({repr(username)},{repr(password)}) "
+            f"cfg_admin=({repr(cfg_user)}, set={bool(cfg_pass)}) "
+            f"user_match={username==cfg_user} pass_match={password==cfg_pass} "
+            f"analyst_keys={list(settings.ANALYST_CREDENTIALS.keys())} "
+            f"client_keys={list(settings.CLIENT_CREDENTIALS.keys())}"
+        )
+        # --- end debug ---
+
         # Try admin
         if settings.ADMIN_PASSWORD and verify_admin_password(username, password):
             if settings.totp_configured():
