@@ -111,10 +111,19 @@ class ClientSummary(BaseModel):
 
     # ── AV Alarm Breakdowns (populated from full alarm list) ──
     av_total_alarms: int = 0
+    av_open_alarms: int = 0
+    av_closed_alarms: int = 0
+    av_resolution_rate: float = 0.0        # % alarms closed
     av_priority_breakdown: list[AVPriorityRow] = Field(default_factory=list)
-    av_method_summary: list[AVMethodRow] = Field(default_factory=list)
+    av_method_summary: list[AVMethodRow] = Field(default_factory=list)   # top 5 methods
+    av_top_strategies: list[AVMethodRow] = Field(default_factory=list)   # top 5 strategies
+    av_top_intents: list[AVMethodRow] = Field(default_factory=list)      # top 5 intents
     av_top_sources: list[AVAssetRow] = Field(default_factory=list)
     av_top_destinations: list[AVAssetRow] = Field(default_factory=list)
+    av_top_countries: list[AVAssetRow] = Field(default_factory=list)     # geographic origin
+    av_sensor_summary: list[AVAssetRow] = Field(default_factory=list)    # per-sensor alarm count
+    av_daily_trend: list[int] = Field(default_factory=list)              # 7-day daily counts
+    av_suppressed: int = 0                                               # suppressed/closed-auto alarms
 
 
 class DashboardState(BaseModel):

@@ -1262,7 +1262,9 @@ def _fallback_av_client_name() -> str:
 def _merge_av_data(client: ClientSummary, alarms: list, events: list) -> None:
     """
     Enrich an existing (S1) ClientSummary with AlienVault alarm/event data.
-    Computes full AV breakdowns: priority x status, methods, sources, destinations.
+    Computes: priority breakdown, top-5 methods/strategies/intents,
+    sources, destinations, countries, sensor summary, 7-day trend,
+    open/closed counts, resolution rate.
     """
     if "AlienVault" not in client.platforms:
         client.platforms.append("AlienVault")
@@ -1308,20 +1310,44 @@ def _merge_av_data(client: ClientSummary, alarms: list, events: list) -> None:
                 color=PRIORITY_COLORS.get(prio, "#6B7280"),
             ))
 
-    # ── Method / Intent / Strategy breakdown ─────────────────────
-    method_counter: dict[str, dict] = {}
+    # ── Open / Closed / Resolution Rate ──────────────────────────
+    total_alarms = len(alarms)
+    open_count   = sum(1 for a in alarms if str(a.get("status","")).lower() == "open")
+    closed_count = sum(1 for a in alarms if str(a.get("status","")).lower() in ("closed","resolved"))
+    suppressed   = sum(1 for a in alarms if str(a.get("status","")).lower() in ("suppressed","auto_closed","autoclosed"))
+    resolution_rate = round((closed_count / total_alarms * 100), 1) if total_alarms else 0.0
+
+    # ── Method / Strategy / Intent — separate Top 5 ──────────────
+    method_counter:   dict[str, int] = {}
+    strategy_counter: dict[str, int] = {}
+    intent_counter:   dict[str, int] = {}
+    method_meta:      dict[str, dict] = {}
+
     for a in alarms:
-        method   = a.get("rule_method", "") or a.get("method", "") or "Unknown"
-        intent   = a.get("rule_intent", "") or a.get("intent", "") or ""
-        strategy = a.get("rule_strategy", "") or a.get("strategy", "") or ""
-        if method not in method_counter:
-            method_counter[method] = {"count": 0, "intent": intent, "strategy": strategy}
-        method_counter[method]["count"] += 1
+        method   = ((a.get("rule_method")   or a.get("method")   or "Unknown").strip()) or "Unknown"
+        strategy = (a.get("rule_strategy")  or a.get("strategy") or "").strip()
+        intent   = (a.get("rule_intent")    or a.get("intent")   or "").strip()
+        method_counter[method] = method_counter.get(method, 0) + 1
+        if method not in method_meta:
+            method_meta[method] = {"intent": intent, "strategy": strategy}
+        if strategy:
+            strategy_counter[strategy] = strategy_counter.get(strategy, 0) + 1
+        if intent:
+            intent_counter[intent] = intent_counter.get(intent, 0) + 1
 
     av_method_summary = [
-        AVMethodRow(method=m, intent=d["intent"], strategy=d["strategy"], count=d["count"])
-        for m, d in sorted(method_counter.items(), key=lambda x: -x[1]["count"])
-    ][:20]
+        AVMethodRow(method=m, intent=method_meta[m]["intent"],
+                    strategy=method_meta[m]["strategy"], count=c)
+        for m, c in sorted(method_counter.items(), key=lambda x: -x[1])
+    ][:5]
+    av_top_strategies = [
+        AVMethodRow(method=s, count=c)
+        for s, c in sorted(strategy_counter.items(), key=lambda x: -x[1])
+    ][:5]
+    av_top_intents = [
+        AVMethodRow(method=i, count=c)
+        for i, c in sorted(intent_counter.items(), key=lambda x: -x[1])
+    ][:5]
 
     # ── Top 5 Sources ─────────────────────────────────────────────
     source_counter: dict[str, Counter] = {}
@@ -1353,16 +1379,47 @@ def _merge_av_data(client: ClientSummary, alarms: list, events: list) -> None:
         for d, c in sorted(dest_counter.items(), key=lambda x: -sum(x[1].values()))
     ][:5]
 
-    # ── Set breakdown fields on client ────────────────────────────
-    client.av_total_alarms       = len(alarms)
-    client.av_priority_breakdown = av_priority_breakdown
-    client.av_method_summary     = av_method_summary
-    client.av_top_sources        = av_top_sources
-    client.av_top_destinations   = av_top_destinations
-    client.total_alerts         += len(alarms)
-    client.total_threats        += sev_map["critical"] + sev_map["high"]
-    client.events_processed     += len(events)
-    client.blocked_attempts     += sev_map["critical"]
+    # ── Top 5 Source Countries ────────────────────────────────────
+    country_counter: dict[str, int] = {}
+    for a in alarms:
+        src_geo = a.get("src_geo") or {}
+        country = (
+            a.get("geo_country") or
+            a.get("source_country") or
+            (src_geo.get("country_name") if isinstance(src_geo, dict) else "") or ""
+        )
+        if country and country.strip():
+            k = country.strip()
+            country_counter[k] = country_counter.get(k, 0) + 1
+    av_top_countries = [
+        AVAssetRow(asset=c, count=n)
+        for c, n in sorted(country_counter.items(), key=lambda x: -x[1])
+    ][:5]
+
+    # ── Per-Sensor Alarm Summary ──────────────────────────────────
+    sensor_counter: dict[str, int] = {}
+    for a in alarms:
+        sensor = (a.get("_deployment_name") or a.get("sensor") or
+                  a.get("sensor_name") or "Unknown")
+        sensor_counter[sensor] = sensor_counter.get(sensor, 0) + 1
+    av_sensor_summary = [
+        AVAssetRow(asset=s, count=n)
+        for s, n in sorted(sensor_counter.items(), key=lambda x: -x[1])
+    ]
+
+    # ── 7-Day Daily Alarm Trend ───────────────────────────────────
+    now_ts = datetime.now(timezone.utc)
+    daily: dict[int, int] = {i: 0 for i in range(7)}
+    for a in alarms:
+        ts_ms = a.get("timestamp_occured") or a.get("timestamp_received") or 0
+        try:
+            alarm_dt = datetime.fromtimestamp(int(ts_ms) / 1000, tz=timezone.utc)
+            days_ago = (now_ts.date() - alarm_dt.date()).days
+            if 0 <= days_ago <= 6:
+                daily[days_ago] += 1
+        except Exception:
+            pass
+    av_daily_trend = [daily[i] for i in range(6, -1, -1)]  # oldest → today
 
     # ── AV AlertItems (up to 50) ──────────────────────────────────
     for a in alarms[:50]:
@@ -1387,12 +1444,32 @@ def _merge_av_data(client: ClientSummary, alarms: list, events: list) -> None:
             platform="AlienVault",
         ))
 
+    # ── Set all fields on client ──────────────────────────────────
+    client.av_total_alarms       = total_alarms
+    client.av_open_alarms        = open_count
+    client.av_closed_alarms      = closed_count
+    client.av_resolution_rate    = resolution_rate
+    client.av_suppressed         = suppressed
+    client.av_priority_breakdown = av_priority_breakdown
+    client.av_method_summary     = av_method_summary
+    client.av_top_strategies     = av_top_strategies
+    client.av_top_intents        = av_top_intents
+    client.av_top_sources        = av_top_sources
+    client.av_top_destinations   = av_top_destinations
+    client.av_top_countries      = av_top_countries
+    client.av_sensor_summary     = av_sensor_summary
+    client.av_daily_trend        = av_daily_trend
+    client.total_alerts         += total_alarms
+    client.total_threats        += sev_map["critical"] + sev_map["high"]
+    client.events_processed     += len(events)
+    client.blocked_attempts     += sev_map["critical"]
+
     client.platform_data.append(PlatformStatus(
         platform="AlienVault",
         is_active=True,
         total_endpoints=0,
         total_threats=sev_map["critical"] + sev_map["high"],
-        total_alerts=len(alarms),
+        total_alerts=total_alarms,
         events_processed=len(events),
         blocked_attempts=sev_map["critical"],
     ))
