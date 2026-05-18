@@ -206,17 +206,12 @@ body {
 }
 
 .page-title {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.3px;
 }
-.page-sub {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    font-weight: 400;
-    margin-top: 2px;
-}
+.page-sub { display: none; }
 
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 
@@ -407,12 +402,12 @@ body {
 .client-list-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .client-list-table { width: 100%; border-collapse: collapse; }
 .client-list-table th {
-    padding: 10px 18px; text-align: left; font-size: 0.63rem; font-weight: 700;
+    padding: 13px 20px; text-align: left; font-size: 0.63rem; font-weight: 700;
     color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; white-space: nowrap;
     background: var(--bg-sidebar);
     border-bottom: 1px solid var(--border);
 }
-.client-list-table td { padding: 12px 18px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.client-list-table td { padding: 15px 20px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .client-list-table tbody tr:last-child td { border-bottom: none; }
 .client-list-table tbody tr { transition: background 0.12s; }
 .client-list-table tbody tr:hover { background: var(--bg-hover); }
@@ -520,14 +515,14 @@ body {
    DATA TABLES
    ═══════════════════════════════════════════════════════════ */
 
-.data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .data-table th {
-    text-align: left; padding: 8px 12px; font-size: 0.62rem; font-weight: 700;
+    text-align: left; padding: 11px 16px; font-size: 0.63rem; font-weight: 700;
     color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
     border-bottom: 1px solid var(--border); white-space: nowrap;
     position: sticky; top: 0; background: var(--bg-card); z-index: 2;
 }
-.data-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.data-table td { padding: 13px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr { transition: background 0.12s; }
 .data-table tbody tr:hover { background: var(--bg-hover); }

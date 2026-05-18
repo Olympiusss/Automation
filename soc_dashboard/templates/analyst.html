@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Sentrium SOC — Analyst Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=9">
+<style>
+.analyst-page .main-content { margin-left: var(--sidebar-w); padding: 0 36px 60px; min-height: 100vh; }
+
+.portal-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 40px;
+    text-align: center;
+    max-width: 520px;
+    margin: 60px auto 0;
+}
+.portal-icon {
+    width: 56px; height: 56px; margin: 0 auto 20px;
+    background: var(--accent-dim); border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+}
+.portal-icon svg { width: 26px; height: 26px; stroke: var(--accent-light); }
+.portal-title { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+.portal-sub { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 24px; }
+
+.portal-select {
+    width: 100%; padding: 12px 16px; font-size: 0.9rem; font-weight: 500;
+    font-family: var(--font); color: var(--text-primary);
+    background: var(--bg-sidebar); border: 1px solid var(--border);
+    border-radius: var(--radius-md); outline: none; cursor: pointer;
+    transition: var(--transition); appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23949AB5' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px;
+}
+.portal-select:focus { border-color: var(--accent); }
+.portal-select option { background: var(--bg-sidebar); color: var(--text-primary); }
+
+.portal-btn {
+    width: 100%; padding: 13px; margin-top: 16px; border: none; border-radius: var(--radius-md);
+    font-size: 0.88rem; font-weight: 700; font-family: var(--font); cursor: pointer;
+    background: var(--accent); color: #fff; transition: var(--transition);
+}
+.portal-btn:hover { opacity: 0.9; }
+.portal-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.portal-foot { margin-top: 20px; font-size: 0.73rem; color: var(--text-muted); }
+.portal-foot a { color: var(--accent-light); text-decoration: none; }
+.portal-foot a:hover { text-decoration: underline; }
+
+.empty-state { text-align: center; padding: 40px; color: var(--text-muted); font-size: 0.85rem; }
+
+@media(max-width:768px) {
+    .analyst-page .main-content { margin-left: 0; padding: 0 16px 60px; }
+    .portal-card { margin-top: 30px; padding: 28px 20px; }
+}
+</style>
+</head>
+<body class="analyst-page">
+
+<div class="notification-container" id="notification-container"></div>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<aside class="sidebar" id="sidebar">
+  <div class="brand">Sentrium</div>
+  <nav class="sidebar-nav">
+    <a href="/analyst" class="nav-item active">
+      <span>Client Lookup</span>
+    </a>
+  </nav>
+  <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" style="margin-top:auto;">
+    <svg id="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+    <svg id="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <span class="tl" id="theme-label">Dark</span>
+  </button>
+</aside>
+
+<main class="main-content">
+  <header class="topbar">
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div>
+          <div class="page-title">Analyst Portal</div>
+          <div class="page-sub">Select a client environment to view</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <a href="/logout" class="user-btn" title="Sign Out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  {% if clients %}
+  <div class="portal-card">
+    <div class="portal-title">Select Client Environment</div>
+    <div class="portal-sub">Choose a client to open their SOC dashboard</div>
+    <select class="portal-select" id="client-select">
+      <option value="" disabled selected>Select a client…</option>
+      {% for c in clients %}
+      <option value="{{ c }}">{{ c }}</option>
+      {% endfor %}
+    </select>
+    <button class="portal-btn" id="view-btn" disabled onclick="viewClient()">Open Dashboard</button>
+    <div class="portal-foot">
+      <a href="/logout">Sign out</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="portal-card">
+    <div class="portal-title">No Environments Available</div>
+    <div class="portal-sub">Client data loads after the first fetch cycle (~30 seconds).</div>
+    <div class="portal-foot" style="margin-top:20px;"><a href="/logout">Sign out</a></div>
+  </div>
+  {% endif %}
+</main>
+
+<script>
+function getTheme() { return localStorage.getItem('soc-theme') || 'dark'; }
+function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('soc-theme', t);
+    const di = document.getElementById('theme-icon-dark');
+    const li = document.getElementById('theme-icon-light');
+    const lb = document.getElementById('theme-label');
+    if (t === 'dark') { if(di)di.style.display=''; if(li)li.style.display='none'; if(lb)lb.textContent='Dark'; }
+    else { if(di)di.style.display='none'; if(li)li.style.display=''; if(lb)lb.textContent='Light'; }
+}
+function toggleTheme() { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); }
+(function(){ setTheme(getTheme()); })();
+
+function toggleMobileMenu() {
+    document.getElementById('sidebar')?.classList.toggle('open');
+    document.getElementById('sidebar-overlay')?.classList.toggle('visible');
+    document.getElementById('hamburger')?.classList.toggle('active');
+}
+document.getElementById('sidebar-overlay')?.addEventListener('click', toggleMobileMenu);
+
+const sel = document.getElementById('client-select');
+const btn = document.getElementById('view-btn');
+if (sel) {
+    sel.addEventListener('change', () => { btn.disabled = !sel.value; });
+    sel.addEventListener('dblclick', () => { if (sel.value) viewClient(); });
+}
+
+function viewClient() {
+    const v = sel ? sel.value : '';
+    if (v) window.location.href = '/client/' + encodeURIComponent(v);
+}
+</script>
+</body>
+</html>
