@@ -31,15 +31,9 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);displ
 .sb-logout:hover{background:rgba(239,68,68,.15)}
 
 /* Main */
-.main{margin-left:var(--sidebar);flex:1;padding:32px 36px;max-width:1200px}
-.ph{margin-bottom:28px}
-.ph-title{font-size:19px;font-weight:700;letter-spacing:-.3px;margin-bottom:3px}
-.ph-sub{color:var(--text3);font-size:12.5px}
+.main{margin-left:var(--sidebar);flex:1;padding:28px 40px;}
 
-/* Alert banners */
-.banner{padding:10px 16px;border-radius:8px;font-size:12.5px;font-weight:500;margin-bottom:20px}
-.banner-ok{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);color:var(--green)}
-.banner-err{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--red)}
+
 
 /* Stat cards */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
@@ -70,7 +64,7 @@ thead th{text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.07em;t
 tbody tr{border-bottom:1px solid rgba(255,255,255,.03);transition:.1s}
 tbody tr:last-child{border-bottom:none}
 tbody tr:hover{background:rgba(255,255,255,.02)}
-td{padding:11px 16px;font-size:13px}
+td{padding:15px 18px;font-size:13.5px}
 td strong{font-weight:600;color:var(--text)}
 .td-muted{color:var(--text3)}
 .empty{text-align:center;padding:40px;color:var(--text3);font-size:12.5px}
@@ -151,13 +145,9 @@ td strong{font-weight:600;color:var(--text)}
 </aside>
 
 <main class="main">
-  <div class="ph">
-    <div class="ph-title">Settings</div>
-    <div class="ph-sub">User accounts, access credentials, and client environment mappings</div>
-  </div>
 
-  {% if flash %}<div class="banner banner-ok">{{ flash }}</div>{% endif %}
-  {% if error %}<div class="banner banner-err">{{ error }}</div>{% endif %}
+  {% if flash %}<script>window._flashMsg='{{ flash }}';window._flashType='ok';</script>{% endif %}
+  {% if error %}<script>window._flashMsg='{{ error }}';window._flashType='err';</script>{% endif %}
 
   <div class="stats">
     <div class="stat"><div class="stat-l">Total Accounts</div><div class="stat-v c-blue">{{ stats.total }}</div></div>
@@ -167,10 +157,10 @@ td strong{font-weight:600;color:var(--text)}
   </div>
 
   <div class="tabs">
-    <button class="tab on" onclick="sw('users',this)">User Accounts</button>
-    <button class="tab" onclick="sw('clients',this)">Client Environments</button>
+    <button class="tab on" onclick="sw('users',this)">Accounts</button>
+    <button class="tab" onclick="sw('clients',this)">Environments</button>
     <button class="tab" onclick="sw('log',this)">Access Log</button>
-    <button class="tab" onclick="sw('export',this)">Export Config</button>
+    <button class="tab" onclick="sw('export',this)">Export</button>
   </div>
 
   <!-- Users -->
@@ -425,8 +415,10 @@ function cp(id) {
 function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = 'show ' + type;
-  setTimeout(() => t.className = '', 2500);
+  setTimeout(() => t.className = '', 3000);
 }
+// Auto-show server flash as dismissing toast
+if (window._flashMsg) showToast(window._flashMsg, window._flashType || 'ok');
 </script>
 </body>
 </html>
