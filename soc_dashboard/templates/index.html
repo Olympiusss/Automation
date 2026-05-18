@@ -207,6 +207,23 @@
       <span class="sec-title-badge stb-av">AlienVault</span>
       <span class="sec-count" id="av-total-lbl">— alarms · 24hr</span>
     </div>
+
+    <!-- AV KPI Strip -->
+    <div class="summary-strip" id="av-kpi-strip">
+      <div class="strip-item"><div><div class="strip-val" id="av-kpi-total">—</div><div class="strip-lbl">Total Alarms</div></div></div>
+      <div class="strip-item"><div><div class="strip-val" id="av-kpi-open" style="color:#F43F5E;">—</div><div class="strip-lbl">Open</div></div></div>
+      <div class="strip-item"><div><div class="strip-val" id="av-kpi-closed" style="color:#34D399;">—</div><div class="strip-lbl">Closed</div></div></div>
+      <div class="strip-item"><div><div class="strip-val" id="av-kpi-rate" style="color:#7C8AFF;">—</div><div class="strip-lbl">Resolution Rate</div></div></div>
+      <div class="strip-item"><div><div class="strip-val" id="av-kpi-supp" style="color:#F59E0B;">—</div><div class="strip-lbl">Suppressed</div></div></div>
+    </div>
+
+    <!-- 7-day trend -->
+    <div class="dash-card" style="margin-bottom:12px;">
+      <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>7-Day Alarm Trend</div>
+      <div id="av-trend-bars" style="display:flex;align-items:flex-end;gap:6px;height:56px;padding:4px 0;"></div>
+      <div id="av-trend-labels" style="display:flex;gap:6px;margin-top:4px;"></div>
+    </div>
+
     <div class="two-col">
       <div class="dash-card">
         <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Priority &amp; Status</div>
@@ -214,11 +231,25 @@
         <tbody id="prio-tbody"><tr><td colspan="5" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
       </div>
       <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>By Method</div>
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top 5 Methods</div>
         <table class="data-table"><thead><tr><th>Method</th><th>Strategy</th><th>Intent</th><th style="text-align:right">Count</th></tr></thead>
         <tbody id="meth-tbody"><tr><td colspan="4" class="empty-msg"><span class="skeleton skeleton-text" style="width:60%;"></span></td></tr></tbody></table>
       </div>
     </div>
+
+    <div class="two-col">
+      <div class="dash-card">
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top 5 Attack Strategies</div>
+        <table class="data-table"><thead><tr><th>Strategy</th><th style="text-align:right">Count</th></tr></thead>
+        <tbody id="strat-tbody"><tr><td colspan="2" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top 5 Attack Intents</div>
+        <table class="data-table"><thead><tr><th>Intent</th><th style="text-align:right">Count</th></tr></thead>
+        <tbody id="intent-tbody"><tr><td colspan="2" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
+      </div>
+    </div>
+
     <div class="two-col">
       <div class="dash-card">
         <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Top Sources</div>
@@ -231,6 +262,20 @@
         <tbody id="dst-tbody"><tr><td colspan="4" class="empty-msg"><span class="skeleton skeleton-text" style="width:40%;"></span></td></tr></tbody></table>
       </div>
     </div>
+
+    <div class="two-col">
+      <div class="dash-card">
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Top Source Countries</div>
+        <table class="data-table"><thead><tr><th>#</th><th>Country</th><th style="text-align:right">Alarms</th></tr></thead>
+        <tbody id="country-tbody"><tr><td colspan="3" class="empty-msg">No geographic data.</td></tr></tbody></table>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Sensor Coverage</div>
+        <table class="data-table"><thead><tr><th>Sensor / Deployment</th><th style="text-align:right">Alarms</th></tr></thead>
+        <tbody id="sensor-tbody"><tr><td colspan="2" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
+      </div>
+    </div>
+
     <div class="dash-card">
       <div class="dash-card-title" style="justify-content:space-between;">
         <span style="display:flex;align-items:center;gap:8px;"><span class="dash-card-title-dot dtd-av"></span>Alarm Log</span>

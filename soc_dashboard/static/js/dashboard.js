@@ -154,10 +154,16 @@ function renderClient(c) {
     const avLbl = $('av-total-lbl'); if (avLbl) avLbl.textContent = fmt(avTotal) + ' alarms · 24hr';
     const lt = $('av-list-total'); if (lt) lt.textContent = fmt(avTotal);
 
+    renderAvKpis(c);
+    renderTrendBars(c.av_daily_trend || []);
     renderPrioTable(c.av_priority_breakdown || []);
     renderMethTable(c.av_method_summary || []);
+    renderSimpleTable('strat-tbody', c.av_top_strategies || [], 2);
+    renderSimpleTable('intent-tbody', c.av_top_intents || [], 2);
     renderAssetTable('src-tbody', c.av_top_sources || []);
     renderAssetTable('dst-tbody', c.av_top_destinations || []);
+    renderCountryTable(c.av_top_countries || []);
+    renderSensorTable(c.av_sensor_summary || []);
     renderAlarmLog(c.recent_alerts || []);
 
     const s1a = (c.recent_alerts || []).filter(a => a.platform === 'SentinelOne');
@@ -224,6 +230,62 @@ function renderAlarmLog(all) {
             + '<td style="font-size:0.74rem;color:var(--text-muted);">' + esc(a.destination||'—') + '</td>'
             + '<td class="alarm-time">' + esc(a.reported_at||a.time||'—') + '</td></tr>';
     }).join('');
+}
+
+// ═══ AV EXECUTIVE SECTIONS ═══
+function renderAvKpis(c) {
+    const set = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+    set('av-kpi-total', fmt(c.av_total_alarms || 0));
+    set('av-kpi-open',  fmt(c.av_open_alarms  || 0));
+    set('av-kpi-closed',fmt(c.av_closed_alarms || 0));
+    set('av-kpi-rate',  (c.av_resolution_rate || 0).toFixed(1) + '%');
+    set('av-kpi-supp',  fmt(c.av_suppressed   || 0));
+}
+
+function renderTrendBars(trend) {
+    const bars  = $('av-trend-bars');  if (!bars)  return;
+    const lbls  = $('av-trend-labels'); 
+    if (!trend || !trend.length) { bars.innerHTML = '<span style="color:var(--text-muted);font-size:0.75rem;">No trend data.</span>'; return; }
+    const max = Math.max(...trend) || 1;
+    const days = ['6d','5d','4d','3d','2d','1d','Today'];
+    const w = Math.floor(100 / trend.length) - 1;
+    bars.innerHTML = trend.map((v, i) => {
+        const h = Math.max(4, Math.round((v / max) * 52));
+        const col = i === trend.length - 1 ? '#F97316' : '#5A6DFF';
+        return `<div title="${days[i]}: ${v} alarms" style="flex:1;height:${h}px;background:${col};border-radius:3px 3px 0 0;opacity:${v===0?0.2:0.85};cursor:default;transition:.2s;"></div>`;
+    }).join('');
+    if (lbls) lbls.innerHTML = days.map((d, i) =>
+        `<div style="flex:1;text-align:center;font-size:0.6rem;color:var(--text-muted);">${d}</div>`).join('');
+}
+
+function renderSimpleTable(tbodyId, rows, cols) {
+    const el = $(tbodyId); if (!el) return;
+    if (!rows.length) { el.innerHTML = `<tr><td colspan="${cols}" class="empty-msg">No data.</td></tr>`; return; }
+    const max = rows[0]?.count || 1;
+    el.innerHTML = rows.map(r =>
+        `<tr><td style="font-weight:500;color:var(--text-primary);">${esc(r.method)}</td>`
+        + `<td style="text-align:right;"><div class="bar-row" style="justify-content:flex-end;"><div class="bar-bg" style="width:50px;"><div class="bar-fill" style="width:${Math.round((r.count/max)*100)}%;"></div></div><span class="bar-cnt">${fmt(r.count)}</span></div></td></tr>`
+    ).join('');
+}
+
+function renderCountryTable(rows) {
+    const el = $('country-tbody'); if (!el) return;
+    if (!rows.length) { el.innerHTML = '<tr><td colspan="3" class="empty-msg">No geographic data available.</td></tr>'; return; }
+    el.innerHTML = rows.map((r, i) =>
+        `<tr><td style="color:var(--text-muted);font-size:0.72rem;">${i+1}</td>`
+        + `<td style="font-weight:500;color:var(--text-primary);">${esc(r.asset)}</td>`
+        + `<td style="text-align:right;"><span class="asset-cnt">${fmt(r.count)}</span></td></tr>`
+    ).join('');
+}
+
+function renderSensorTable(rows) {
+    const el = $('sensor-tbody'); if (!el) return;
+    if (!rows.length) { el.innerHTML = '<tr><td colspan="2" class="empty-msg">No sensor data.</td></tr>'; return; }
+    const max = rows[0]?.count || 1;
+    el.innerHTML = rows.map(r =>
+        `<tr><td style="font-weight:500;color:var(--text-primary);">${esc(r.asset)}</td>`
+        + `<td style="text-align:right;"><div class="bar-row" style="justify-content:flex-end;"><div class="bar-bg" style="width:60px;"><div class="bar-fill bar-fill-s1" style="width:${Math.round((r.count/max)*100)}%;"></div></div><span class="bar-cnt">${fmt(r.count)}</span></div></td></tr>`
+    ).join('');
 }
 
 // ═══ EDR ═══
