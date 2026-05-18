@@ -367,11 +367,13 @@ class AVFetcher:
         url = dep_url.rstrip("/") + "/api/2.0/alarms"
 
         # Send both possible field names — AV accepts whichever it knows
+        # suppressed=false → match AV UI default (Not Suppressed view)
         params = {
             "timestamp_occured_gte":  start_ms,
             "timestamp_occured_lte":  end_ms,
             "timestamp_received_gte": start_ms,
             "timestamp_received_lte": end_ms,
+            "suppressed": "false",          # exclude suppressed — match AV default
             "sort": "timestamp_occured,desc",
             "size": 200,
             "page": 0,
@@ -414,15 +416,16 @@ class AVFetcher:
         except Exception as e:
             logger.error(f"AV alarm fetch {dep_name}: {e}")
 
-        # ── Strict client-side time-window filter ────────────────────────────
-        # The AV API server-side filter is unreliable; enforce the window locally.
+        # ── Client-side filter: time window + exclude suppressed ────────────
         def _in_window(a: dict) -> bool:
             ts = a.get("timestamp_occured") or a.get("timestamp_received") or 0
-            return start_ms <= int(ts) <= end_ms
+            in_time = start_ms <= int(ts) <= end_ms
+            not_suppressed = not a.get("suppressed", False)
+            return in_time and not_suppressed
 
         filtered = [a for a in all_alarms if _in_window(a)]
         logger.info(
-            f"AV: {dep_name} → {len(all_alarms)} raw, {len(filtered)} in {days_back}d window"
+            f"AV: {dep_name} → {len(all_alarms)} raw, {len(filtered)} in window (not suppressed)"
         )
         return filtered
 

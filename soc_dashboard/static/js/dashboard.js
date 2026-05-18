@@ -152,7 +152,6 @@ function renderClient(c) {
     if (nb && avTotal > 0) { nb.textContent = fmt(avTotal); nb.style.display = 'inline'; }
 
     const avLbl = $('av-total-lbl'); if (avLbl) avLbl.textContent = fmt(avTotal) + ' alarms · 24hr';
-    const lt = $('av-list-total'); if (lt) lt.textContent = fmt(avTotal);
 
     renderAvKpis(c);
     renderTrendBars(c.av_daily_trend || []);
@@ -164,7 +163,6 @@ function renderClient(c) {
     renderAssetTable('dst-tbody', c.av_top_destinations || []);
     renderCountryTable(c.av_top_countries || []);
     renderSensorTable(c.av_sensor_summary || []);
-    renderAlarmLog(c.recent_alerts || []);
 
     const s1a = (c.recent_alerts || []).filter(a => a.platform === 'SentinelOne');
     const s1l = $('s1-threat-lbl'); if (s1l) s1l.textContent = fmt(s1a.length) + ' threats · 24hr';
