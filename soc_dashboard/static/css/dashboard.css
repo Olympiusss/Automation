@@ -608,7 +608,47 @@ body {
    CHARTS (ApexCharts wrapper)
    ═══════════════════════════════════════════════════════════ */
 
-.charts-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; margin-bottom: 20px; }
+/* ═══════════════════════════════════════════════════════════
+   AV EXECUTIVE KPI STRIP
+   ═══════════════════════════════════════════════════════════ */
+
+.summary-strip {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.strip-item {
+    flex: 1;
+    min-width: 100px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.strip-val {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--text-primary);
+    line-height: 1;
+    margin-bottom: 3px;
+}
+.strip-lbl {
+    font-size: 0.67rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+/* Bar fill variant for sensor/S1 bars */
+.bar-fill-s1 { background: var(--accent); }
+
 .chart-card { padding: 20px; }
 .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
 .chart-header h2 { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }

@@ -507,8 +507,44 @@ class AVFetcher:
         return []
 
     async def fetch_sensors(self) -> list[dict]:
-        """Legacy — returns deployments as sensor objects for compatibility."""
+        """Legacy compatibility — returns deployments for aggregator."""
         return await self.fetch_deployments()
+
+    async def fetch_sensor_names(self) -> dict[str, str]:
+        """
+        Fetch real sensor list from AV and return a UUID→name mapping.
+        Sensors are physical/cloud sensors (e.g. 'CybervergentAlienvault', 'usm-anywhere').
+        """
+        if not settings.av_configured():
+            return {}
+        token = await self._get_token()
+        if not token:
+            return {}
+        client = await self._get_client()
+        headers = {"Authorization": f"Bearer {token}"}
+        base = self.base_url.rstrip("/")
+        sensor_map: dict[str, str] = {}
+        for path in ("/api/2.0/sensors", "/api/1.1/sensors", "/api/2.0/sensors/list"):
+            try:
+                resp = await client.get(base + path, headers=headers, timeout=20)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    sensors = (
+                        data.get("_embedded", {}).get("sensors") or
+                        data.get("_embedded", {}).get("sensor_instances") or
+                        (data if isinstance(data, list) else [])
+                    )
+                    for s in sensors:
+                        uid  = s.get("uuid") or s.get("id") or ""
+                        name = s.get("name") or s.get("hostname") or uid
+                        if uid:
+                            sensor_map[uid] = name
+                    logger.info(f"AV sensors: {len(sensor_map)} sensors from {path}")
+                    if sensor_map:
+                        break
+            except Exception as e:
+                logger.debug(f"AV sensors {path}: {e}")
+        return sensor_map
 
 
 
@@ -575,6 +611,7 @@ class DashboardAggregator:
                 *s1_build_tasks,
                 self.av.fetch_alarms_per_deployment(days_back=1),  # 24hr window
                 self.av.fetch_events(days_back=1),
+                self.av.fetch_sensor_names(),                       # real sensor UUID→name map
                 return_exceptions=True,
             )
 
@@ -582,11 +619,15 @@ class DashboardAggregator:
             s1_results       = all_results[:n_s1]
             av_per_dep_raw   = all_results[n_s1]   if not isinstance(all_results[n_s1],   Exception) else {}
             av_events_raw    = all_results[n_s1+1] if not isinstance(all_results[n_s1+1], Exception) else []
+            av_sensor_map    = all_results[n_s1+2] if not isinstance(all_results[n_s1+2], Exception) else {}
 
             if isinstance(av_per_dep_raw, Exception):
                 logger.error(f"AV per-deployment fetch error: {av_per_dep_raw}"); av_per_dep_raw = {}
             if isinstance(av_events_raw, Exception):
                 logger.error(f"AV events error: {av_events_raw}"); av_events_raw = []
+            if isinstance(av_sensor_map, Exception):
+                logger.warning(f"AV sensor names error: {av_sensor_map}"); av_sensor_map = {}
+            logger.info(f"AV sensor map: {len(av_sensor_map)} sensors resolved")
 
             # ── Phase 3: Build S1 client index ───────────────────────────
             clients: dict[str, ClientSummary] = {}
@@ -614,11 +655,11 @@ class DashboardAggregator:
                 s1_match = _find_best_match(norm_dep, list(clients.keys()), raw_av_name=dep_name)
 
                 if s1_match:
-                    _merge_av_data(clients[s1_match], alarms, [])
+                    _merge_av_data(clients[s1_match], alarms, [], sensor_map=av_sensor_map)
                     logger.info(f"AV: '{dep_name}' merged → S1 '{clients[s1_match].name}'")
                 else:
                     clean_name = dep_name.replace("-", " ").title()
-                    av_only = self._build_av_summary(alarms, [], clean_name)
+                    av_only = self._build_av_summary(alarms, [], clean_name, sensor_map=av_sensor_map)
                     clients[norm_dep] = av_only
                     logger.info(f"AV: '{dep_name}' → standalone AV-only card ({len(alarms)} alarms)")
 
@@ -830,189 +871,37 @@ class DashboardAggregator:
             ],
         )
 
-    def _build_av_summary(self, alarms: list[dict], events: list[dict], name: str) -> ClientSummary:
-        """Build ClientSummary from AlienVault data — computes full breakdowns from ALL alarms."""
-
-        # ── Priority × Status breakdown ──────────────────────────────────
-        PRIORITY_COLORS = {
-            "critical": "#DC2626", "high": "#EF4444",
-            "medium": "#F59E0B",   "low": "#22C55E",
-        }
-        prio_map: dict[str, dict] = {}   # priority → {open, closed, in_review, other}
-        for a in alarms:
-            prio = str(a.get("priority_label", "low")).lower()
-            if prio not in ("critical", "high", "medium", "low"):
-                prio = "low"
-            st = str(a.get("status", "")).lower()
-            if prio not in prio_map:
-                prio_map[prio] = {"open": 0, "closed": 0, "in_review": 0, "other": 0}
-            if st == "open":
-                prio_map[prio]["open"] += 1
-            elif st in ("closed", "resolved"):
-                prio_map[prio]["closed"] += 1
-            elif st in ("in_review", "investigating"):
-                prio_map[prio]["in_review"] += 1
-            else:
-                prio_map[prio]["other"] += 1
-
-        av_priority_breakdown = []
-        for prio in ("critical", "high", "medium", "low"):
-            if prio in prio_map:
-                counts = prio_map[prio]
-                total = sum(counts.values())
-                av_priority_breakdown.append(AVPriorityRow(
-                    priority=prio.capitalize(),
-                    total=total,
-                    statuses=AVStatusCount(
-                        open=counts["open"],
-                        closed=counts["closed"],
-                        in_review=counts["in_review"],
-                        other=counts["other"],
-                    ),
-                    color=PRIORITY_COLORS.get(prio, "#6B7280"),
-                ))
-
-        # ── Method / Intent / Strategy breakdown ─────────────────────────
-        method_counter: dict[str, dict] = {}   # method → {count, intent, strategy}
-        for a in alarms:
-            method   = a.get("rule_method", "") or a.get("method", "") or "Unknown"
-            intent   = a.get("rule_intent", "") or a.get("intent", "") or ""
-            strategy = a.get("rule_strategy", "") or a.get("strategy", "") or ""
-            key = method
-            if key not in method_counter:
-                method_counter[key] = {"count": 0, "intent": intent, "strategy": strategy}
-            method_counter[key]["count"] += 1
-
-        av_method_summary = [
-            AVMethodRow(
-                method=m,
-                intent=d["intent"],
-                strategy=d["strategy"],
-                count=d["count"],
-            )
-            for m, d in sorted(method_counter.items(), key=lambda x: -x[1]["count"])
-        ][:20]
-
-        # ── Top 5 Sources ─────────────────────────────────────────────────
-        source_counter: dict[str, Counter] = {}
-        for a in alarms:
-            src = a.get("source_name", "") or a.get("src_ip", "") or ""
-            if not src:
-                continue
-            method = a.get("rule_method", "Unknown")
-            if src not in source_counter:
-                source_counter[src] = Counter()
-            source_counter[src][method] += 1
-
-        av_top_sources = [
-            AVAssetRow(
-                asset=src,
-                count=sum(c.values()),
-                alarm_types=list(dict(c.most_common(3)).keys()),
-            )
-            for src, c in sorted(source_counter.items(), key=lambda x: -sum(x[1].values()))
-        ][:5]
-
-        # ── Top 5 Destinations ────────────────────────────────────────────
-        dest_counter: dict[str, Counter] = {}
-        for a in alarms:
-            dst = a.get("destination_name", "") or a.get("dst_ip", "") or ""
-            if not dst:
-                continue
-            method = a.get("rule_method", "Unknown")
-            if dst not in dest_counter:
-                dest_counter[dst] = Counter()
-            dest_counter[dst][method] += 1
-
-        av_top_destinations = [
-            AVAssetRow(
-                asset=dst,
-                count=sum(c.values()),
-                alarm_types=list(dict(c.most_common(3)).keys()),
-            )
-            for dst, c in sorted(dest_counter.items(), key=lambda x: -sum(x[1].values()))
-        ][:5]
-
-        # ── Severity KPIs ─────────────────────────────────────────────────
-        severity_map = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-        for r in av_priority_breakdown:
-            severity_map[r.priority.lower()] = r.total
-
-        # ── Classifications (for pie chart) ──────────────────────────────
+    def _build_av_summary(self, alarms: list[dict], events: list[dict],
+                          name: str, sensor_map: dict | None = None) -> ClientSummary:
+        """
+        Build a standalone AV-only ClientSummary.
+        Delegates all computation to _merge_av_data — AV-only cards
+        are identical in richness to merged S1+AV cards.
+        """
         intent_counter: Counter = Counter()
         for a in alarms:
-            intent = a.get("rule_intent", "") or a.get("intent", "Other")
+            intent = a.get("rule_intent") or a.get("intent") or "Other"
             if intent:
                 intent_counter[intent] += 1
-
         INTENT_COLORS = {
-            "System Compromise":         "#DC2626",
-            "Exploitation & Installation":"#EF4444",
-            "Delivery & Attack":          "#F97316",
-            "Reconnaissance & Probing":   "#F59E0B",
-            "Environmental Awareness":    "#3B82F6",
+            "System Compromise":          "#DC2626",
+            "Exploitation & Installation": "#EF4444",
+            "Delivery & Attack":           "#F97316",
+            "Reconnaissance & Probing":    "#F59E0B",
+            "Environmental Awareness":     "#3B82F6",
         }
         classifications = [
-            ThreatClassification(
-                name=intent,
-                count=count,
-                color=INTENT_COLORS.get(intent, "#6B7280"),
-            )
-            for intent, count in intent_counter.most_common(5)
+            ThreatClassification(name=i, count=c, color=INTENT_COLORS.get(i, "#6B7280"))
+            for i, c in intent_counter.most_common(5)
         ]
-
-        # ── Recent alerts (50 most recent for the table) ──────────────────
-        recent_alerts = []
-        for a in alarms[:50]:
-            prio_label = str(a.get("priority_label", "low")).lower()
-            if prio_label not in ("critical", "high", "medium", "low"):
-                prio_label = "low"
-            ts_ms = a.get("timestamp_occured") or a.get("timestamp_received")
-            recent_alerts.append(AlertItem(
-                id=f"AV-{str(a.get('uuid', ''))[:6]}",
-                alert_type=a.get("rule_method", a.get("rule_intent", "Alarm")),
-                source=a.get("source_name", a.get("sensor", "")),
-                destination=a.get("destination_name", ""),
-                severity=prio_label,
-                confidence=prio_label.capitalize(),
-                status="Open" if a.get("status") == "open" else
-                       "In Review" if a.get("status") in ("in_review", "investigating") else "Closed",
-                time=_format_timestamp_ms(ts_ms),
-                reported_at=_format_exact_time_ms(ts_ms),
-                intent=a.get("rule_intent", ""),
-                strategy=a.get("rule_strategy", ""),
-                platform="AlienVault",
-            ))
-
-        return ClientSummary(
+        summary = ClientSummary(
             name=name,
-            platforms=["AlienVault"],
-            total_endpoints=0,
-            total_threats=severity_map.get("critical", 0) + severity_map.get("high", 0),
-            total_alerts=len(alarms),
-            events_processed=len(events),
-            blocked_attempts=severity_map.get("critical", 0),
-            dfir_cases=0,
+            platforms=[],
             threat_classifications=classifications,
-            recent_alerts=recent_alerts,
-            event_timeline=[],
-            av_total_alarms=len(alarms),
-            av_priority_breakdown=av_priority_breakdown,
-            av_method_summary=av_method_summary,
-            av_top_sources=av_top_sources,
-            av_top_destinations=av_top_destinations,
-            platform_data=[
-                PlatformStatus(
-                    platform="AlienVault",
-                    is_active=True,
-                    total_endpoints=0,
-                    total_threats=len(alarms),
-                    total_alerts=len(alarms),
-                    events_processed=len(events),
-                    blocked_attempts=severity_map.get("critical", 0),
-                ),
-            ],
+            event_timeline=_build_hourly_timeline(alarms),
         )
+        _merge_av_data(summary, alarms, events, sensor_map=sensor_map)
+        return summary
 
 
     def _build_global_timeline(self, clients: list[ClientSummary]) -> list[TimePoint]:
@@ -1259,12 +1148,14 @@ def _fallback_av_client_name() -> str:
     return " ".join(p.title() for p in parts) or "AlienVault"
 
 
-def _merge_av_data(client: ClientSummary, alarms: list, events: list) -> None:
+def _merge_av_data(client: ClientSummary, alarms: list, events: list,
+                   sensor_map: dict[str, str] | None = None) -> None:
     """
     Enrich an existing (S1) ClientSummary with AlienVault alarm/event data.
     Computes: priority breakdown, top-5 methods/strategies/intents,
     sources, destinations, countries, sensor summary, 7-day trend,
-    open/closed counts, resolution rate.
+    open/closed counts, resolution rate, labels.
+    sensor_map: UUID → display name for actual AV sensor devices.
     """
     if "AlienVault" not in client.platforms:
         client.platforms.append("AlienVault")
@@ -1397,15 +1288,45 @@ def _merge_av_data(client: ClientSummary, alarms: list, events: list) -> None:
     ][:5]
 
     # ── Per-Sensor Alarm Summary ──────────────────────────────────
+    # Alarm's `sensors` field = list of sensor UUIDs; resolve via sensor_map
     sensor_counter: dict[str, int] = {}
+    _sm = sensor_map or {}
     for a in alarms:
-        sensor = (a.get("_deployment_name") or a.get("sensor") or
-                  a.get("sensor_name") or "Unknown")
-        sensor_counter[sensor] = sensor_counter.get(sensor, 0) + 1
+        # Try UUID list first
+        raw_sensors = a.get("sensors") or []
+        if isinstance(raw_sensors, list) and raw_sensors:
+            for uid in raw_sensors:
+                name = _sm.get(str(uid), "") or str(uid)
+                sensor_counter[name] = sensor_counter.get(name, 0) + 1
+        else:
+            # Fall back to string field names
+            name = (
+                _sm.get(str(a.get("sensor_uuid", "")), "") or
+                a.get("sensor_name", "") or
+                a.get("sensor", "") or
+                a.get("_deployment_name", "Unknown")
+            )
+            sensor_counter[name] = sensor_counter.get(name, 0) + 1
     av_sensor_summary = [
         AVAssetRow(asset=s, count=n)
         for s, n in sorted(sensor_counter.items(), key=lambda x: -x[1])
     ]
+
+    # ── Label Tracking ────────────────────────────────────────────
+    # AV alarms carry labels like 'Closed', 'False Positive', 'No Value'
+    label_counter: dict[str, int] = {}
+    for a in alarms:
+        labels = a.get("labels") or []
+        if isinstance(labels, list):
+            for lbl in labels:
+                lname = (lbl.get("name") if isinstance(lbl, dict) else str(lbl)).strip()
+                if lname:
+                    label_counter[lname] = label_counter.get(lname, 0) + 1
+        elif isinstance(labels, str) and labels:
+            label_counter[labels] = label_counter.get(labels, 0) + 1
+        # If no labels field, count unlabelled
+        if not labels:
+            label_counter["No Label"] = label_counter.get("No Label", 0) + 1
 
     # ── 7-Day Daily Alarm Trend ───────────────────────────────────
     now_ts = datetime.now(timezone.utc)
@@ -1459,6 +1380,7 @@ def _merge_av_data(client: ClientSummary, alarms: list, events: list) -> None:
     client.av_top_countries      = av_top_countries
     client.av_sensor_summary     = av_sensor_summary
     client.av_daily_trend        = av_daily_trend
+    client.av_labels             = label_counter
     client.total_alerts         += total_alarms
     client.total_threats        += sev_map["critical"] + sev_map["high"]
     client.events_processed     += len(events)

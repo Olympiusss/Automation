@@ -124,6 +124,7 @@ class ClientSummary(BaseModel):
     av_sensor_summary: list[AVAssetRow] = Field(default_factory=list)    # per-sensor alarm count
     av_daily_trend: list[int] = Field(default_factory=list)              # 7-day daily counts
     av_suppressed: int = 0                                               # suppressed/closed-auto alarms
+    av_labels: dict[str, int] = Field(default_factory=dict)             # label name → count
 
 
 class DashboardState(BaseModel):
