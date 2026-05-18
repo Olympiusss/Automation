@@ -567,10 +567,10 @@ def _settings_context(request: Request, flash: str = "", error: str = "") -> dic
         la = last_access_map.get(u["username"])
         users_enriched.append({**u, "last_access": la, "last_access_fmt": fmt_ts(la)})
 
-    # Client environments from aggregator
+    # Client environments from aggregator (correct attribute: cached_state)
     state = None
     try:
-        state = aggregator.last_state
+        state = aggregator.cached_state
         all_clients = [c.name for c in (state.clients if state else [])]
     except Exception:
         all_clients = []
