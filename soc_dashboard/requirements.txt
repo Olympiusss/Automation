@@ -9,3 +9,4 @@ websockets==13.1
 pydantic==2.9.2
 starlette==0.41.3
 anyio==4.6.2
+psycopg2-binary==2.9.10

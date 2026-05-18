@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings — Sentrium SOC</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #0b0f1a;
+            --surface:   #111827;
+            --card:      #1a2236;
+            --border:    #1e2d47;
+            --accent:    #3b82f6;
+            --accent2:   #6366f1;
+            --success:   #10b981;
+            --warning:   #f59e0b;
+            --danger:    #ef4444;
+            --text:      #e2e8f0;
+            --muted:     #64748b;
+            --sidebar-w: 220px;
+        }
+
+        body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text);
+               display:flex; min-height:100vh; font-size:14px; }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            width:var(--sidebar-w); background:var(--surface); border-right:1px solid var(--border);
+            display:flex; flex-direction:column; padding:24px 0; position:fixed; top:0; bottom:0;
+        }
+        .sidebar-logo { padding:0 20px 24px; font-size:15px; font-weight:700;
+                        letter-spacing:.08em; color:var(--text); border-bottom:1px solid var(--border); }
+        .sidebar-logo span { color:var(--accent); }
+        .sidebar-nav { padding:16px 12px; flex:1; overflow-y:auto; }
+        .nav-link { display:flex; align-items:center; gap:10px; padding:9px 12px;
+                    border-radius:8px; color:var(--muted); text-decoration:none;
+                    font-size:13px; font-weight:500; transition:.15s; margin-bottom:2px; }
+        .nav-link:hover, .nav-link.active { background:rgba(59,130,246,.12); color:var(--text); }
+        .nav-link.active { color:var(--accent); }
+        .nav-icon { width:16px; text-align:center; }
+        .sidebar-footer { padding:16px 20px; border-top:1px solid var(--border); }
+        .logout-btn { display:block; text-align:center; padding:8px; border-radius:8px;
+                      background:rgba(239,68,68,.1); color:var(--danger); font-size:13px;
+                      font-weight:500; text-decoration:none; transition:.15s; }
+        .logout-btn:hover { background:rgba(239,68,68,.2); }
+
+        /* ── Main ── */
+        .main { margin-left:var(--sidebar-w); flex:1; padding:32px; }
+        .page-header { margin-bottom:28px; }
+        .page-title { font-size:22px; font-weight:700; margin-bottom:4px; }
+        .page-sub   { color:var(--muted); font-size:13px; }
+
+        /* ── Tabs ── */
+        .tabs { display:flex; gap:4px; border-bottom:2px solid var(--border);
+                margin-bottom:24px; }
+        .tab { padding:10px 20px; background:none; border:none; color:var(--muted);
+               font-size:13px; font-weight:500; cursor:pointer; border-bottom:2px solid transparent;
+               margin-bottom:-2px; transition:.15s; }
+        .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+        .tab-panel { display:none; }
+        .tab-panel.active { display:block; }
+
+        /* ── Cards / Tables ── */
+        .card { background:var(--card); border:1px solid var(--border); border-radius:12px;
+                padding:20px; margin-bottom:20px; }
+        .card-header { display:flex; align-items:center; justify-content:space-between;
+                       margin-bottom:16px; }
+        .card-title { font-size:15px; font-weight:600; }
+
+        table { width:100%; border-collapse:collapse; }
+        thead th { text-align:left; font-size:11px; font-weight:600; letter-spacing:.06em;
+                   text-transform:uppercase; color:var(--muted); padding:10px 12px;
+                   border-bottom:1px solid var(--border); }
+        tbody tr { border-bottom:1px solid rgba(255,255,255,.04); transition:.1s; }
+        tbody tr:hover { background:rgba(255,255,255,.03); }
+        tbody td { padding:11px 12px; font-size:13px; }
+
+        /* ── Badges ── */
+        .badge { display:inline-block; padding:2px 9px; border-radius:999px;
+                 font-size:11px; font-weight:600; letter-spacing:.04em; }
+        .badge-admin     { background:rgba(139,92,246,.15); color:#a78bfa; }
+        .badge-client    { background:rgba(59,130,246,.15); color:#93c5fd; }
+        .badge-analyst   { background:rgba(16,185,129,.15); color:#6ee7b7; }
+        .badge-thirdparty{ background:rgba(245,158,11,.15); color:#fcd34d; }
+        .badge-active    { background:rgba(16,185,129,.12); color:var(--success); }
+        .badge-inactive  { background:rgba(239,68,68,.12); color:var(--danger); }
+
+        /* ── Buttons ── */
+        .btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px;
+               border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;
+               border:none; transition:.15s; }
+        .btn-primary { background:var(--accent); color:#fff; }
+        .btn-primary:hover { background:#2563eb; }
+        .btn-danger  { background:rgba(239,68,68,.15); color:var(--danger); }
+        .btn-danger:hover { background:rgba(239,68,68,.25); }
+        .btn-ghost   { background:rgba(255,255,255,.06); color:var(--text); }
+        .btn-ghost:hover { background:rgba(255,255,255,.1); }
+        .btn-sm { padding:4px 10px; font-size:11px; }
+        .btn-success { background:rgba(16,185,129,.15); color:var(--success); }
+        .btn-success:hover { background:rgba(16,185,129,.25); }
+
+        /* ── Stats row ── */
+        .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+        .stat-card { background:var(--card); border:1px solid var(--border); border-radius:12px;
+                     padding:18px; }
+        .stat-label { font-size:11px; font-weight:600; letter-spacing:.06em;
+                      text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+        .stat-value { font-size:26px; font-weight:700; }
+        .stat-value.blue { color:var(--accent); }
+        .stat-value.green { color:var(--success); }
+        .stat-value.amber { color:var(--warning); }
+        .stat-value.purple { color:#a78bfa; }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            display:none; position:fixed; inset:0; background:rgba(0,0,0,.7);
+            z-index:1000; align-items:center; justify-content:center;
+        }
+        .modal-overlay.open { display:flex; }
+        .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px;
+                 width:480px; max-height:90vh; overflow-y:auto; padding:28px; }
+        .modal-title { font-size:17px; font-weight:700; margin-bottom:20px; }
+        .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .form-group { margin-bottom:16px; }
+        .form-label { display:block; font-size:12px; font-weight:600; color:var(--muted);
+                      margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em; }
+        .form-input, .form-select {
+            width:100%; padding:9px 12px; background:var(--card); border:1px solid var(--border);
+            border-radius:8px; color:var(--text); font-size:13px; font-family:inherit; outline:none;
+        }
+        .form-input:focus, .form-select:focus { border-color:var(--accent); }
+        .form-select option { background:var(--surface); }
+        .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
+
+        /* ── Toast ── */
+        #toast { position:fixed; bottom:24px; right:24px; background:var(--card);
+                 border:1px solid var(--border); border-radius:10px; padding:12px 18px;
+                 font-size:13px; font-weight:500; z-index:2000;
+                 transform:translateY(80px); opacity:0; transition:.3s; }
+        #toast.show { transform:translateY(0); opacity:1; }
+        #toast.success { border-color:var(--success); color:var(--success); }
+        #toast.error   { border-color:var(--danger);  color:var(--danger);  }
+
+        /* ── Misc ── */
+        .empty-state { text-align:center; padding:40px; color:var(--muted); }
+        .client-bar { display:flex; align-items:center; justify-content:space-between;
+                      padding:12px 16px; background:var(--bg); border-radius:8px;
+                      margin-bottom:6px; }
+        .client-bar-info { display:flex; align-items:center; gap:12px; }
+        .client-num { width:24px; height:24px; border-radius:6px;
+                      background:var(--border); display:grid; place-items:center;
+                      font-size:11px; font-weight:700; color:var(--muted); }
+        .login-count { font-size:12px; color:var(--muted); }
+        .login-count span { color:var(--accent); font-weight:600; }
+        .search-bar { padding:8px 12px; background:var(--card); border:1px solid var(--border);
+                      border-radius:8px; color:var(--text); font-size:13px; outline:none;
+                      width:220px; }
+        .search-bar:focus { border-color:var(--accent); }
+    </style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+    <div class="sidebar-logo">SENT<span>RIUM</span></div>
+    <nav class="sidebar-nav">
+        <a href="/" class="nav-link">
+            <span class="nav-icon">⊞</span> Dashboard
+        </a>
+        <a href="/settings" class="nav-link active">
+            <span class="nav-icon">⚙</span> Settings
+        </a>
+    </nav>
+    <div class="sidebar-footer">
+        <a href="/logout" class="logout-btn">Sign Out</a>
+    </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="main">
+    <div class="page-header">
+        <div class="page-title">⚙ Admin Settings</div>
+        <div class="page-sub">Manage user accounts, client mappings, and access logs</div>
+    </div>
+
+    {% if flash %}
+    <div style="background:rgba(16,185,129,.1);border:1px solid var(--success);border-radius:8px;
+                padding:10px 16px;margin-bottom:20px;color:var(--success);font-size:13px;">
+        ✓ {{ flash }}
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div style="background:rgba(239,68,68,.1);border:1px solid var(--danger);border-radius:8px;
+                padding:10px 16px;margin-bottom:20px;color:var(--danger);font-size:13px;">
+        ✗ {{ error }}
+    </div>
+    {% endif %}
+
+    <!-- Stats -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-label">Total Users</div>
+            <div class="stat-value blue">{{ stats.total }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Client Logins</div>
+            <div class="stat-value green">{{ stats.clients }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Analysts</div>
+            <div class="stat-value amber">{{ stats.analysts }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Third Party</div>
+            <div class="stat-value purple">{{ stats.thirdparty }}</div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('users',this)">👤 Users</button>
+        <button class="tab" onclick="switchTab('clients',this)">🏢 Clients</button>
+        <button class="tab" onclick="switchTab('log',this)">📋 Access Log</button>
+        <button class="tab" onclick="switchTab('export',this)">📤 Export Config</button>
+    </div>
+
+    <!-- ── Tab: Users ── -->
+    <div class="tab-panel active" id="panel-users">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">All Login Accounts</div>
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <input class="search-bar" placeholder="Search username…" id="user-search"
+                           oninput="filterTable('user-table',this.value)">
+                    <button class="btn btn-primary" onclick="openModal('modal-add')">+ Add User</button>
+                </div>
+            </div>
+            <table id="user-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th>Client Mapping</th>
+                        <th>Last Access</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for u in users %}
+                <tr>
+                    <td><strong>{{ u.username }}</strong></td>
+                    <td><span class="badge badge-{{ u.role }}">{{ u.role }}</span></td>
+                    <td>{{ u.client_name or '—' }}</td>
+                    <td style="color:var(--muted);">
+                        {% if u.last_access %}
+                            {{ u.last_access_fmt }}
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ 'badge-active' if u.is_active else 'badge-inactive' }}">
+                            {{ 'Active' if u.is_active else 'Inactive' }}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display:flex;gap:6px;">
+                            <button class="btn btn-ghost btn-sm"
+                                onclick="openEdit('{{ u.username }}','{{ u.role }}','{{ u.client_name or '' }}')">
+                                Edit
+                            </button>
+                            <form method="POST" action="/settings/user/toggle" style="display:inline;">
+                                <input type="hidden" name="username" value="{{ u.username }}">
+                                <input type="hidden" name="active" value="{{ '0' if u.is_active else '1' }}">
+                                <button class="btn btn-ghost btn-sm" type="submit">
+                                    {{ 'Deactivate' if u.is_active else 'Activate' }}
+                                </button>
+                            </form>
+                            {% if u.role != 'admin' %}
+                            <form method="POST" action="/settings/user/delete"
+                                  style="display:inline;"
+                                  onsubmit="return confirm('Delete {{ u.username }}?');">
+                                <input type="hidden" name="username" value="{{ u.username }}">
+                                <button class="btn btn-danger btn-sm" type="submit">Delete</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty-state">No users yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── Tab: Clients ── -->
+    <div class="tab-panel" id="panel-clients">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">Client Environments ({{ client_envs|length }})</div>
+                <input class="search-bar" placeholder="Search client…" id="client-search"
+                       oninput="filterBars(this.value)">
+            </div>
+            <div id="client-bars">
+            {% for c in client_envs %}
+            <div class="client-bar" data-name="{{ c.name|lower }}">
+                <div class="client-bar-info">
+                    <div class="client-num">{{ loop.index }}</div>
+                    <div>
+                        <div style="font-weight:600;">{{ c.name }}</div>
+                        <div class="login-count">
+                            <span>{{ c.login_count }}</span> login(s) ·
+                            <span>{{ c.analyst_count }}</span> analyst(s) ·
+                            <span>{{ c.total_accesses }}</span> total accesses
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    {% for p in c.platforms %}<span style="font-size:11px;background:var(--border);
+                        padding:2px 8px;border-radius:4px;">{{ p }}</span>{% endfor %}
+                    <button class="btn btn-primary btn-sm"
+                        onclick="prefillClient('{{ c.name }}')">+ Login</button>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">No client environments found.</div>
+            {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Tab: Access Log ── -->
+    <div class="tab-panel" id="panel-log">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">Recent Access Log</div>
+                <span style="color:var(--muted);font-size:12px;">Last {{ access_log|length }} events</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th>Client</th>
+                        <th>Action</th>
+                        <th>IP Address</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for entry in access_log %}
+                <tr>
+                    <td style="color:var(--muted);white-space:nowrap;">{{ entry.time_fmt }}</td>
+                    <td><strong>{{ entry.username }}</strong></td>
+                    <td><span class="badge badge-{{ entry.role }}">{{ entry.role }}</span></td>
+                    <td>{{ entry.client_name or '—' }}</td>
+                    <td>
+                        <span style="color:{{ 'var(--success)' if entry.action=='login' else 'var(--muted)' }}">
+                            {{ entry.action }}
+                        </span>
+                    </td>
+                    <td style="color:var(--muted);">{{ entry.ip_address or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty-state">No access events yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── Tab: Export ── -->
+    <div class="tab-panel" id="panel-export">
+        <div class="card">
+            <div class="card-title" style="margin-bottom:16px;">Export to Railway Variables</div>
+            <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">
+                Copy these values into Railway → Variables to persist user accounts across deployments.
+            </p>
+            {% for key, val in export_vars.items() %}
+            <div class="form-group">
+                <label class="form-label">{{ key }}</label>
+                <div style="display:flex;gap:8px;">
+                    <input class="form-input" readonly value="{{ val }}" id="exp-{{ key }}">
+                    <button class="btn btn-ghost btn-sm"
+                            onclick="copyToClip('exp-{{ key }}')">Copy</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</main>
+
+<!-- ── Modal: Add User ── -->
+<div class="modal-overlay" id="modal-add">
+    <div class="modal">
+        <div class="modal-title">➕ Add New User</div>
+        <form method="POST" action="/settings/user/create">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input class="form-input" name="username" placeholder="e.g. client01" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input class="form-input" type="password" name="password" placeholder="••••••••" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Role</label>
+                <select class="form-select" name="role" onchange="toggleClientField(this)">
+                    <option value="client">Client</option>
+                    <option value="analyst">Analyst</option>
+                    <option value="thirdparty">Third Party</option>
+                </select>
+            </div>
+            <div class="form-group" id="client-name-group">
+                <label class="form-label">Client Environment Mapping</label>
+                <select class="form-select" name="client_name" id="client-name-select">
+                    <option value="">— Select client —</option>
+                    {% for c in client_envs %}
+                    <option value="{{ c.name }}">{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('modal-add')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── Modal: Edit User ── -->
+<div class="modal-overlay" id="modal-edit">
+    <div class="modal">
+        <div class="modal-title">✏️ Edit User</div>
+        <form method="POST" action="/settings/user/update">
+            <input type="hidden" name="original_username" id="edit-orig">
+            <div class="form-group">
+                <label class="form-label">Username</label>
+                <input class="form-input" name="username" id="edit-username">
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Password <span style="color:var(--muted);font-weight:400;">(leave blank to keep current)</span></label>
+                <input class="form-input" type="password" name="password" placeholder="••••••••">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Role</label>
+                <select class="form-select" name="role" id="edit-role" onchange="toggleEditClientField(this)">
+                    <option value="client">Client</option>
+                    <option value="analyst">Analyst</option>
+                    <option value="thirdparty">Third Party</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="form-group" id="edit-client-group">
+                <label class="form-label">Client Mapping</label>
+                <select class="form-select" name="client_name" id="edit-client">
+                    <option value="">— None —</option>
+                    {% for c in client_envs %}
+                    <option value="{{ c.name }}">{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('modal-edit')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+    // Tab switching
+    function switchTab(name, btn) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + name).classList.add('active');
+    }
+
+    // Modal
+    function openModal(id) { document.getElementById(id).classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+        m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+    });
+
+    // Edit user modal
+    function openEdit(username, role, clientName) {
+        document.getElementById('edit-orig').value     = username;
+        document.getElementById('edit-username').value = username;
+        document.getElementById('edit-role').value     = role;
+        document.getElementById('edit-client').value   = clientName;
+        toggleEditClientField(document.getElementById('edit-role'));
+        openModal('modal-edit');
+    }
+
+    // Role → show/hide client field
+    function toggleClientField(sel) {
+        const g = document.getElementById('client-name-group');
+        g.style.display = (sel.value === 'analyst' || sel.value === 'thirdparty') ? 'none' : '';
+    }
+    function toggleEditClientField(sel) {
+        const g = document.getElementById('edit-client-group');
+        g.style.display = (sel.value === 'admin') ? 'none' : '';
+    }
+
+    // Prefill client for quick-add
+    function prefillClient(name) {
+        openModal('modal-add');
+        setTimeout(() => {
+            document.getElementById('client-name-select').value = name;
+        }, 50);
+    }
+
+    // Table filter
+    function filterTable(tableId, q) {
+        q = q.toLowerCase();
+        document.querySelectorAll('#' + tableId + ' tbody tr').forEach(tr => {
+            tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+        });
+    }
+
+    // Client bars filter
+    function filterBars(q) {
+        q = q.toLowerCase();
+        document.querySelectorAll('.client-bar').forEach(bar => {
+            bar.style.display = bar.dataset.name.includes(q) ? '' : 'none';
+        });
+    }
+
+    // Copy to clipboard
+    function copyToClip(id) {
+        const el = document.getElementById(id);
+        navigator.clipboard.writeText(el.value);
+        showToast('Copied to clipboard!', 'success');
+    }
+
+    // Toast
+    function showToast(msg, type='success') {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'show ' + type;
+        setTimeout(() => t.className = '', 2800);
+    }
+</script>
+
+</body>
+</html>

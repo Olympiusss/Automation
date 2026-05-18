@@ -24,6 +24,7 @@ from auth import (
     create_session, validate_session, destroy_session,
     get_session_role, get_session_client,
 )
+import db as user_db
 from fetcher import aggregator
 from websocket_manager import ws_manager
 
@@ -69,6 +70,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"TOTP configured: {settings.totp_configured()}")
     logger.info(f"Clients configured: {len(settings.CLIENT_CREDENTIALS)}")
     logger.info(f"Analysts configured: {len(settings.ANALYST_CREDENTIALS)}")
+    # Initialise user DB (seeds from env vars on first run)
+    user_db.init_db()
     _bg_task = asyncio.create_task(_background_fetcher())
     logger.info("═══ Sentrium SOC Dashboard started ═══")
     yield
@@ -216,6 +219,8 @@ async def login_submit(
             else:
                 # No TOTP configured — log in directly
                 token = create_session(role="admin")
+                ip = request.client.host if request.client else None
+                user_db.log_access(username, "admin", None, "login", ip)
                 response = RedirectResponse(url="/", status_code=302)
                 response.set_cookie(
                     key=SESSION_COOKIE, value=token,
@@ -225,22 +230,32 @@ async def login_submit(
                 logger.info("Admin authenticated (no TOTP)")
                 return response
 
-        # Try client
-        if verify_client_password(username, password):
+        # Try client (DB first, then env-var fallback via verify_client_password)
+        db_user = user_db.verify_login(username, password)
+        if db_user and db_user["role"] == "client":
+            cname = db_user.get("client_name") or resolve_client_name(username)
+        elif verify_client_password(username, password):
             cname = resolve_client_name(username)
-            if cname:
-                token = create_session(role="client", client_name=cname)
-                response = RedirectResponse(url=f"/client/{cname}", status_code=302)
-                response.set_cookie(
-                    key=SESSION_COOKIE, value=token,
-                    httponly=True, samesite="lax",
-                    max_age=settings.SESSION_TIMEOUT_MINUTES * 60,
-                )
-                logger.info(f"Client '{cname}' authenticated")
-                return response
+        else:
+            cname = None
+        if cname:
+            ip = request.client.host if request.client else None
+            user_db.log_access(username, "client", cname, "login", ip)
+            token = create_session(role="client", client_name=cname)
+            response = RedirectResponse(url=f"/client/{cname}", status_code=302)
+            response.set_cookie(
+                key=SESSION_COOKIE, value=token,
+                httponly=True, samesite="lax",
+                max_age=settings.SESSION_TIMEOUT_MINUTES * 60,
+            )
+            logger.info(f"Client '{cname}' authenticated")
+            return response
 
-        # Try analyst
-        if verify_analyst_password(username, password):
+        # Try analyst (DB first, then env-var fallback)
+        db_user2 = user_db.verify_login(username, password)
+        if (db_user2 and db_user2["role"] in ("analyst", "thirdparty")) or verify_analyst_password(username, password):
+            ip = request.client.host if request.client else None
+            user_db.log_access(username, "analyst", None, "login", ip)
             token = create_session(role="analyst")
             response = RedirectResponse(url="/analyst", status_code=302)
             response.set_cookie(
@@ -525,6 +540,188 @@ async def _send_client_detail(ws: WebSocket, client_name: str):
         "type": "error",
         "message": f"Client '{client_name}' not found",
     })
+
+
+# ════════════════════════════════════════════════════════════════
+#  Admin Settings
+# ════════════════════════════════════════════════════════════════
+
+def _settings_context(request: Request, flash: str = "", error: str = "") -> dict:
+    """Build full context for the settings template."""
+    import time
+    from datetime import datetime, timezone
+
+    all_users = user_db.get_all_users()
+    last_access_map = {u["username"]: user_db.get_last_access(u["username"]) for u in all_users}
+    login_counts = user_db.get_client_login_counts()
+    access_log_raw = user_db.get_access_log(limit=200)
+
+    def fmt_ts(ts):
+        if not ts:
+            return None
+        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d %b %Y %H:%M UTC")
+
+    # Enrich users with last access
+    users_enriched = []
+    for u in all_users:
+        la = last_access_map.get(u["username"])
+        users_enriched.append({**u, "last_access": la, "last_access_fmt": fmt_ts(la)})
+
+    # Client environments from aggregator
+    try:
+        state = aggregator.last_state
+        all_clients = [c.name for c in (state.clients if state else [])]
+    except Exception:
+        all_clients = []
+
+    # Also merge DB client_name values
+    db_clients = {u["client_name"] for u in all_users if u.get("client_name")}
+    all_client_names = sorted(set(all_clients) | db_clients)
+
+    # Build client env summary
+    client_users = {u["username"]: u for u in all_users}
+    client_envs = []
+    for cname in all_client_names:
+        mapped_logins = [u for u in all_users if u.get("client_name") == cname and u["role"] == "client"]
+        analysts = [u for u in all_users if u["role"] == "analyst"]
+        # Try to get platform tags
+        platforms = []
+        if state:
+            for c in state.clients:
+                if c.name == cname:
+                    platforms = c.platforms if hasattr(c, "platforms") else []
+                    break
+        client_envs.append({
+            "name": cname,
+            "login_count": len(mapped_logins),
+            "analyst_count": len(analysts),
+            "total_accesses": login_counts.get(cname, 0),
+            "platforms": platforms,
+        })
+
+    # Stats
+    stats = {
+        "total": len(all_users),
+        "clients": sum(1 for u in all_users if u["role"] == "client"),
+        "analysts": sum(1 for u in all_users if u["role"] == "analyst"),
+        "thirdparty": sum(1 for u in all_users if u["role"] == "thirdparty"),
+    }
+
+    # Access log enriched
+    access_log = [
+        {**e, "time_fmt": fmt_ts(e["timestamp"])}
+        for e in access_log_raw
+    ]
+
+    # Export config
+    import json
+    active_clients = {u["username"]: u["password"] for u in all_users
+                      if u["role"] == "client" and u["is_active"]}
+    active_name_map = {u["username"]: u["client_name"] for u in all_users
+                       if u["role"] == "client" and u["is_active"] and u.get("client_name")}
+    active_analysts = {u["username"]: u["password"] for u in all_users
+                       if u["role"] in ("analyst", "thirdparty") and u["is_active"]}
+    export_vars = {
+        "CLIENT_CREDENTIALS": json.dumps(active_clients),
+        "CLIENT_NAME_MAP": json.dumps(active_name_map),
+        "ANALYST_CREDENTIALS": json.dumps(active_analysts),
+    }
+
+    return {
+        "users": users_enriched,
+        "client_envs": client_envs,
+        "access_log": access_log,
+        "stats": stats,
+        "export_vars": export_vars,
+        "flash": flash,
+        "error": error,
+    }
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    token = request.cookies.get(SESSION_COOKIE)
+    if not validate_session(token) or get_session_role(token) != "admin":
+        return RedirectResponse(url="/login", status_code=302)
+    ctx = _settings_context(request)
+    return templates.TemplateResponse(request=request, name="settings.html", context=ctx)
+
+
+@app.post("/settings/user/create")
+async def settings_create_user(
+    request: Request,
+    username: str = Form(""),
+    password: str = Form(""),
+    role: str = Form("client"),
+    client_name: str = Form(""),
+):
+    token = request.cookies.get(SESSION_COOKIE)
+    if not validate_session(token) or get_session_role(token) != "admin":
+        return RedirectResponse(url="/login", status_code=302)
+    if not username or not password:
+        ctx = _settings_context(request, error="Username and password are required.")
+        return templates.TemplateResponse(request=request, name="settings.html", context=ctx)
+    try:
+        user_db.upsert_user(username, password, role, client_name or None)
+        logger.info(f"Admin created user: {username} ({role})")
+        ctx = _settings_context(request, flash=f"User '{username}' created successfully.")
+    except Exception as e:
+        ctx = _settings_context(request, error=str(e))
+    return templates.TemplateResponse(request=request, name="settings.html", context=ctx)
+
+
+@app.post("/settings/user/update")
+async def settings_update_user(
+    request: Request,
+    original_username: str = Form(""),
+    username: str = Form(""),
+    password: str = Form(""),
+    role: str = Form("client"),
+    client_name: str = Form(""),
+):
+    token = request.cookies.get(SESSION_COOKIE)
+    if not validate_session(token) or get_session_role(token) != "admin":
+        return RedirectResponse(url="/login", status_code=302)
+    try:
+        existing = user_db.get_user(original_username)
+        new_pw = password if password else (existing["password"] if existing else "")
+        user_db.upsert_user(username, new_pw, role, client_name or None)
+        # If username changed, delete the old record
+        if username != original_username:
+            user_db.delete_user(original_username)
+        ctx = _settings_context(request, flash=f"User '{username}' updated.")
+    except Exception as e:
+        ctx = _settings_context(request, error=str(e))
+    return templates.TemplateResponse(request=request, name="settings.html", context=ctx)
+
+
+@app.post("/settings/user/delete")
+async def settings_delete_user(
+    request: Request,
+    username: str = Form(""),
+):
+    token = request.cookies.get(SESSION_COOKIE)
+    if not validate_session(token) or get_session_role(token) != "admin":
+        return RedirectResponse(url="/login", status_code=302)
+    user_db.delete_user(username)
+    logger.info(f"Admin deleted user: {username}")
+    ctx = _settings_context(request, flash=f"User '{username}' deleted.")
+    return templates.TemplateResponse(request=request, name="settings.html", context=ctx)
+
+
+@app.post("/settings/user/toggle")
+async def settings_toggle_user(
+    request: Request,
+    username: str = Form(""),
+    active: str = Form("1"),
+):
+    token = request.cookies.get(SESSION_COOKIE)
+    if not validate_session(token) or get_session_role(token) != "admin":
+        return RedirectResponse(url="/login", status_code=302)
+    user_db.toggle_user(username, active == "1")
+    status = "activated" if active == "1" else "deactivated"
+    ctx = _settings_context(request, flash=f"User '{username}' {status}.")
+    return templates.TemplateResponse(request=request, name="settings.html", context=ctx)
 
 
 # ════════════════════════════════════════════════════════════════
