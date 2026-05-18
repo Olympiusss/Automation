@@ -106,7 +106,7 @@
                 <span class="step-dot {{ 'active' if step == 'totp' else '' }}" data-step="2"></span>
             </div>
 
-            <form method="POST" action="/login" id="login-form">
+            <form method="POST" action="/login" id="login-form" onsubmit="return validateLogin()">
                 <input type="hidden" name="step" value="{{ step }}">
 
                 <!-- Step 1: Credentials -->
@@ -125,7 +125,7 @@
                     <p id="form-error" style="color:#F87171;font-size:.78rem;text-align:center;margin:-8px 0 12px;display:none;">
                         Please enter both username and password.
                     </p>
-                    <button type="button" class="btn" onclick="submitCredentials()">Sign In</button>
+                    <button type="submit" class="btn">Sign In</button>
                 </div>
 
                 <!-- Step 2: TOTP (admin only) -->
@@ -146,7 +146,7 @@
                         </div>
                         <input type="hidden" name="totp_code" id="totp_code">
                     </div>
-                    <button type="submit" class="btn">Verify</button>
+                    <button type="submit" class="btn" id="verify-btn">Verify</button>
                     <button type="button" class="btn-outline" onclick="backToCredentials()">Back to sign in</button>
                 </div>
             </form>
@@ -160,17 +160,23 @@
     </div>
 
     <script>
-        function submitCredentials() {
-            const u = document.getElementById('username').value.trim();
-            const p = document.getElementById('password').value;
-            const err = document.getElementById('form-error');
-            if (!u || !p) {
-                err.style.display = 'block';
-                if (!u) document.getElementById('username').style.borderColor = '#F87171';
-                if (!p) document.getElementById('password').style.borderColor = '#F87171';
-                return;
+        function validateLogin() {
+            const credStep = document.getElementById('step-credentials');
+            if (credStep && credStep.classList.contains('active')) {
+                const u = document.getElementById('username').value.trim();
+                const p = document.getElementById('password').value;
+                const err = document.getElementById('form-error');
+                if (!u || !p) {
+                    if (err) err.style.display = 'block';
+                    if (!u) document.getElementById('username').style.borderColor = '#F87171';
+                    if (!p) document.getElementById('password').style.borderColor = '#F87171';
+                    return false; // block form submission
+                }
             }
-            err.style.display = 'none';
+            return true;
+        }
+
+        function submitCredentials() {
             document.getElementById('login-form').submit();
         }
 
