@@ -568,6 +568,7 @@ def _settings_context(request: Request, flash: str = "", error: str = "") -> dic
         users_enriched.append({**u, "last_access": la, "last_access_fmt": fmt_ts(la)})
 
     # Client environments from aggregator
+    state = None
     try:
         state = aggregator.last_state
         all_clients = [c.name for c in (state.clients if state else [])]
