@@ -416,16 +416,13 @@ class AVFetcher:
         except Exception as e:
             logger.error(f"AV alarm fetch {dep_name}: {e}")
 
-        # ── Client-side filter: time window + exclude suppressed ────────────
-        def _in_window(a: dict) -> bool:
-            ts = a.get("timestamp_occured") or a.get("timestamp_received") or 0
-            in_time = start_ms <= int(ts) <= end_ms
-            not_suppressed = not a.get("suppressed", False)
-            return in_time and not_suppressed
-
-        filtered = [a for a in all_alarms if _in_window(a)]
+        # ── Client-side time-window filter only ──────────────────────────
+        # Suppressed alarms are already excluded at API level (suppressed=false param).
+        # Do NOT add a second boolean check here — it drops False Positive alarms
+        # that AV still shows under the "Not Suppressed" filter view.
+        filtered = [a for a in all_alarms if start_ms <= int(a.get("timestamp_occured") or a.get("timestamp_received") or 0) <= end_ms]
         logger.info(
-            f"AV: {dep_name} → {len(all_alarms)} raw, {len(filtered)} in window (not suppressed)"
+            f"AV: {dep_name} → {len(all_alarms)} raw, {len(filtered)} in window"
         )
         return filtered
 

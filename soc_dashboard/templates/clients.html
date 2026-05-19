@@ -105,11 +105,6 @@
     </table>
   </div>
 
-  <!-- Live -->
-  <div class="live-indicator" id="live-indicator">
-    <span class="live-pulse"></span>
-    <span class="live-text">Updated <strong id="last-updated">connecting…</strong></span>
-  </div>
 </main>
 
 <script>
@@ -155,14 +150,9 @@ document.getElementById('sidebar-overlay').addEventListener('click', toggleMobil
 
 function connectWS() {
     ws = new WebSocket(WS_URL);
-    ws.onopen = () => {
-        document.getElementById('live-indicator').classList.remove('disconnected');
-        showNotification('Connected','Real-time feed active','success');
-    };
+    ws.onopen = () => { /* connected silently */ };
     ws.onmessage = e => { try { handleState(JSON.parse(e.data)); lastUpdateTime = new Date(); } catch(_){} };
     ws.onclose = () => {
-        document.getElementById('live-indicator').classList.add('disconnected');
-        showNotification('Reconnecting','Connection lost, retrying…','warning');
         setTimeout(connectWS, 3000);
     };
     ws.onerror = () => ws.close();
@@ -197,11 +187,7 @@ function renderTable(clients, search) {
     }).join('');
 }
 
-setInterval(()=>{
-    if(!lastUpdateTime) return;
-    const s=Math.floor((Date.now()-lastUpdateTime.getTime())/1000);
-    document.getElementById('last-updated').textContent = s<5?'just now':s<60?s+'s ago':Math.floor(s/60)+'m ago';
-},1000);
+
 
 function escHtml(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
 connectWS();

@@ -91,13 +91,12 @@ function connectWS() {
     ws.onopen = () => {
         reconnectAttempts = 0;
         const o = $('reconnect-overlay'); if (o) o.classList.remove('visible');
-        showNotification('Connected', 'Real-time feed active', 'success');
     };
     ws.onmessage = e => {
         try {
             const d = JSON.parse(e.data);
             const client = (d.clients || []).find(c => c.name.toLowerCase() === CLIENT_NAME.toLowerCase());
-            if (client) { renderClient(client); lastUpdateTime = new Date(); tick(); }
+            if (client) { renderClient(client); lastUpdateTime = new Date(); }
         } catch (_) { /* ignore */ }
     };
     ws.onclose = () => {
@@ -320,15 +319,7 @@ function fmt(n) { n = Number(n) || 0; if (n >= 1e6) return (n/1e6).toFixed(1)+'M
 
 function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
 
-function tick() {
-    if (_timer) clearInterval(_timer);
-    _timer = setInterval(() => {
-        if (!lastUpdateTime) return;
-        const s = Math.floor((Date.now() - lastUpdateTime.getTime()) / 1000);
-        const el = $('last-updated');
-        if (el) el.textContent = s < 5 ? 'just now' : s < 60 ? s + 's ago' : Math.floor(s / 60) + 'm ago';
-    }, 1000);
-}
+
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (typeof initEventChart === 'function') initEventChart();
