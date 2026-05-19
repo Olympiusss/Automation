@@ -958,3 +958,78 @@ html { scroll-behavior: smooth; }
 :root .data-table tbody tr:hover {
     background: var(--accent-dim);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   SENTRIUM SOC BRAND TYPOGRAPHY
+   ═══════════════════════════════════════════════════════════ */
+.brand-logo {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 20px 16px 16px;
+    text-decoration: none;
+}
+.brand-shield {
+    width: 30px;
+    height: 35px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 2px 6px rgba(33,84,232,0.35));
+}
+.brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+}
+.brand-name {
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #1A3ABF;
+    line-height: 1.1;
+}
+.brand-soc {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    color: #3B82F6;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+[data-theme="dark"] .brand-name { color: #7C8AFF; }
+[data-theme="dark"] .brand-soc  { color: #5A6DFF; }
+[data-theme="dark"] .brand-shield { filter: drop-shadow(0 2px 6px rgba(90,109,255,0.4)); }
+
+/* Login wordmark */
+.login-logo { flex-direction: row; align-items: center; gap: 12px; }
+.login-logo-wordmark { display: flex; flex-direction: column; }
+.lw-sentrium {
+    font-size: 1.3rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    color: #1A3ABF;
+    line-height: 1.1;
+}
+.lw-soc {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    color: #3B82F6;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+.login-logo-icon {
+    background: none !important;
+    padding: 0 !important;
+}
+.login-left-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.login-left-brand span {
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    color: rgba(255,255,255,0.88);
+    text-transform: uppercase;
+}
