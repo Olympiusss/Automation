@@ -75,7 +75,6 @@
   </div>
 
   <div class="nav-divider"></div>
-  <div class="nav-section-label">Navigation</div>
 
   <nav style="display:flex;flex-direction:column;gap:2px;">
     <button class="client-nav-item active" data-section="section-overview">
@@ -84,7 +83,7 @@
     </button>
     <button class="client-nav-item" data-section="section-alerts" id="nav-alerts" style="display:none;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      Alerts
+      SIEM
       <span class="nav-badge" id="nav-alerts-badge" style="display:none;"></span>
     </button>
     <button class="client-nav-item" data-section="section-edr" id="nav-edr" style="display:none;">
@@ -194,60 +193,82 @@
     </div>
   </section>
 
-  <!-- ══ ALERTS ══ -->
+  <!-- ====== SIEM ====== -->
   <section id="section-alerts" class="client-section">
     <div class="sec-title">
-      <h2>AlienVault Alarms</h2>
+      <h2>SIEM</h2>
       <span class="sec-title-badge stb-av">AlienVault</span>
       <span class="sec-count" id="av-total-lbl">— alarms · 24hr</span>
     </div>
 
-    <!-- AV KPI Strip -->
-    <div class="summary-strip" id="av-kpi-strip">
-      <div class="strip-item"><div><div class="strip-val" id="av-kpi-total">—</div><div class="strip-lbl">Total Alarms</div></div></div>
-      <div class="strip-item"><div><div class="strip-val" id="av-kpi-open" style="color:#F43F5E;">—</div><div class="strip-lbl">Open</div></div></div>
-      <div class="strip-item"><div><div class="strip-val" id="av-kpi-closed" style="color:#34D399;">—</div><div class="strip-lbl">Closed</div></div></div>
-      <div class="strip-item"><div><div class="strip-val" id="av-kpi-rate" style="color:#7C8AFF;">—</div><div class="strip-lbl">Resolution Rate</div></div></div>
-      <div class="strip-item"><div><div class="strip-val" id="av-kpi-supp" style="color:#F59E0B;">—</div><div class="strip-lbl">Suppressed</div></div></div>
+    <!-- Summary Row: Total | Severity | Status -->
+    <div class="siem-summary-row">
+      <div class="siem-total-block">
+        <div class="siem-total-num" id="siem-total">—</div>
+        <div class="siem-total-lbl">Alarms</div>
+      </div>
+      <div class="siem-divider"></div>
+      <div class="siem-meta-block">
+        <div class="siem-meta-label">ALARM SEVERITY</div>
+        <div class="siem-meta-vals" id="siem-severity-row">
+          <span><strong id="siem-sev-h" class="sev-h">0</strong> HIGH</span>
+          <span><strong id="siem-sev-m" class="sev-m">0</strong> MEDIUM</span>
+          <span><strong id="siem-sev-l" class="sev-l">0</strong> LOW</span>
+        </div>
+      </div>
+      <div class="siem-divider"></div>
+      <div class="siem-meta-block">
+        <div class="siem-meta-label">ALARM STATUS</div>
+        <div class="siem-meta-vals" id="siem-status-row">
+          <span><strong id="siem-st-open" class="sev-h">0</strong> OPEN</span>
+          <span><strong id="siem-st-inv" style="color:#FBBF24;">0</strong> INVESTIGATION</span>
+          <span><strong id="siem-st-closed" class="sev-l">0</strong> CLOSED</span>
+        </div>
+      </div>
     </div>
 
     <!-- 7-day trend -->
-    <div class="dash-card" style="margin-bottom:12px;">
+    <div class="dash-card" style="margin-bottom:14px;">
       <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>7-Day Alarm Trend</div>
       <div id="av-trend-bars" style="display:flex;align-items:flex-end;gap:6px;height:56px;padding:4px 0;"></div>
       <div id="av-trend-labels" style="display:flex;gap:6px;margin-top:4px;"></div>
     </div>
 
-    <div class="two-col">
-      <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Priority &amp; Status</div>
-        <table class="data-table"><thead><tr><th>Priority</th><th>Total</th><th>Open</th><th>Closed</th><th>Review</th></tr></thead>
-        <tbody id="prio-tbody"><tr><td colspan="5" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
-      </div>
-      <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top 5 Methods</div>
-        <table class="data-table"><thead><tr><th>Method</th><th>Strategy</th><th>Intent</th><th style="text-align:right">Count</th></tr></thead>
-        <tbody id="meth-tbody"><tr><td colspan="4" class="empty-msg"><span class="skeleton skeleton-text" style="width:60%;"></span></td></tr></tbody></table>
-      </div>
-    </div>
+    <!-- Priority cards: HIGH / MEDIUM / LOW -->
+    <div id="siem-prio-cards" class="siem-prio-cards"></div>
 
-    <div class="two-col">
-      <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top 5 Attack Strategies</div>
-        <table class="data-table"><thead><tr><th>Strategy</th><th style="text-align:right">Count</th></tr></thead>
-        <tbody id="strat-tbody"><tr><td colspan="2" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
+    <!-- More Details accordion -->
+    <div class="siem-accordion">
+      <button class="siem-acc-toggle" onclick="toggleSiemAcc(this)">
+        <span>More Details</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="siem-acc-body">
+        <div class="two-col">
+          <div class="dash-card">
+            <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top 5 Methods</div>
+            <table class="data-table"><thead><tr><th>Method</th><th>Strategy</th><th>Intent</th><th style="text-align:right">Count</th></tr></thead>
+            <tbody id="meth-tbody"><tr><td colspan="4" class="empty-msg"><span class="skeleton skeleton-text" style="width:60%;"></span></td></tr></tbody></table>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top 5 Strategies</div>
+            <table class="data-table"><thead><tr><th>Strategy</th><th style="text-align:right">Count</th></tr></thead>
+            <tbody id="strat-tbody"><tr><td colspan="2" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
+          </div>
+        </div>
+        <div class="two-col" style="margin-top:12px;">
+          <div class="dash-card">
+            <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top 5 Intents</div>
+            <table class="data-table"><thead><tr><th>Intent</th><th style="text-align:right">Count</th></tr></thead>
+            <tbody id="intent-tbody"><tr><td colspan="2" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Sensor Coverage</div>
+            <table class="data-table"><thead><tr><th>Sensor / Deployment</th><th style="text-align:right">Alarms</th></tr></thead>
+            <tbody id="sensor-tbody"><tr><td colspan="2" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
+          </div>
+        </div>
       </div>
-      <div class="dash-card">
-        <div class="dash-card-title"><span class="dash-card-title-dot dtd-blue"></span>Top 5 Attack Intents</div>
-        <table class="data-table"><thead><tr><th>Intent</th><th style="text-align:right">Count</th></tr></thead>
-        <tbody id="intent-tbody"><tr><td colspan="2" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
-      </div>
-    </div>
-
-    <div class="dash-card">
-      <div class="dash-card-title"><span class="dash-card-title-dot dtd-av"></span>Sensor Coverage</div>
-      <table class="data-table"><thead><tr><th>Sensor / Deployment</th><th style="text-align:right">Alarms</th></tr></thead>
-      <tbody id="sensor-tbody"><tr><td colspan="2" class="empty-msg"><span class="skeleton skeleton-text" style="width:50%;"></span></td></tr></tbody></table>
     </div>
 
   </section>

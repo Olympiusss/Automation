@@ -152,9 +152,8 @@ function renderClient(c) {
 
     const avLbl = $('av-total-lbl'); if (avLbl) avLbl.textContent = fmt(avTotal) + ' alarms · 24hr';
 
-    renderAvKpis(c);
+    renderSiemSection(c);
     renderTrendBars(c.av_daily_trend || []);
-    renderPrioTable(c.av_priority_breakdown || []);
     renderMethTable(c.av_method_summary || []);
     renderSimpleTable('strat-tbody', c.av_top_strategies || [], 2);
     renderSimpleTable('intent-tbody', c.av_top_intents || [], 2);
@@ -226,15 +225,83 @@ function renderAlarmLog(all) {
     }).join('');
 }
 
-// ═══ AV EXECUTIVE SECTIONS ═══
-function renderAvKpis(c) {
-    const set = (id, val) => { const el = $(id); if (el) el.textContent = val; };
-    set('av-kpi-total', fmt(c.av_total_alarms || 0));
-    set('av-kpi-open',  fmt(c.av_open_alarms  || 0));
-    set('av-kpi-closed',fmt(c.av_closed_alarms || 0));
-    set('av-kpi-rate',  (c.av_resolution_rate || 0).toFixed(1) + '%');
-    set('av-kpi-supp',  fmt(c.av_suppressed   || 0));
+// ═══ SIEM SECTION ═══
+function renderSiemSection(c) {
+    const prios   = c.av_priority_breakdown || [];
+    const sensors = c.av_sensor_summary || [];
+    const avTotal = c.av_total_alarms || 0;
+
+    // Summary row totals
+    const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    set('siem-total', fmt(avTotal));
+    set('av-total-lbl', fmt(avTotal) + ' alarms · 24hr');
+
+    // Severity counts from priority breakdown
+    let sH = 0, sM = 0, sL = 0, stOpen = 0, stInv = 0, stClosed = 0;
+    prios.forEach(r => {
+        const p = (r.priority || '').toLowerCase();
+        const t = r.total || 0, st = r.statuses || {};
+        if (p === 'high')   sH += t;
+        else if (p === 'medium') sM += t;
+        else sL += t;
+        stOpen   += st.open   || 0;
+        stInv    += st.in_review || 0;
+        stClosed += st.closed || 0;
+    });
+    set('siem-sev-h', sH); set('siem-sev-m', sM); set('siem-sev-l', sL);
+    set('siem-st-open', stOpen); set('siem-st-inv', stInv); set('siem-st-closed', stClosed);
+
+    // Priority cards
+    const container = $('siem-prio-cards');
+    if (!container) return;
+    const ORDER = ['High', 'Medium', 'Low'];
+    const SEV_CLASS = { high: 'high', medium: 'medium', low: 'low' };
+    const numCls = { open: 'open', in_review: 'inv', closed: 'closed' };
+
+    // Build sensor chips HTML (top 4)
+    const sensorChips = sensors.slice(0, 4).map(s =>
+        `<span class="siem-sensor-chip">${esc(s.asset)} <span style="color:var(--text-muted);">${fmt(s.count)}</span></span>`
+    ).join('');
+
+    const cards = ORDER.map(pLabel => {
+        const row = prios.find(r => r.priority?.toLowerCase() === pLabel.toLowerCase());
+        if (!row) return '';
+        const st = row.statuses || {};
+        const open = st.open || 0, inv = st.in_review || 0, closed = st.closed || 0;
+        const cls = SEV_CLASS[pLabel.toLowerCase()];
+        return `
+        <div class="siem-prio-card">
+          <div class="siem-prio-card-header">
+            <span class="siem-prio-badge ${cls}">${esc(pLabel)}</span>
+            <span class="siem-prio-total">${fmt(row.total)}</span>
+            <span class="siem-prio-sublabel">${fmt(open + inv + closed)} classified</span>
+          </div>
+          <div class="siem-status-boxes">
+            <div class="siem-status-box">
+              <div class="siem-status-box-num open">${fmt(open)}</div>
+              <div class="siem-status-box-lbl">Open</div>
+            </div>
+            <div class="siem-status-box">
+              <div class="siem-status-box-num inv">${fmt(inv)}</div>
+              <div class="siem-status-box-lbl">Investigating</div>
+            </div>
+            <div class="siem-status-box">
+              <div class="siem-status-box-num closed">${fmt(closed)}</div>
+              <div class="siem-status-box-lbl">Closed</div>
+            </div>
+          </div>
+          ${sensorChips ? `<div class="siem-sensor-row"><strong>Sensors:</strong>${sensorChips}</div>` : ''}
+        </div>`;
+    }).join('');
+    container.innerHTML = cards || '<p style="color:var(--text-muted);padding:12px;">No alarm data.</p>';
 }
+
+function toggleSiemAcc(btn) {
+    btn.classList.toggle('open');
+    const body = btn.nextElementSibling;
+    if (body) body.classList.toggle('open');
+}
+
 
 function renderTrendBars(trend) {
     const bars  = $('av-trend-bars');  if (!bars)  return;
