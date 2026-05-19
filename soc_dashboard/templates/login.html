@@ -16,6 +16,102 @@
             overflow: hidden;
         }
 
+        /* ══════════════════════════════════════
+           CURTAIN ANIMATION
+        ══════════════════════════════════════ */
+        .curtain {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            pointer-events: none;
+        }
+        .curtain-left, .curtain-right {
+            width: 50%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        .curtain-left {
+            background: linear-gradient(135deg, #1A3ABF 0%, #2563EB 50%, #1E40AF 100%);
+            animation: curtainLeft 1.8s cubic-bezier(0.77, 0, 0.18, 1) 0.3s forwards;
+        }
+        .curtain-right {
+            background: #F1F5F9;
+            animation: curtainRight 1.8s cubic-bezier(0.77, 0, 0.18, 1) 0.3s forwards;
+        }
+        @keyframes curtainLeft  { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+        @keyframes curtainRight { from { transform: translateX(0); } to { transform: translateX(100%); } }
+
+        /* Black accent stripes on curtains */
+        .curtain-left::before {
+            content: '';
+            position: absolute;
+            right: 0; top: 0; bottom: 0;
+            width: 6px;
+            background: linear-gradient(180deg, #000 0%, #111 40%, #000 100%);
+            opacity: 0.35;
+        }
+        .curtain-left::after {
+            content: '';
+            position: absolute;
+            right: 18px; top: 0; bottom: 0;
+            width: 2px;
+            background: rgba(255,255,255,0.15);
+        }
+        .curtain-right::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 6px;
+            background: linear-gradient(180deg, #000 0%, #111 40%, #000 100%);
+            opacity: 0.18;
+        }
+        .curtain-right::after {
+            content: '';
+            position: absolute;
+            left: 18px; top: 0; bottom: 0;
+            width: 2px;
+            background: rgba(37,99,235,0.12);
+        }
+
+        /* Curtain logo centered */
+        .curtain-center {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            animation: curtainFade 0.6s ease 1.6s forwards;
+            opacity: 1;
+        }
+        @keyframes curtainFade { to { opacity: 0; } }
+        .curtain-logo-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            animation: curtainLogoPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
+        }
+        @keyframes curtainLogoPop { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .curtain-logo-wrap svg { width: 64px; height: 74px; filter: drop-shadow(0 4px 18px rgba(0,0,0,0.35)); }
+        .curtain-logo-wrap .cl-name { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.06em; color: #FFFFFF; text-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+        .curtain-logo-wrap .cl-soc  { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.35em; color: rgba(255,255,255,0.7); text-transform: uppercase; }
+
+        /* ══════════════════════════════════════
+           PAGE CONTENT — fade in after curtain
+        ══════════════════════════════════════ */
+        .page-wrap {
+            display: flex;
+            width: 100%;
+            min-height: 100vh;
+            opacity: 0;
+            animation: pageReveal 0.5s ease 1.9s forwards;
+        }
+        @keyframes pageReveal { to { opacity: 1; } }
+
         /* ── LEFT PANEL ── */
         .login-left {
             flex: 0 0 50%;
@@ -43,18 +139,19 @@
             top: 40px;
             left: 52px;
             z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .login-left-brand h1 {
-            font-size: 1rem;
+        .login-left-brand svg { width: 28px; height: 33px; opacity: 0.9; }
+        .login-left-brand span {
+            font-size: 0.82rem;
             font-weight: 800;
-            letter-spacing: 1.5px;
+            letter-spacing: 0.18em;
+            color: rgba(255,255,255,0.88);
             text-transform: uppercase;
-            color: rgba(255,255,255,0.92);
         }
-        .login-left-copy {
-            position: relative;
-            z-index: 1;
-        }
+        .login-left-copy { position: relative; z-index: 1; }
         .login-left-copy h2 {
             font-size: 2.1rem;
             font-weight: 800;
@@ -64,9 +161,9 @@
             margin-bottom: 14px;
         }
         .login-left-copy p {
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             color: rgba(255,255,255,0.65);
-            line-height: 1.6;
+            line-height: 1.65;
             max-width: 340px;
         }
         .login-left-dots {
@@ -79,9 +176,8 @@
             background-image: radial-gradient(circle, rgba(255,255,255,0.18) 1.5px, transparent 1.5px);
             background-size: 22px 22px;
             border-radius: 50%;
-            opacity: 0.5;
+            opacity: 0.45;
         }
-        /* Floating card decoration */
         .login-left-card {
             position: absolute;
             top: 38%;
@@ -95,41 +191,12 @@
             min-width: 220px;
             z-index: 1;
         }
-        .login-left-card-label {
-            font-size: 0.65rem;
-            font-weight: 700;
-            color: rgba(255,255,255,0.55);
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-bottom: 10px;
-        }
-        .login-left-card-stat {
-            display: flex;
-            align-items: baseline;
-            gap: 6px;
-        }
-        .login-left-card-stat .num {
-            font-size: 2rem;
-            font-weight: 800;
-            color: #FFFFFF;
-            line-height: 1;
-        }
-        .login-left-card-stat .lbl {
-            font-size: 0.75rem;
-            color: rgba(255,255,255,0.6);
-            font-weight: 500;
-        }
-        .login-left-pips {
-            display: flex;
-            gap: 6px;
-            margin-top: 14px;
-        }
-        .login-left-pip {
-            height: 3px;
-            border-radius: 2px;
-            flex: 1;
-            background: rgba(255,255,255,0.2);
-        }
+        .login-left-card-label { font-size: 0.64rem; font-weight: 700; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+        .login-left-card-stat { display: flex; align-items: baseline; gap: 6px; }
+        .login-left-card-stat .num { font-size: 2rem; font-weight: 800; color: #FFFFFF; line-height: 1; }
+        .login-left-card-stat .lbl { font-size: 0.74rem; color: rgba(255,255,255,0.6); font-weight: 500; }
+        .login-left-pips { display: flex; gap: 6px; margin-top: 14px; }
+        .login-left-pip { height: 3px; border-radius: 2px; flex: 1; background: rgba(255,255,255,0.2); }
         .login-left-pip.active { background: #60A5FA; }
 
         /* ── RIGHT PANEL ── */
@@ -140,407 +207,277 @@
             align-items: center;
             justify-content: center;
             padding: 48px 40px;
-            position: relative;
         }
-        .login-form-wrap {
-            width: 100%;
-            max-width: 380px;
-        }
+        .login-form-wrap { width: 100%; max-width: 380px; }
+
         .login-logo {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             justify-content: center;
-            margin-bottom: 36px;
-        }
-        .login-logo-icon {
-            width: 40px;
-            height: 40px;
-            background: #1A3ABF;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .login-logo-icon svg {
-            width: 22px;
-            height: 22px;
-            stroke: #FFFFFF;
-            fill: none;
-            stroke-width: 2;
-        }
-        .login-logo-text {
-            font-size: 1.25rem;
-            font-weight: 800;
-            color: #1A3ABF;
-            letter-spacing: -0.3px;
-        }
-
-        .login-tagline {
-            text-align: center;
-            font-size: 0.88rem;
-            color: #64748B;
             margin-bottom: 32px;
-            font-weight: 400;
         }
+        .login-logo svg { width: 40px; height: 46px; filter: drop-shadow(0 2px 8px rgba(37,99,235,0.3)); }
+        .login-logo-wordmark { display: flex; flex-direction: column; }
+        .lw-sentrium { font-size: 1.28rem; font-weight: 800; letter-spacing: 0.03em; color: #1A3ABF; line-height: 1.1; }
+        .lw-soc { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.32em; color: #3B82F6; text-transform: uppercase; margin-top: 3px; }
 
-        /* Step indicator */
-        .step-indicator {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            margin-bottom: 28px;
-        }
-        .step-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #E2E8F0;
-            transition: all 0.3s;
-        }
+        .login-tagline { text-align: center; font-size: 0.86rem; color: #6B7280; margin-bottom: 28px; }
+
+        .step-indicator { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 24px; }
+        .step-dot { width: 8px; height: 8px; border-radius: 50%; background: #E2E8F0; transition: all 0.3s; }
         .step-dot.active { background: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
         .step-dot.done   { background: #16A34A; }
-        .step-line       { width: 32px; height: 1px; background: #E2E8F0; }
+        .step-line { width: 32px; height: 1px; background: #E2E8F0; }
 
-        /* Error */
+        /* Error / warning */
         .error-msg {
-            background: #FEF2F2;
-            border: 1px solid #FECACA;
-            color: #DC2626;
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            text-align: center;
-            margin-bottom: 16px;
+            background: #FEF2F2; border: 1px solid #FECACA; color: #DC2626;
+            padding: 10px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 500;
+            text-align: center; margin-bottom: 18px;
+            animation: shake 0.4s ease;
         }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
         .config-warning {
-            background: #FFFBEB;
-            border: 1px solid #FDE68A;
-            color: #92400E;
-            padding: 12px 14px;
-            border-radius: 8px;
-            font-size: 0.78rem;
-            font-weight: 500;
-            text-align: center;
-            margin-bottom: 16px;
-            line-height: 1.5;
+            background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E;
+            padding: 12px 14px; border-radius: 8px; font-size: 0.78rem; font-weight: 500;
+            text-align: center; margin-bottom: 16px; line-height: 1.5;
         }
 
-        /* Form */
+        /* Form steps */
         .form-step { display: none; }
         .form-step.active { display: block; }
 
         .form-group { margin-bottom: 18px; }
-        .form-group label {
-            display: block;
-            font-size: 0.82rem;
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 7px;
-        }
+        .form-group label { display: block; font-size: 0.82rem; font-weight: 600; color: #374151; margin-bottom: 7px; }
         .input-wrap { position: relative; }
         input[type="text"], input[type="password"] {
-            width: 100%;
-            padding: 11px 14px;
-            font-size: 0.9rem;
-            font-weight: 400;
-            font-family: 'Inter', sans-serif;
-            color: #0F172A;
-            background: #FFFFFF;
-            border: 1.5px solid #D1D5DB;
-            border-radius: 8px;
-            outline: none;
-            transition: all 0.18s;
+            width: 100%; padding: 11px 14px; font-size: 0.9rem; font-weight: 400;
+            font-family: 'Inter', sans-serif; color: #0F172A;
+            background: #FFFFFF; border: 1.5px solid #D1D5DB; border-radius: 8px;
+            outline: none; transition: all 0.18s;
         }
         input[type="text"]:focus, input[type="password"]:focus {
-            border-color: #2563EB;
-            box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+            border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
         }
-        input[type="text"]::placeholder, input[type="password"]::placeholder {
-            color: #9CA3AF;
-            font-weight: 400;
-        }
+        input[type="text"]::placeholder, input[type="password"]::placeholder { color: #9CA3AF; }
+        input[type="password"] { padding-right: 42px; }
         .input-eye {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: #9CA3AF;
-            padding: 2px;
-            display: flex;
-            align-items: center;
+            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer; color: #9CA3AF; padding: 2px; display: flex;
         }
         .input-eye:hover { color: #6B7280; }
         .input-eye svg { width: 17px; height: 17px; }
-        input[type="password"] { padding-right: 42px; }
 
         .forgot-link {
-            font-size: 0.78rem;
-            color: #2563EB;
-            font-weight: 600;
-            text-decoration: none;
-            display: block;
-            margin-top: -10px;
-            margin-bottom: 20px;
+            font-size: 0.78rem; color: #2563EB; font-weight: 600; text-decoration: none;
+            display: block; margin-top: -10px; margin-bottom: 20px;
         }
         .forgot-link:hover { text-decoration: underline; }
 
         /* OTP */
-        .totp-info {
-            text-align: center;
-            font-size: 0.8rem;
-            color: #6B7280;
-            margin-bottom: 18px;
-            line-height: 1.6;
-        }
+        .totp-info { text-align: center; font-size: 0.8rem; color: #6B7280; margin-bottom: 18px; line-height: 1.6; }
         .otp-row { display: flex; gap: 8px; justify-content: center; }
         .otp-d {
-            width: 48px;
-            height: 56px;
-            text-align: center;
-            font-size: 1.4rem;
-            font-weight: 700;
-            font-family: 'Inter', monospace;
-            color: #0F172A;
-            background: #FFFFFF;
-            border: 1.5px solid #D1D5DB;
-            border-radius: 8px;
-            outline: none;
-            transition: all 0.18s;
-            caret-color: #2563EB;
+            width: 48px; height: 56px; text-align: center; font-size: 1.4rem; font-weight: 700;
+            font-family: 'Inter', monospace; color: #0F172A; background: #FFFFFF;
+            border: 1.5px solid #D1D5DB; border-radius: 8px; outline: none; transition: all 0.18s;
         }
         .otp-d:focus { border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.10); }
 
         /* Buttons */
         .btn {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: #1E40AF;
-            color: #FFFFFF;
-            letter-spacing: 0.2px;
+            width: 100%; padding: 12px; border: none; border-radius: 8px;
+            font-size: 0.9rem; font-weight: 600; font-family: inherit; cursor: pointer;
+            transition: all 0.2s; background: #1E40AF; color: #FFFFFF; letter-spacing: 0.2px;
         }
         .btn:hover { background: #1D4ED8; box-shadow: 0 4px 14px rgba(30,64,175,0.35); transform: translateY(-1px); }
         .btn:active { transform: translateY(0); box-shadow: none; }
         .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
         .btn-outline {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            border: 1.5px solid #E2E8F0;
-            border-radius: 8px;
-            font-size: 0.82rem;
-            font-weight: 500;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all 0.18s;
-            background: transparent;
-            color: #6B7280;
+            width: 100%; padding: 10px; margin-top: 10px; border: 1.5px solid #E2E8F0;
+            border-radius: 8px; font-size: 0.82rem; font-weight: 500; font-family: inherit;
+            cursor: pointer; transition: all 0.18s; background: transparent; color: #6B7280;
         }
         .btn-outline:hover { border-color: #2563EB; color: #2563EB; background: rgba(37,99,235,0.04); }
 
-        .footer {
-            text-align: center;
-            margin-top: 22px;
-            font-size: 0.78rem;
-            color: #9CA3AF;
-        }
-        .footer a {
-            color: #2563EB;
-            font-weight: 600;
-            text-decoration: none;
-        }
+        .footer { text-align: center; margin-top: 22px; font-size: 0.78rem; color: #9CA3AF; }
+        .footer a { color: #2563EB; font-weight: 600; text-decoration: none; }
         .footer a:hover { text-decoration: underline; }
 
-        /* Responsive */
         @media(max-width: 768px) {
             .login-left { display: none; }
             .login-right { flex: 0 0 100%; }
+            .curtain-left { display: none; }
+            .curtain-right { width: 100%; }
         }
     </style>
 </head>
 <body>
 
-<!-- LEFT PANEL -->
-<div class="login-left">
-    <div class="login-left-brand">
-    <svg style="width:32px;height:38px;opacity:0.9;" viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <defs>
-    <linearGradient id="sg" x1="0" y1="0" x2="0.6" y2="1">
-      <stop offset="0%" stop-color="#5B8EF8"/>
-      <stop offset="45%" stop-color="#2154E8"/>
-      <stop offset="100%" stop-color="#1029B0"/>
-    </linearGradient>
-    <linearGradient id="sg2" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.30)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
-    </linearGradient>
-  </defs>
-  <!-- Shield body -->
-  <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#sg)"/>
-  <!-- Gloss highlight top-left -->
-  <path d="M24 3 L43 11 L43 24 C32 21 14 18 5 20 L5 11 Z" fill="url(#sg2)" opacity="0.7"/>
-  <!-- Shield border -->
-  <path d="M24 2 L44 11 L44 33 C44 46 35 53 24 54 C13 53 4 46 4 33 L4 11 Z" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
-  <!-- 4 vertical pill bars (white) — varying heights like the logo -->
-  <!-- Bar 1 -->
-  <rect x="9"  y="17" width="6" height="24" rx="3" fill="white"/>
-  <!-- Bar 2 -->
-  <rect x="18" y="13" width="6" height="28" rx="3" fill="white"/>
-  <!-- Bar 3 -->
-  <rect x="27" y="15" width="6" height="26" rx="3" fill="white"/>
-  <!-- Bar 4 -->
-  <rect x="36" y="18" width="6" height="22" rx="3" fill="white"/>
-</svg>
-    <span>SENTRIUM SOC</span>
-  </div>
-    <div class="login-left-dots"></div>
-
-    <!-- Floating stat card -->
-    <div class="login-left-card">
-        <div class="login-left-card-label">Active Monitoring</div>
-        <div class="login-left-card-stat">
-            <span class="num">24/7</span>
-            <span class="lbl">SOC Coverage</span>
-        </div>
-        <div class="login-left-pips">
-            <div class="login-left-pip active"></div>
-            <div class="login-left-pip active"></div>
-            <div class="login-left-pip active"></div>
-            <div class="login-left-pip"></div>
-        </div>
-    </div>
-
-    <div class="login-left-copy">
-        <h2>Security Operations<br>at Your Fingertips</h2>
-        <p>Real-time threat intelligence, alarm management, and endpoint protection — unified in one executive dashboard.</p>
+<!-- ══ CURTAIN ANIMATION ══ -->
+<div class="curtain" id="curtain" aria-hidden="true">
+    <div class="curtain-left"></div>
+    <div class="curtain-right"></div>
+</div>
+<div class="curtain-center" id="curtain-center" aria-hidden="true">
+    <div class="curtain-logo-wrap">
+        <svg viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="csg" x1="0" y1="0" x2="0.6" y2="1">
+                    <stop offset="0%" stop-color="#7EB3FF"/>
+                    <stop offset="50%" stop-color="#FFFFFF"/>
+                    <stop offset="100%" stop-color="#A8CCFF"/>
+                </linearGradient>
+            </defs>
+            <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#csg)"/>
+            <rect x="9"  y="17" width="6" height="24" rx="3" fill="#1A3ABF"/>
+            <rect x="18" y="13" width="6" height="28" rx="3" fill="#1A3ABF"/>
+            <rect x="27" y="15" width="6" height="26" rx="3" fill="#1A3ABF"/>
+            <rect x="36" y="18" width="6" height="22" rx="3" fill="#1A3ABF"/>
+        </svg>
+        <div class="cl-name">SENTRIUM</div>
+        <div class="cl-soc">SOC</div>
     </div>
 </div>
 
-<!-- RIGHT PANEL -->
-<div class="login-right">
-    <div class="login-form-wrap">
+<!-- ══ PAGE CONTENT ══ -->
+<div class="page-wrap">
 
-        <div class="login-logo">
-            <div class="login-logo-icon">
-              <svg style="width:42px;height:42px;" viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <defs>
-    <linearGradient id="sg" x1="0" y1="0" x2="0.6" y2="1">
-      <stop offset="0%" stop-color="#5B8EF8"/>
-      <stop offset="45%" stop-color="#2154E8"/>
-      <stop offset="100%" stop-color="#1029B0"/>
-    </linearGradient>
-    <linearGradient id="sg2" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.30)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
-    </linearGradient>
-  </defs>
-  <!-- Shield body -->
-  <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#sg)"/>
-  <!-- Gloss highlight top-left -->
-  <path d="M24 3 L43 11 L43 24 C32 21 14 18 5 20 L5 11 Z" fill="url(#sg2)" opacity="0.7"/>
-  <!-- Shield border -->
-  <path d="M24 2 L44 11 L44 33 C44 46 35 53 24 54 C13 53 4 46 4 33 L4 11 Z" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
-  <!-- 4 vertical pill bars (white) — varying heights like the logo -->
-  <!-- Bar 1 -->
-  <rect x="9"  y="17" width="6" height="24" rx="3" fill="white"/>
-  <!-- Bar 2 -->
-  <rect x="18" y="13" width="6" height="28" rx="3" fill="white"/>
-  <!-- Bar 3 -->
-  <rect x="27" y="15" width="6" height="26" rx="3" fill="white"/>
-  <!-- Bar 4 -->
-  <rect x="36" y="18" width="6" height="22" rx="3" fill="white"/>
-</svg>
-            </div>
-            <div class="login-logo-wordmark">
-              <span class="lw-sentrium">Sentrium</span><span class="lw-soc">SOC</span>
-            </div>
-          </div>
-            <span class="login-logo-text">Sentrium</span>
+    <!-- LEFT PANEL -->
+    <div class="login-left">
+        <div class="login-left-brand">
+            <svg viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><linearGradient id="sg" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0%" stop-color="#5B8EF8"/><stop offset="45%" stop-color="#2154E8"/><stop offset="100%" stop-color="#1029B0"/></linearGradient><linearGradient id="sg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(255,255,255,0.30)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/></linearGradient></defs>
+                <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#sg)"/>
+                <path d="M24 3 L43 11 L43 24 C32 21 14 18 5 20 L5 11 Z" fill="url(#sg2)" opacity="0.7"/>
+                <path d="M24 2 L44 11 L44 33 C44 46 35 53 24 54 C13 53 4 46 4 33 L4 11 Z" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
+                <rect x="9"  y="17" width="6" height="24" rx="3" fill="white"/>
+                <rect x="18" y="13" width="6" height="28" rx="3" fill="white"/>
+                <rect x="27" y="15" width="6" height="26" rx="3" fill="white"/>
+                <rect x="36" y="18" width="6" height="22" rx="3" fill="white"/>
+            </svg>
+            <span>SENTRIUM SOC</span>
         </div>
-
-        <p class="login-tagline">Welcome back! Please sign in to your account.</p>
-
-        <div class="step-indicator">
-            <div class="step-dot active" id="sd-1"></div>
-            <div class="step-line"></div>
-            <div class="step-dot" id="sd-2"></div>
+        <div class="login-left-dots"></div>
+        <div class="login-left-card">
+            <div class="login-left-card-label">Active Monitoring</div>
+            <div class="login-left-card-stat">
+                <span class="num">24/7</span>
+                <span class="lbl">SOC Coverage</span>
+            </div>
+            <div class="login-left-pips">
+                <div class="login-left-pip active"></div>
+                <div class="login-left-pip active"></div>
+                <div class="login-left-pip active"></div>
+                <div class="login-left-pip"></div>
+            </div>
         </div>
+        <div class="login-left-copy">
+            <h2>Security Operations<br>at Your Fingertips</h2>
+            <p>Real-time threat intelligence, alarm management, and endpoint protection — unified in one executive dashboard.</p>
+        </div>
+    </div>
 
-        {% if config_error %}
-        <div class="config-warning">⚠ {{ config_error }}</div>
-        {% endif %}
-        <div class="error-msg" id="error-box" style="display:none;"></div>
+    <!-- RIGHT PANEL -->
+    <div class="login-right">
+        <div class="login-form-wrap">
 
-        <!-- Step 1: credentials -->
-        <form id="login-form" autocomplete="off">
-            <div class="form-step active" id="step-credentials">
-                <div class="form-group">
-                    <label for="username">Email</label>
-                    <input type="text" id="username" name="username" placeholder="you@company.com" autocomplete="username" required>
+            <div class="login-logo">
+                <svg viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs><linearGradient id="sg3" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0%" stop-color="#5B8EF8"/><stop offset="45%" stop-color="#2154E8"/><stop offset="100%" stop-color="#1029B0"/></linearGradient></defs>
+                    <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#sg3)"/>
+                    <rect x="9"  y="17" width="6" height="24" rx="3" fill="white"/>
+                    <rect x="18" y="13" width="6" height="28" rx="3" fill="white"/>
+                    <rect x="27" y="15" width="6" height="26" rx="3" fill="white"/>
+                    <rect x="36" y="18" width="6" height="22" rx="3" fill="white"/>
+                </svg>
+                <div class="login-logo-wordmark">
+                    <span class="lw-sentrium">Sentrium</span>
+                    <span class="lw-soc">SOC</span>
                 </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <div class="input-wrap">
-                        <input type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password" required>
-                        <button type="button" class="input-eye" onclick="togglePwd()" title="Show/hide password">
-                            <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-                            </svg>
-                        </button>
+            </div>
+
+            <p class="login-tagline">Welcome back! Please sign in to your account.</p>
+
+            <div class="step-indicator">
+                <div class="step-dot {% if step == 'totp' %}done{% else %}active{% endif %}" id="sd-1"></div>
+                <div class="step-line"></div>
+                <div class="step-dot {% if step == 'totp' %}active{% endif %}" id="sd-2"></div>
+            </div>
+
+            {% if config_error %}
+            <div class="config-warning">⚠ {{ config_error }}</div>
+            {% endif %}
+
+            {% if error %}
+            <div class="error-msg">{{ error }}</div>
+            {% endif %}
+
+            <!-- ── Credentials form ── -->
+            <form method="POST" action="/login" autocomplete="off">
+                <input type="hidden" name="step" value="credentials">
+                <div class="form-step {% if step != 'totp' %}active{% endif %}" id="step-credentials">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username"
+                               placeholder="Enter your username"
+                               value="{{ username or '' }}"
+                               autocomplete="username" required>
                     </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <div class="input-wrap">
+                            <input type="password" id="password" name="password"
+                                   placeholder="Enter your password"
+                                   autocomplete="current-password" required>
+                            <button type="button" class="input-eye" onclick="togglePwd()" title="Show/hide">
+                                <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <a href="#" class="forgot-link">Forgot Password</a>
+                    <button type="submit" class="btn">Login</button>
                 </div>
-                <a href="#" class="forgot-link">Forgot Password</a>
-                <button type="submit" class="btn" id="btn-login">Login</button>
-            </div>
+            </form>
 
-            <!-- Step 2: TOTP -->
-            <div class="form-step" id="step-totp">
-                <p class="totp-info">Enter the 6-digit code from your authenticator app.</p>
-                <div class="otp-row" id="otp-row">
-                    <input class="otp-d" maxlength="1" inputmode="numeric" pattern="[0-9]">
-                    <input class="otp-d" maxlength="1" inputmode="numeric" pattern="[0-9]">
-                    <input class="otp-d" maxlength="1" inputmode="numeric" pattern="[0-9]">
-                    <input class="otp-d" maxlength="1" inputmode="numeric" pattern="[0-9]">
-                    <input class="otp-d" maxlength="1" inputmode="numeric" pattern="[0-9]">
-                    <input class="otp-d" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <!-- ── TOTP form ── -->
+            {% if step == 'totp' %}
+            <form method="POST" action="/login" autocomplete="off">
+                <input type="hidden" name="step" value="totp">
+                <div class="form-step active" id="step-totp">
+                    <p class="totp-info">Enter the 6-digit code from your authenticator app.</p>
+                    <div class="otp-row" id="otp-row">
+                        <input class="otp-d" name="totp_code" maxlength="6" inputmode="numeric" placeholder="——————" style="width:auto;flex:1;letter-spacing:0.5em;font-size:1.1rem;" autofocus>
+                    </div>
+                    <br>
+                    <button type="submit" class="btn">Verify Code</button>
+                    <a href="/login" class="btn-outline" style="display:block;text-align:center;text-decoration:none;padding:10px;margin-top:10px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:0.82rem;color:#6B7280;">← Back</a>
                 </div>
-                <br>
-                <button type="submit" class="btn" id="btn-totp">Verify Code</button>
-                <button type="button" class="btn-outline" onclick="backToStep1()">← Back</button>
-            </div>
-        </form>
+            </form>
+            {% endif %}
 
-        <div class="footer">Don't have an account? <a href="#">Sign Up</a></div>
+            <div class="footer">Security Operations Portal &nbsp;·&nbsp; <a href="#">Sentrium</a></div>
+        </div>
     </div>
-</div>
+
+</div><!-- /.page-wrap -->
 
 <script>
-let step = 1;
-
-function showError(msg) {
-    const el = document.getElementById('error-box');
-    el.textContent = msg; el.style.display = 'block';
-}
-function clearError() {
-    const el = document.getElementById('error-box');
-    el.style.display = 'none'; el.textContent = '';
-}
+// Remove curtain from DOM after animation completes
+setTimeout(() => {
+    const c = document.getElementById('curtain');
+    const cc = document.getElementById('curtain-center');
+    if (c) c.remove();
+    if (cc) cc.remove();
+}, 2400);
 
 function togglePwd() {
     const inp = document.getElementById('password');
     const ico = document.getElementById('eye-icon');
+    if (!inp) return;
     if (inp.type === 'password') {
         inp.type = 'text';
         ico.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
@@ -549,78 +486,6 @@ function togglePwd() {
         ico.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
     }
 }
-
-// OTP auto-advance
-document.querySelectorAll('.otp-d').forEach((inp, i, arr) => {
-    inp.addEventListener('input', () => {
-        if (inp.value.length === 1 && i < arr.length - 1) arr[i + 1].focus();
-    });
-    inp.addEventListener('keydown', e => {
-        if (e.key === 'Backspace' && !inp.value && i > 0) arr[i - 1].focus();
-    });
-});
-
-function backToStep1() {
-    step = 1;
-    document.getElementById('step-credentials').classList.add('active');
-    document.getElementById('step-totp').classList.remove('active');
-    document.getElementById('sd-1').classList.add('active');
-    document.getElementById('sd-1').classList.remove('done');
-    document.getElementById('sd-2').classList.remove('active');
-    clearError();
-}
-
-document.getElementById('login-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    clearError();
-
-    if (step === 1) {
-        const btn = document.getElementById('btn-login');
-        btn.disabled = true; btn.textContent = 'Signing in…';
-        try {
-            const fd = new FormData();
-            fd.append('username', document.getElementById('username').value.trim());
-            fd.append('password', document.getElementById('password').value);
-            const r = await fetch('/login', { method: 'POST', body: fd });
-            const d = await r.json();
-            if (d.success) {
-                if (d.totp_required) {
-                    step = 2;
-                    document.getElementById('step-credentials').classList.remove('active');
-                    document.getElementById('step-totp').classList.add('active');
-                    document.getElementById('sd-1').classList.remove('active');
-                    document.getElementById('sd-1').classList.add('done');
-                    document.getElementById('sd-2').classList.add('active');
-                    document.querySelectorAll('.otp-d')[0].focus();
-                } else {
-                    window.location.href = d.redirect || '/';
-                }
-            } else {
-                showError(d.message || 'Invalid credentials.');
-            }
-        } catch { showError('Network error. Please try again.'); }
-        finally { btn.disabled = false; btn.textContent = 'Login'; }
-
-    } else {
-        const btn = document.getElementById('btn-totp');
-        btn.disabled = true; btn.textContent = 'Verifying…';
-        const otp = [...document.querySelectorAll('.otp-d')].map(i => i.value).join('');
-        try {
-            const fd = new FormData();
-            fd.append('totp_code', otp);
-            const r = await fetch('/login/totp', { method: 'POST', body: fd });
-            const d = await r.json();
-            if (d.success) {
-                window.location.href = d.redirect || '/';
-            } else {
-                showError(d.message || 'Invalid code. Try again.');
-                document.querySelectorAll('.otp-d').forEach(i => i.value = '');
-                document.querySelectorAll('.otp-d')[0].focus();
-            }
-        } catch { showError('Network error. Please try again.'); }
-        finally { btn.disabled = false; btn.textContent = 'Verify Code'; }
-    }
-});
 </script>
 </body>
 </html>
