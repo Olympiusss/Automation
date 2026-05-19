@@ -5,11 +5,61 @@
 
 /* ── Design Tokens: Dark (default) ── */
 :root {
+    /* Cybervergent light palette — default theme */
+    --bg-main:     #F1F5F9;
+    --bg-card:     #FFFFFF;
+    --bg-sidebar:  #FFFFFF;
+    --bg-hover:    #F8FAFC;
+    --bg-elevated: #F8FAFC;
+    --bg-body:     #F1F5F9;
+
+    --text-primary:   #0F172A;
+    --text-secondary: #475569;
+    --text-muted:     #94A3B8;
+    --text-inverse:   #FFFFFF;
+
+    --accent:       #2563EB;
+    --accent-light: #3B82F6;
+    --accent-dim:   rgba(37,99,235,0.08);
+
+    --severity-critical: #DC2626;
+    --severity-high:     #EA580C;
+    --severity-medium:   #D97706;
+    --severity-low:      #16A34A;
+    --severity-info:     #2563EB;
+
+    --status-active:        #DC2626;
+    --status-investigating: #D97706;
+    --status-resolved:      #16A34A;
+
+    --border:   #E2E8F0;
+    --border-h: #CBD5E1;
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.07);
+    --shadow-lg: 0 12px 32px rgba(0,0,0,0.09);
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 18px;
+
+    --transition: all 0.18s ease;
+
+    --sidebar-w: 220px;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+    --skeleton-base:  rgba(0,0,0,0.06);
+    --skeleton-shine: rgba(0,0,0,0.11);
+}
+
+[data-theme="dark"] {
     --bg-main:     #0A0C14;
     --bg-card:     #11131F;
     --bg-sidebar:  #0D0F18;
     --bg-hover:    rgba(255,255,255,0.04);
     --bg-elevated: #1A1D2E;
+    --bg-body:     #0A0C14;
 
     --text-primary:   #E4E8F2;
     --text-secondary: #949AB5;
@@ -26,10 +76,6 @@
     --severity-low:      #34D399;
     --severity-info:     #60A5FA;
 
-    --status-active:        #F43F5E;
-    --status-investigating: #FBBF24;
-    --status-resolved:      #34D399;
-
     --border:   rgba(255,255,255,0.06);
     --border-h: rgba(255,255,255,0.10);
 
@@ -37,40 +83,8 @@
     --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
     --shadow-lg: 0 12px 40px rgba(0,0,0,0.45);
 
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --radius-xl: 18px;
-
-    --transition: all 0.2s ease;
-
-    --sidebar-w: 200px;
-    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-
     --skeleton-base:  rgba(255,255,255,0.04);
     --skeleton-shine: rgba(255,255,255,0.09);
-}
-
-[data-theme="light"] {
-    --bg-main:     #F1F3F6;
-    --bg-card:     #FFFFFF;
-    --bg-sidebar:  #FFFFFF;
-    --bg-hover:    rgba(0,0,0,0.04);
-    --bg-elevated: #F8F9FC;
-
-    --text-primary:   #14161F;
-    --text-secondary: #4F5596;
-    --text-muted:     #8B90AB;
-
-    --border:   rgba(0,0,0,0.07);
-    --border-h: rgba(0,0,0,0.14);
-
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
-    --shadow-md: 0 4px 16px rgba(0,0,0,0.06);
-    --shadow-lg: 0 12px 40px rgba(0,0,0,0.08);
-
-    --skeleton-base:  rgba(0,0,0,0.05);
-    --skeleton-shine: rgba(0,0,0,0.10);
 }
 
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
@@ -877,3 +891,70 @@ body {
 
 html { scroll-behavior: smooth; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* SIEM heading override */
+.siem-heading {
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    color: var(--text-primary);
+    line-height: 1;
+}
+.siem-window-lbl {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 5px;
+    opacity: 0.85;
+}
+
+/* Light-mode sidebar refinements */
+[data-theme="light"] .sidebar,
+:root .sidebar {
+    border-right: 1px solid var(--border);
+    box-shadow: none;
+}
+[data-theme="light"] .brand,
+:root .brand {
+    color: var(--accent);
+    font-weight: 800;
+}
+[data-theme="light"] .client-nav-item.active,
+:root .client-nav-item.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-left: 3px solid var(--accent);
+    padding-left: 8px;
+}
+[data-theme="light"] .nav-item.active,
+:root .nav-item.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-left: 3px solid var(--accent);
+}
+
+/* Card shadow in light mode */
+:root .dash-card {
+    box-shadow: var(--shadow-sm);
+    border-color: var(--border);
+}
+:root .kpi-tile {
+    box-shadow: var(--shadow-sm);
+    border-color: var(--border);
+}
+
+/* Topbar in light mode */
+:root .topbar {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+}
+
+/* Table zebra in light */
+:root .data-table tbody tr:nth-child(even) {
+    background: #FAFBFC;
+}
+:root .data-table tbody tr:hover {
+    background: var(--accent-dim);
+}

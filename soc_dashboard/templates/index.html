@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>{{ client_name }} — Sentrium SOC</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/dashboard.css?v=9">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=10">
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
 <style>
 /* Client dashboard overrides */
@@ -196,9 +196,7 @@
   <!-- ====== SIEM ====== -->
   <section id="section-alerts" class="client-section">
     <div class="sec-title">
-      <h2>SIEM</h2>
-      <span class="sec-title-badge stb-av">AlienVault</span>
-      <span class="sec-count" id="av-total-lbl">— alarms · 24hr</span>
+      <h2 class="siem-heading">SIEM</h2>
     </div>
 
     <!-- Summary Row: Total | Severity | Status -->
@@ -206,6 +204,7 @@
       <div class="siem-total-block">
         <div class="siem-total-num" id="siem-total">—</div>
         <div class="siem-total-lbl">Alarms</div>
+        <div class="siem-window-lbl">24hr window</div>
       </div>
       <div class="siem-divider"></div>
       <div class="siem-meta-block">
@@ -305,7 +304,7 @@
 <script>
 const WS_URL="{{ws_url}}",CLIENT_NAME="{{client_name}}",REFRESH_INTERVAL={{refresh_interval}},ROLE="{{role}}";
 </script>
-<script src="/static/js/charts.js?v=9"></script>
-<script src="/static/js/dashboard.js?v=9"></script>
+<script src="/static/js/charts.js?v=10"></script>
+<script src="/static/js/dashboard.js?v=10"></script>
 </body>
 </html>
