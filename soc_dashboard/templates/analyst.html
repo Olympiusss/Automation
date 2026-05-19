@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Sentrium SOC — Clientele</title>
@@ -15,7 +15,7 @@
 
 /* ── hero band ── */
 .clientele-hero {
-    background: linear-gradient(135deg, #0F2261 0%, #1D4ED8 55%, #1E3A8A 100%);
+    background: linear-gradient(135deg, #1A3ABF 0%, #2563EB 55%, #1E40AF 100%);
     border-radius: var(--radius-lg);
     padding: 36px 40px;
     margin: 28px 0 24px;
@@ -423,10 +423,10 @@
 
 <script>
 // Theme
-function getTheme() { return localStorage.getItem('soc-theme') || 'light'; }
+function getTheme() { return localStorage.getItem('soc-theme-analyst') || 'dark'; }
 function setTheme(t) {
     document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('soc-theme', t);
+    localStorage.setItem('soc-theme-analyst', t);
     const di = document.getElementById('theme-icon-dark');
     const li = document.getElementById('theme-icon-light');
     const lb = document.getElementById('theme-label');
