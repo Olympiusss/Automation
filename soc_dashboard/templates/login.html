@@ -72,7 +72,7 @@
             position: absolute;
             left: 18px; top: 0; bottom: 0;
             width: 2px;
-            background: rgba(37,99,235,0.12);
+            background: rgba(29,78,216,0.14);
         }
 
         /* Curtain logo centered */
@@ -116,7 +116,7 @@
         .login-left {
             flex: 0 0 50%;
             position: relative;
-            background: radial-gradient(ellipse at 30% 40%, #3B5BDB 0%, #1A3ABF 40%, #0F2596 100%);
+            background: radial-gradient(ellipse at 30% 40%, #1E3A8A 0%, #112280 40%, #070E52 100%);
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -219,8 +219,8 @@
         }
         .login-logo svg { width: 40px; height: 46px; filter: drop-shadow(0 2px 8px rgba(37,99,235,0.3)); }
         .login-logo-wordmark { display: flex; flex-direction: column; }
-        .lw-sentrium { font-size: 1.28rem; font-weight: 800; letter-spacing: 0.03em; color: #1A3ABF; line-height: 1.1; }
-        .lw-soc { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.32em; color: #3B82F6; text-transform: uppercase; margin-top: 3px; }
+        .lw-sentrium { font-size: 1.28rem; font-weight: 800; letter-spacing: 0.03em; color: #1E3A8A; line-height: 1.1; }
+        .lw-soc { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.32em; color: #2563EB; text-transform: uppercase; margin-top: 3px; }
 
         .login-tagline { text-align: center; font-size: 0.86rem; color: #6B7280; margin-bottom: 28px; }
 
@@ -258,7 +258,7 @@
             outline: none; transition: all 0.18s;
         }
         input[type="text"]:focus, input[type="password"]:focus {
-            border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+            border-color: #1D4ED8; box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
         }
         input[type="text"]::placeholder, input[type="password"]::placeholder { color: #9CA3AF; }
         input[type="password"] { padding-right: 42px; }
@@ -283,15 +283,15 @@
             font-family: 'Inter', monospace; color: #0F172A; background: #FFFFFF;
             border: 1.5px solid #D1D5DB; border-radius: 8px; outline: none; transition: all 0.18s;
         }
-        .otp-d:focus { border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.10); }
+        .otp-d:focus { border-color: #1D4ED8; box-shadow: 0 0 0 3px rgba(37,99,235,0.10); }
 
         /* Buttons */
         .btn {
             width: 100%; padding: 12px; border: none; border-radius: 8px;
             font-size: 0.9rem; font-weight: 600; font-family: inherit; cursor: pointer;
-            transition: all 0.2s; background: #1E40AF; color: #FFFFFF; letter-spacing: 0.2px;
+            transition: all 0.2s; background: #1E3A8A; color: #FFFFFF; letter-spacing: 0.2px;
         }
-        .btn:hover { background: #1D4ED8; box-shadow: 0 4px 14px rgba(30,64,175,0.35); transform: translateY(-1px); }
+        .btn:hover { background: #1D4588; box-shadow: 0 4px 14px rgba(30,58,138,0.38); transform: translateY(-1px); }
         .btn:active { transform: translateY(0); box-shadow: none; }
         .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
         .btn-outline {
@@ -299,7 +299,7 @@
             border-radius: 8px; font-size: 0.82rem; font-weight: 500; font-family: inherit;
             cursor: pointer; transition: all 0.18s; background: transparent; color: #6B7280;
         }
-        .btn-outline:hover { border-color: #2563EB; color: #2563EB; background: rgba(37,99,235,0.04); }
+        .btn-outline:hover { border-color: #1D4ED8; color: #2563EB; background: rgba(37,99,235,0.04); }
 
         .footer { text-align: center; margin-top: 22px; font-size: 0.78rem; color: #9CA3AF; }
         .footer a { color: #2563EB; font-weight: 600; text-decoration: none; }
@@ -348,7 +348,7 @@
     <div class="login-left">
         <div class="login-left-brand">
             <svg viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <defs><linearGradient id="sg" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0%" stop-color="#5B8EF8"/><stop offset="45%" stop-color="#2154E8"/><stop offset="100%" stop-color="#1029B0"/></linearGradient><linearGradient id="sg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(255,255,255,0.30)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/></linearGradient></defs>
+                <defs><linearGradient id="sg" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0%" stop-color="#3B6FE8"/><stop offset="45%" stop-color="#1438C2"/><stop offset="100%" stop-color="#08158A"/></linearGradient><linearGradient id="sg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(255,255,255,0.30)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/></linearGradient></defs>
                 <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#sg)"/>
                 <path d="M24 3 L43 11 L43 24 C32 21 14 18 5 20 L5 11 Z" fill="url(#sg2)" opacity="0.7"/>
                 <path d="M24 2 L44 11 L44 33 C44 46 35 53 24 54 C13 53 4 46 4 33 L4 11 Z" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
@@ -385,7 +385,7 @@
 
             <div class="login-logo">
                 <svg viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <defs><linearGradient id="sg3" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0%" stop-color="#5B8EF8"/><stop offset="45%" stop-color="#2154E8"/><stop offset="100%" stop-color="#1029B0"/></linearGradient></defs>
+                    <defs><linearGradient id="sg3" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0%" stop-color="#3B6FE8"/><stop offset="45%" stop-color="#1438C2"/><stop offset="100%" stop-color="#08158A"/></linearGradient></defs>
                     <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#sg3)"/>
                     <rect x="9"  y="17" width="6" height="24" rx="3" fill="white"/>
                     <rect x="18" y="13" width="6" height="28" rx="3" fill="white"/>

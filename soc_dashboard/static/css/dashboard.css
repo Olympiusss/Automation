@@ -18,9 +18,9 @@
     --text-muted:     #94A3B8;
     --text-inverse:   #FFFFFF;
 
-    --accent:       #2563EB;
-    --accent-light: #3B82F6;
-    --accent-dim:   rgba(37,99,235,0.08);
+    --accent:       #1D4ED8;
+    --accent-light: #2563EB;
+    --accent-dim:   rgba(29,78,216,0.08);
 
     --severity-critical: #DC2626;
     --severity-high:     #EA580C;
@@ -984,14 +984,14 @@ html { scroll-behavior: smooth; }
     font-size: 0.9rem;
     font-weight: 800;
     letter-spacing: 0.04em;
-    color: #1A3ABF;
+    color: #1E3A8A;
     line-height: 1.1;
 }
 .brand-soc {
     font-size: 0.58rem;
     font-weight: 700;
     letter-spacing: 0.25em;
-    color: #3B82F6;
+    color: #2563EB;
     text-transform: uppercase;
     margin-top: 2px;
 }
@@ -1006,14 +1006,14 @@ html { scroll-behavior: smooth; }
     font-size: 1.3rem;
     font-weight: 800;
     letter-spacing: 0.03em;
-    color: #1A3ABF;
+    color: #1E3A8A;
     line-height: 1.1;
 }
 .lw-soc {
     font-size: 0.65rem;
     font-weight: 700;
     letter-spacing: 0.3em;
-    color: #3B82F6;
+    color: #2563EB;
     text-transform: uppercase;
     margin-top: 2px;
 }
