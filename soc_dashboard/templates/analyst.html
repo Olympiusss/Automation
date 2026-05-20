@@ -137,29 +137,53 @@
     font-size: 0.76rem;
     color: var(--text-muted);
 }
-/* search in section bar */
-.sb-search {
-    position: relative;
-    flex-shrink: 0;
+/* ── Floating search popup ── */
+.search-trigger {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); padding: 6px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s;
 }
-.sb-search svg {
-    position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
-    width: 13px; height: 13px; stroke: var(--text-muted); pointer-events: none;
-}
-.sb-search input {
-    padding: 7px 12px 7px 28px;
-    font-size: 0.8rem; font-family: var(--font);
-    color: var(--text-primary);
+.search-trigger:hover { background: var(--bg-hover); color: var(--accent); }
+.search-trigger svg { width: 19px; height: 19px; }
+
+.search-popup {
+    position: fixed;
+    top: 64px; right: 24px;
     background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    outline: none;
-    width: 190px;
-    transition: border-color 0.18s, box-shadow 0.18s;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    padding: 14px 16px;
+    width: 280px;
+    z-index: 999;
+    display: none;
+    animation: popIn 0.18s cubic-bezier(0.34,1.56,0.64,1);
 }
-.sb-search input:focus {
-    border-color: #1D4ED8;
-    box-shadow: 0 0 0 3px rgba(29,78,216,0.08);
+@keyframes popIn { from { opacity:0; transform: translateY(-8px) scale(0.97); } to { opacity:1; transform: translateY(0) scale(1); } }
+.search-popup.open { display: block; }
+.search-popup-inner {
+    display: flex; align-items: center; gap: 8px;
+}
+.search-popup-inner svg { width: 15px; height: 15px; stroke: var(--text-muted); flex-shrink: 0; }
+.search-popup input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 0.88rem; font-family: var(--font); color: var(--text-primary);
+}
+.search-popup input::placeholder { color: var(--text-muted); }
+.search-popup-hint {
+    font-size: 0.68rem; color: var(--text-muted); margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+}
+
+/* ── big page title ── */
+.soc-page-title {
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.4px;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 /* empty / loading */
@@ -210,15 +234,11 @@
     <span class="brand-name">Sentrium</span><span class="brand-soc">SOC</span>
   </div>
   </div>
-  <div class="sidebar-search">
-    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-    <input type="text" placeholder="Search clients..." id="sidebar-search">
-  </div>
-  <nav class="sidebar-nav">
+  <div class="sidebar-nav">
     <a href="/analyst" class="nav-item active">
       <span>Clientele</span>
     </a>
-  </nav>
+  </div>
   <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" style="margin-top:auto;">
     <svg id="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
     <svg id="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
@@ -229,29 +249,29 @@
 <!-- ═══ MAIN ═══ -->
 <main class="main-content">
   <header class="topbar">
-    <div class="topbar-left" style="display:flex;align-items:center;">
+    <div class="topbar-left" style="display:flex;align-items:center;gap:12px;">
       <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
-      <div>
-        <div class="page-title">Clientele</div>
-        <div class="page-sub">Sentrium Security Operations Center</div>
-      </div>
+      <span class="soc-page-title">Security Operations Centre</span>
     </div>
-    <div class="topbar-right">
+    <div class="topbar-right" style="display:flex;align-items:center;gap:6px;">
+      <button class="search-trigger" id="search-trigger" onclick="toggleSearch()" title="Search clients">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
       <a href="/logout" class="user-btn" title="Sign Out">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       </a>
     </div>
   </header>
 
-  <!-- Section bar -->
-  <div class="section-bar">
-    <h2>Managed Clients &nbsp;<span id="client-count-lbl" style="font-size:0.76rem;font-weight:500;color:var(--text-muted);"></span></h2>
-    <div class="sb-search">
+  <!-- Floating search popup -->
+  <div class="search-popup" id="search-popup">
+    <div class="search-popup-inner">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="grid-search" placeholder="Search clients…" oninput="filterCards(this.value)">
+      <input type="text" id="grid-search" placeholder="Search clients…" oninput="filterCards(this.value)" autocomplete="off">
     </div>
+    <div class="search-popup-hint">Press <kbd>Esc</kbd> to close</div>
   </div>
 
   <!-- Card grid -->
@@ -291,13 +311,6 @@ function toggleMobileMenu() {
 }
 document.getElementById('sidebar-overlay')?.addEventListener('click', toggleMobileMenu);
 
-// Sidebar + grid search sync
-document.getElementById('sidebar-search')?.addEventListener('input', e => {
-    const gs = document.getElementById('grid-search');
-    if (gs) gs.value = e.target.value;
-    filterCards(e.target.value);
-});
-
 function fmtNum(n) {
     if (n == null || n === undefined) return '0';
     if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'') + 'k';
@@ -315,14 +328,19 @@ function renderCards(clients) {
     }
 
     grid.innerHTML = clients.map(c => {
-        const eps  = c.total_endpoints ?? c.endpoints ?? 0;
-        const thr  = c.total_threats  ?? c.threats   ?? 0;
-        const alr  = c.total_alarms   ?? c.alarms    ?? c.alerts ?? 0;
+        const hasS1 = (c.platforms || []).includes('SentinelOne');
+        const hasAV = (c.platforms || []).includes('AlienVault');
 
+        // ENDPOINTS & THREATS → EDR (SentinelOne) only
+        const eps = hasS1 ? fmtNum(c.total_endpoints ?? c.endpoints ?? 0) : '\u2014';
+        const thr = hasS1 ? fmtNum(c.total_threats  ?? c.threats   ?? 0) : '\u2014';
+        // ALERTS → AlienVault only
+        const alr = hasAV ? fmtNum(c.total_alarms ?? c.alarms ?? c.alerts ?? 0) : '\u2014';
+
+        const rawThr = hasS1 ? (c.total_threats ?? 0) : 0;
         let dotClass = 'dot-ok', statusText = 'Healthy';
-        if (thr > 10) { dotClass = 'dot-critical'; statusText = thr + ' threats'; }
-        else if (thr > 0) { dotClass = 'dot-warn'; statusText = thr + ' threat' + (thr > 1 ? 's' : ''); }
-        else if (c.last_updated) { statusText = 'Last updated: just now'; }
+        if (rawThr > 10) { dotClass = 'dot-critical'; statusText = rawThr + ' threats'; }
+        else if (rawThr > 0) { dotClass = 'dot-warn'; statusText = rawThr + ' threat' + (rawThr > 1 ? 's' : ''); }
 
         const pills = (c.platforms || []).map(p =>
             p === 'SentinelOne'
@@ -339,15 +357,15 @@ function renderCards(clients) {
   </div>
   <div class="cc-metrics">
     <div class="cc-metric">
-      <div class="cc-metric-val">${fmtNum(eps)}</div>
+      <div class="cc-metric-val">${eps}</div>
       <div class="cc-metric-lbl">Endpoints</div>
     </div>
     <div class="cc-metric">
-      <div class="cc-metric-val">${fmtNum(thr)}</div>
+      <div class="cc-metric-val">${thr}</div>
       <div class="cc-metric-lbl">Threats</div>
     </div>
     <div class="cc-metric">
-      <div class="cc-metric-val">${fmtNum(alr)}</div>
+      <div class="cc-metric-val">${alr}</div>
       <div class="cc-metric-lbl">Alerts</div>
     </div>
   </div>
@@ -360,16 +378,38 @@ function renderCards(clients) {
   </div>
 </div>`;
     }).join('');
-
-    document.getElementById('client-count-lbl').textContent = clients.length + ' clients monitored';
 }
 
 function filterCards(q) {
     q = (q || '').toLowerCase().trim();
     const filtered = q ? allClients.filter(c => c.name.toLowerCase().includes(q)) : allClients;
     renderCards(filtered);
-    document.getElementById('client-count-lbl').textContent = filtered.length + ' clients monitored';
 }
+
+function toggleSearch() {
+    const popup = document.getElementById('search-popup');
+    popup.classList.toggle('open');
+    if (popup.classList.contains('open')) {
+        setTimeout(() => document.getElementById('grid-search')?.focus(), 50);
+    }
+}
+
+// Close popup on outside click or Escape
+document.addEventListener('click', e => {
+    const popup = document.getElementById('search-popup');
+    const trigger = document.getElementById('search-trigger');
+    if (!popup || !trigger) return;
+    if (!popup.contains(e.target) && !trigger.contains(e.target)) {
+        popup.classList.remove('open');
+    }
+});
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('search-popup')?.classList.remove('open');
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        toggleSearch();
+    }
+});
 
 function connectWS() {
     ws = new WebSocket(WS_URL);
