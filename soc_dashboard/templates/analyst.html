@@ -3,11 +3,179 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Sentrium SOC — Clientele</title>
-<meta name="description" content="Sentrium Integrated Security Operations Center — Clientele">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/dashboard.css?v=10">
 <style>
-.clients-page .sidebar .brand { padding-bottom: 20px; }
+/* ── Client card grid ── */
+.client-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    padding: 0 0 40px;
+}
+@media(max-width: 1200px){ .client-grid{ grid-template-columns: repeat(3,1fr); } }
+@media(max-width: 900px) { .client-grid{ grid-template-columns: repeat(2,1fr); } }
+@media(max-width: 600px) { .client-grid{ grid-template-columns: 1fr; } }
+
+.cc {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 18px 14px;
+    cursor: pointer;
+    transition: box-shadow 0.18s, transform 0.18s, border-color 0.18s;
+    position: relative;
+}
+.cc:hover {
+    box-shadow: 0 6px 24px rgba(37,99,235,0.10), 0 2px 8px rgba(0,0,0,0.06);
+    transform: translateY(-2px);
+    border-color: #1D4ED8;
+}
+/* card top row */
+.cc-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+.cc-name {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.3;
+    max-width: 70%;
+    word-break: break-word;
+}
+.cc-badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.cc-badge {
+    font-size: 0.6rem; font-weight: 700;
+    padding: 2px 7px; border-radius: 4px;
+    letter-spacing: 0.3px; text-transform: uppercase;
+}
+.badge-s1 { background: rgba(109,40,217,0.1); color: #7C3AED; }
+.badge-av { background: rgba(234,88,12,0.1);  color: #C2410C; }
+
+/* metrics row */
+.cc-metrics {
+    display: flex;
+    gap: 0;
+    margin-bottom: 14px;
+}
+.cc-metric {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.cc-metric-val {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+}
+.cc-metric-lbl {
+    font-size: 0.58rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+/* bottom row */
+.cc-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 0.74rem;
+}
+.cc-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+.cc-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    flex-shrink: 0;
+}
+.dot-ok      { background: #16A34A; }
+.dot-warn    { background: #D97706; }
+.dot-critical{ background: #DC2626; }
+
+.cc-view {
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #1D4ED8;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+}
+.cc-view:hover { text-decoration: underline; }
+.cc-view svg { width: 12px; height: 12px; stroke: #1D4ED8; }
+
+/* section header */
+.section-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 20px 0 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.section-bar h2 {
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.section-bar-right {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+}
+/* search in section bar */
+.sb-search {
+    position: relative;
+    flex-shrink: 0;
+}
+.sb-search svg {
+    position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+    width: 13px; height: 13px; stroke: var(--text-muted); pointer-events: none;
+}
+.sb-search input {
+    padding: 7px 12px 7px 28px;
+    font-size: 0.8rem; font-family: var(--font);
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+    width: 190px;
+    transition: border-color 0.18s, box-shadow 0.18s;
+}
+.sb-search input:focus {
+    border-color: #1D4ED8;
+    box-shadow: 0 0 0 3px rgba(29,78,216,0.08);
+}
+
+/* empty / loading */
+.grid-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+}
+.grid-loading { display: flex; flex-direction: column; gap: 5px; }
+.grid-loading .skeleton { border-radius: 4px; background: var(--skeleton-base); }
+
+@media(max-width:768px){
+    .main-content { margin-left: 0; }
+}
 </style>
 </head>
 <body class="clients-page">
@@ -44,7 +212,7 @@
   </div>
   <div class="sidebar-search">
     <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-    <input type="text" placeholder="Search clients..." id="search-input">
+    <input type="text" placeholder="Search clients..." id="sidebar-search">
   </div>
   <nav class="sidebar-nav">
     <a href="/analyst" class="nav-item active">
@@ -77,60 +245,31 @@
     </div>
   </header>
 
-  <!-- Summary strip -->
-  <div class="summary-strip" id="summary-strip">
-    <div class="strip-item">
-      <div class="strip-icon si-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
-      <div><div class="strip-val" id="total-clients"><span class="skeleton skeleton-value" style="width:36px;"></span></div><div class="strip-lbl">Total Clients</div></div>
-    </div>
-    <div class="strip-item">
-      <div class="strip-icon si-indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-      <div><div class="strip-val" id="s1-count"><span class="skeleton skeleton-value" style="width:28px;"></span></div><div class="strip-lbl">SentinelOne</div></div>
-    </div>
-    <div class="strip-item">
-      <div class="strip-icon si-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
-      <div><div class="strip-val" id="av-count"><span class="skeleton skeleton-value" style="width:28px;"></span></div><div class="strip-lbl">AlienVault</div></div>
+  <!-- Section bar -->
+  <div class="section-bar">
+    <h2>Managed Clients &nbsp;<span id="client-count-lbl" style="font-size:0.76rem;font-weight:500;color:var(--text-muted);"></span></h2>
+    <div class="sb-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="grid-search" placeholder="Search clients…" oninput="filterCards(this.value)">
     </div>
   </div>
 
-  <!-- Filters -->
-  <div class="filter-bar">
-    <button class="filter-pill active" data-filter="all">All Clients</button>
-    <button class="filter-pill filter-pill-s1" data-filter="SentinelOne">SentinelOne</button>
-    <button class="filter-pill filter-pill-av" data-filter="AlienVault">AlienVault</button>
-    <button class="filter-pill" data-filter="both">Both Platforms</button>
-  </div>
-
-  <!-- Count -->
-  <div class="list-header">
-    <h2>Managed Clients</h2>
-    <span class="client-count" id="client-count"><span class="skeleton skeleton-pill"></span></span>
-  </div>
-
-  <!-- Table -->
-  <div class="client-list-card">
-    <table class="client-list-table" id="client-list-table">
-      <thead><tr><th>#</th><th>Client Name</th><th>Platform</th><th>Status</th><th></th></tr></thead>
-      <tbody id="clients-tbody">
-        <tr><td colspan="5"><div class="loading-state" id="loading-skeleton">
-          <div style="padding:16px;">
-            <div class="skeleton skeleton-row" style="width:94%"></div>
-            <div class="skeleton skeleton-row" style="width:88%"></div>
-            <div class="skeleton skeleton-row" style="width:82%"></div>
-            <div class="skeleton skeleton-row" style="width:90%"></div>
-            <div class="skeleton skeleton-row" style="width:85%"></div>
-          </div>
-          <p style="font-size:0.74rem;color:var(--text-muted);margin-top:2px;">Loading clients…</p>
-        </div></td></tr>
-      </tbody>
-    </table>
+  <!-- Card grid -->
+  <div class="client-grid" id="client-grid">
+    <!-- skeleton loading -->
+    <div class="grid-empty" id="grid-skeleton">
+      <div class="grid-loading">
+        <div class="skeleton" style="height:120px;border-radius:12px;width:100%;"></div>
+      </div>
+      <p style="margin-top:12px;font-size:0.78rem;">Loading clients…</p>
+    </div>
   </div>
 
 </main>
 
 <script>
 const WS_URL = "{{ ws_url }}";
-let ws = null, lastUpdateTime = null, currentFilter = 'all', allClients = [];
+let ws = null, allClients = [];
 
 function getTheme() { return localStorage.getItem('soc-theme') || 'light'; }
 function setTheme(t) {
@@ -145,69 +284,118 @@ function setTheme(t) {
 function toggleTheme() { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); }
 (function(){ setTheme(getTheme()); })();
 
-function showNotification(title, desc, type) {
-    const c = document.getElementById('notification-container'); if(!c) return;
-    const icons={success:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',error:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',warning:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',info:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'};
-    const t = document.createElement('div');
-    t.className='toast toast-'+type;
-    t.innerHTML=(icons[type]||icons.info)+'<div class="toast-content"><div class="toast-title">'+escHtml(title)+'</div>'+(desc?'<div class="toast-desc">'+escHtml(desc)+'</div>':'')+'</div><svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-    c.appendChild(t);
-    t.addEventListener('click',()=>{if(!t.classList.contains('toast-out')){t.classList.add('toast-out');setTimeout(()=>t.remove(),250);}});
-    setTimeout(()=>{if(!t.classList.contains('toast-out')){t.classList.add('toast-out');setTimeout(()=>t.remove(),250);}},5000);
-}
-
-document.querySelectorAll('.filter-pill').forEach(p => p.addEventListener('click',()=>{
-    document.querySelectorAll('.filter-pill').forEach(x=>x.classList.remove('active'));
-    p.classList.add('active'); currentFilter=p.dataset.filter; renderTable(allClients);
-}));
-document.getElementById('search-input').addEventListener('input', e => renderTable(allClients, e.target.value.toLowerCase().trim()));
-
 function toggleMobileMenu() {
-    document.getElementById('sidebar').classList.toggle('open');
-    document.getElementById('sidebar-overlay').classList.toggle('visible');
-    document.getElementById('hamburger').classList.toggle('active');
+    document.getElementById('sidebar')?.classList.toggle('open');
+    document.getElementById('sidebar-overlay')?.classList.toggle('visible');
+    document.getElementById('hamburger')?.classList.toggle('active');
 }
-document.getElementById('sidebar-overlay').addEventListener('click', toggleMobileMenu);
+document.getElementById('sidebar-overlay')?.addEventListener('click', toggleMobileMenu);
+
+// Sidebar + grid search sync
+document.getElementById('sidebar-search')?.addEventListener('input', e => {
+    const gs = document.getElementById('grid-search');
+    if (gs) gs.value = e.target.value;
+    filterCards(e.target.value);
+});
+
+function fmtNum(n) {
+    if (n == null || n === undefined) return '0';
+    if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'') + 'k';
+    return String(n);
+}
+
+function renderCards(clients) {
+    const grid = document.getElementById('client-grid');
+    const skel = document.getElementById('grid-skeleton');
+    if (skel) skel.remove();
+
+    if (!clients.length) {
+        grid.innerHTML = '<div class="grid-empty"><p>No clients available yet.<br>Data loads after the first fetch cycle.</p></div>';
+        return;
+    }
+
+    grid.innerHTML = clients.map(c => {
+        const eps  = c.total_endpoints ?? c.endpoints ?? 0;
+        const thr  = c.total_threats  ?? c.threats   ?? 0;
+        const alr  = c.total_alarms   ?? c.alarms    ?? c.alerts ?? 0;
+
+        let dotClass = 'dot-ok', statusText = 'Healthy';
+        if (thr > 10) { dotClass = 'dot-critical'; statusText = thr + ' threats'; }
+        else if (thr > 0) { dotClass = 'dot-warn'; statusText = thr + ' threat' + (thr > 1 ? 's' : ''); }
+        else if (c.last_updated) { statusText = 'Last updated: just now'; }
+
+        const pills = (c.platforms || []).map(p =>
+            p === 'SentinelOne'
+                ? '<span class="cc-badge badge-s1">S1</span>'
+                : '<span class="cc-badge badge-av">AV</span>'
+        ).join('');
+
+        const enc = encodeURIComponent(c.name);
+        return `
+<div class="cc" onclick="window.location='/client/${enc}'" title="Open ${escHtml(c.name)} dashboard">
+  <div class="cc-top">
+    <div class="cc-name">${escHtml(c.name)}</div>
+    <div class="cc-badges">${pills}</div>
+  </div>
+  <div class="cc-metrics">
+    <div class="cc-metric">
+      <div class="cc-metric-val">${fmtNum(eps)}</div>
+      <div class="cc-metric-lbl">Endpoints</div>
+    </div>
+    <div class="cc-metric">
+      <div class="cc-metric-val">${fmtNum(thr)}</div>
+      <div class="cc-metric-lbl">Threats</div>
+    </div>
+    <div class="cc-metric">
+      <div class="cc-metric-val">${fmtNum(alr)}</div>
+      <div class="cc-metric-lbl">Alerts</div>
+    </div>
+  </div>
+  <div class="cc-footer">
+    <span class="cc-status"><span class="cc-dot ${dotClass}"></span>${statusText}</span>
+    <a class="cc-view" href="/client/${enc}" onclick="event.stopPropagation()">
+      View Dashboard
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+  </div>
+</div>`;
+    }).join('');
+
+    document.getElementById('client-count-lbl').textContent = clients.length + ' clients monitored';
+}
+
+function filterCards(q) {
+    q = (q || '').toLowerCase().trim();
+    const filtered = q ? allClients.filter(c => c.name.toLowerCase().includes(q)) : allClients;
+    renderCards(filtered);
+    document.getElementById('client-count-lbl').textContent = filtered.length + ' clients monitored';
+}
 
 function connectWS() {
     ws = new WebSocket(WS_URL);
-    ws.onopen = () => { /* connected silently */ };
-    ws.onmessage = e => { try { handleState(JSON.parse(e.data)); lastUpdateTime = new Date(); } catch(_){} };
-    ws.onclose = () => { setTimeout(connectWS, 3000); };
+    ws.onmessage = e => {
+        try {
+            const state = JSON.parse(e.data);
+            allClients = (state.clients || []).sort((a,b) => a.name.localeCompare(b.name));
+            const q = document.getElementById('grid-search')?.value || '';
+            filterCards(q);
+        } catch(_) {}
+    };
+    ws.onclose = () => setTimeout(connectWS, 3000);
     ws.onerror = () => ws.close();
 }
 
-function handleState(state) {
-    allClients = state.clients || [];
-    document.getElementById('loading-skeleton')?.style.setProperty('display','none');
-    document.getElementById('total-clients').textContent = allClients.length;
-    document.getElementById('s1-count').textContent = allClients.filter(c => c.platforms.includes('SentinelOne')).length;
-    document.getElementById('av-count').textContent = allClients.filter(c => c.platforms.includes('AlienVault')).length;
-    document.getElementById('client-count').textContent = allClients.length + ' clients monitored';
-    renderTable(allClients, document.getElementById('search-input').value.toLowerCase().trim());
-}
+function escHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 
-function renderTable(clients, search) {
-    const tb = document.getElementById('clients-tbody');
-    const f = clients.filter(c => {
-        if(search && !c.name.toLowerCase().includes(search)) return false;
-        if(currentFilter==='SentinelOne') return c.platforms.includes('SentinelOne')&&!c.platforms.includes('AlienVault');
-        if(currentFilter==='AlienVault') return c.platforms.includes('AlienVault')&&!c.platforms.includes('SentinelOne');
-        if(currentFilter==='both') return c.platforms.includes('SentinelOne')&&c.platforms.includes('AlienVault');
-        return true;
-    }).sort((a,b)=>a.name.localeCompare(b.name));
-    if(!f.length){ tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:36px;color:var(--text-muted);">No clients match filter.</td></tr>'; return; }
-    tb.innerHTML = f.map((c,i)=>{
-        const pills = (c.platforms||[]).map(p => p==='SentinelOne'?'<span class="plat-pill plat-pill-s1"><span class="plat-dot"></span>S1</span>':'<span class="plat-pill plat-pill-av"><span class="plat-dot"></span>AV</span>').join('');
-        let dc='',sl='Healthy';
-        if(c.total_threats>10){dc='critical';sl='Critical';}else if(c.total_threats>0){dc='warning';sl='Alert';}
-        const enc=encodeURIComponent(c.name);
-        return '<tr onclick="window.location=\'/client/'+enc+'\'"><td><span class="cl-index">'+(i+1)+'</span></td><td><span class="cl-name">'+escHtml(c.name)+'</span></td><td><div class="plat-pills">'+pills+'</div></td><td><span class="cl-status"><span class="cl-status-dot '+dc+'"></span>'+sl+'</span></td><td style="text-align:right;"><a href="/client/'+enc+'" class="view-action" onclick="event.stopPropagation()">View <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></a></td></tr>';
-    }).join('');
-}
-
-function escHtml(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
 connectWS();
+
+// Keyboard shortcut: / to focus search
+document.addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        document.getElementById('grid-search')?.focus();
+    }
+});
 </script>
 </body>
 </html>
