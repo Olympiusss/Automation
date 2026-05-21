@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+chat_history/
+user_data/
+monitor_state.json
+monitor_log.json
+monitor.log
+.env
+.devcontainer/
