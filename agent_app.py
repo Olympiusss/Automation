@@ -1341,20 +1341,20 @@ def render_chat():
 
     # Get sorted chat IDs for navigation
     chat_ids = list(st.session_state.chats.keys())
-    current_id = st.session_state.active_chat
+    current_id = st.session_state.active_chat_id
     current_idx = chat_ids.index(current_id) if current_id in chat_ids else 0
 
     with col_prev:
         if st.button("◀", key="nav_prev", help="Previous chat"):
             if len(chat_ids) > 1:
                 prev_idx = (current_idx - 1) % len(chat_ids)
-                st.session_state.active_chat = chat_ids[prev_idx]
+                st.session_state.active_chat_id = chat_ids[prev_idx]
                 st.rerun()
     with col_next:
         if st.button("▶", key="nav_next", help="Next chat"):
             if len(chat_ids) > 1:
                 next_idx = (current_idx + 1) % len(chat_ids)
-                st.session_state.active_chat = chat_ids[next_idx]
+                st.session_state.active_chat_id = chat_ids[next_idx]
                 st.rerun()
     with col_share:
         if messages:
