@@ -26,6 +26,18 @@ BORDER = Border(
 
 def _san(n): return re.sub(r'[\\/*?:\[\]]', '', n)[:31]
 
+# Strip emoji and illegal XML chars that Excel/openpyxl can't handle
+_ILLEGAL_XML = re.compile(
+    u'[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]')
+def _strip_unicode(v):
+    """Remove emoji and illegal XML characters from a string value."""
+    if not isinstance(v, str): return v
+    # Remove emoji (most fall in these blocks)
+    v = re.sub(u'[\U0001F000-\U0001FFFF\U00002600-\U000027BF\U0001F300-\U0001F9FF]', '', v)
+    # Remove remaining illegal XML characters
+    v = _ILLEGAL_XML.sub('', v)
+    return v.strip()
+
 def _aw(ws):
     for cc in ws.columns:
         ml = 0; cl = get_column_letter(cc[0].column)
@@ -324,9 +336,9 @@ def convert_pdf_to_xlsx(pdf_stream):
                 if ic and wb.sheetnames:
                     ws = wb[wb.sheetnames[-1]]; sr = ws.max_row + 1
                 else:
-                    tc += 1; ws = wb.create_sheet(title=_san(f"P{pn} Table {tc}"))
+                    tc += 1; ws = wb.create_sheet(title=_san(_strip_unicode(f"P{pn} Table {tc}")))
                     for oc, (_, h) in enumerate(keep, 1):
-                        ws.cell(row=1, column=oc, value=h["name"])
+                        ws.cell(row=1, column=oc, value=_strip_unicode(h["name"]))
                     _sh(ws, 1, len(keep)); sr = 2
                 for ri, row in enumerate(rows, sr):
                     for oc, (sc, h) in enumerate(keep, 1):
@@ -334,7 +346,7 @@ def convert_pdf_to_xlsx(pdf_stream):
                         cn = h["name"].strip().lower()
                         if cn in NUMERIC_COLUMNS:
                             val = _efn(raw); isn = _in(val)
-                        else: val = str(raw) if raw else ""; isn = False
+                        else: val = _strip_unicode(str(raw)) if raw else ""; isn = False
                         cell = ws.cell(row=ri, column=oc, value=val); _sc(cell, num=isn)
                 _aw(ws)
 
@@ -343,20 +355,20 @@ def convert_pdf_to_xlsx(pdf_stream):
         for c, n in enumerate(["Metric", "Value", "Trend / Details"], 1): ws.cell(row=1, column=c, value=n)
         _sh(ws, 1, 3)
         for ri, (k, (v_num, v_det)) in enumerate(all_metrics.items(), 2):
-            ws.cell(row=ri, column=1, value=k); _sc(ws.cell(row=ri, column=1))
+            ws.cell(row=ri, column=1, value=_strip_unicode(k)); _sc(ws.cell(row=ri, column=1))
             val = _efn(v_num)
             c2 = ws.cell(row=ri, column=2, value=val); _sc(c2, num=_in(val))
-            ws.cell(row=ri, column=3, value=v_det); _sc(ws.cell(row=ri, column=3))
+            ws.cell(row=ri, column=3, value=_strip_unicode(v_det)); _sc(ws.cell(row=ri, column=3))
         _aw(ws)
         
     for list_name, rows in all_lists.items():
         if not rows: continue
-        ws = wb.create_sheet(title=_san(list_name), index=1)
+        ws = wb.create_sheet(title=_san(_strip_unicode(list_name)), index=1)
         for c, n in enumerate(["Rank", "Name", "Volume"], 1): ws.cell(row=1, column=c, value=n)
         _sh(ws, 1, 3)
         for ri, r in enumerate(rows, 2):
             ws.cell(row=ri, column=1, value=int(r[0])); _sc(ws.cell(row=ri, column=1), num=True)
-            ws.cell(row=ri, column=2, value=r[1]); _sc(ws.cell(row=ri, column=2))
+            ws.cell(row=ri, column=2, value=_strip_unicode(r[1])); _sc(ws.cell(row=ri, column=2))
             val = _efn(r[2])
             c3 = ws.cell(row=ri, column=3, value=val); _sc(c3, num=_in(val))
         _aw(ws)
