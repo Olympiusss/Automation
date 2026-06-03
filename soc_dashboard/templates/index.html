@@ -4,11 +4,11 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>{{ client_name }} — Sentrium SOC</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/dashboard.css?v=10">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=18">
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
 <style>
 /* Client dashboard overrides */
-.client-dash .sidebar { width: 200px; }
+.client-dash .sidebar { width: var(--sidebar-w); }
 .client-dash .sidebar .nav-back { display:flex; align-items:center; gap:7px; padding:6px 10px; font-size:0.75rem; font-weight:500; color:var(--text-muted); text-decoration:none; border-radius:var(--radius-md); transition:var(--transition); margin-bottom:4px; }
 .client-dash .sidebar .nav-back:hover { background:var(--bg-hover); color:var(--text-secondary); }
 .client-dash .sidebar .nav-back svg { width:13px; height:13px; }
@@ -35,8 +35,8 @@
 .client-section.active { display:block; }
 
 /* Override topbar for client page */
-.client-dash .topbar { border-bottom-color: var(--border); padding-bottom: 16px; margin-bottom: 24px; }
-.client-dash .main-content { padding: 0 32px 60px; }
+.client-dash .topbar { border-bottom-color: var(--border); }
+.client-dash .main-content { padding: 0 clamp(24px, 3vw, 48px) 64px; }
 
 @media(max-width:768px) {
     .client-dash .main-content { padding: 0 16px 60px !important; }
@@ -312,7 +312,75 @@
       <span class="sec-title-badge stb-s1">SentinelOne</span>
       <span class="sec-count" id="s1-threat-lbl">— threats · 24hr</span>
     </div>
-    <div class="dash-card">
+
+    <!-- ── EDR KPI Strip ── -->
+    <div class="edr-kpi-strip" id="edr-kpi-strip">
+
+      <div class="edr-kpi-card edr-kpi-blue">
+        <div class="edr-kpi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </div>
+        <div class="edr-kpi-body">
+          <div class="edr-kpi-val" id="ekv-endpoints"><span class="skeleton skeleton-value" style="width:36px;"></span></div>
+          <div class="edr-kpi-lbl">Total Endpoints</div>
+        </div>
+      </div>
+
+      <div class="edr-kpi-card edr-kpi-red">
+        <div class="edr-kpi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="edr-kpi-body">
+          <div class="edr-kpi-val" id="ekv-threats"><span class="skeleton skeleton-value" style="width:32px;"></span></div>
+          <div class="edr-kpi-lbl">Threats · 24hr</div>
+        </div>
+      </div>
+
+      <div class="edr-kpi-card edr-kpi-orange">
+        <div class="edr-kpi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="edr-kpi-body">
+          <div class="edr-kpi-val" id="ekv-vuln-eps"><span class="skeleton skeleton-value" style="width:28px;"></span></div>
+          <div class="edr-kpi-lbl">Vulnerable Endpoints · 24hr</div>
+        </div>
+      </div>
+
+      <div class="edr-kpi-card edr-kpi-purple">
+        <div class="edr-kpi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        </div>
+        <div class="edr-kpi-body">
+          <div class="edr-kpi-val" id="ekv-vuln-apps"><span class="skeleton skeleton-value" style="width:28px;"></span></div>
+          <div class="edr-kpi-lbl">Vulnerable Apps · 24hr</div>
+        </div>
+      </div>
+
+      <div class="edr-kpi-card edr-kpi-teal">
+        <div class="edr-kpi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        </div>
+        <div class="edr-kpi-body">
+          <div class="edr-kpi-val" id="ekv-alerts"><span class="skeleton skeleton-value" style="width:32px;"></span></div>
+          <div class="edr-kpi-lbl">Total Alerts &middot; 24hr</div>
+        </div>
+      </div>
+
+      <div class="edr-kpi-card edr-kpi-grey">
+        <div class="edr-kpi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </div>
+        <div class="edr-kpi-body">
+          <div class="edr-kpi-val" id="ekv-hashes"><span class="skeleton skeleton-value" style="width:28px;"></span></div>
+          <div class="edr-kpi-lbl">Blocklisted Hashes</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Threats Table ── -->
+    <div class="dash-card" style="margin-top:16px;">
+      <div class="dash-card-title"><span class="dash-card-title-dot dtd-s1"></span>Threat Events · 24hr Window</div>
       <div class="alarm-table-wrap">
         <table class="data-table">
           <thead><tr><th>Threat</th><th>Confidence</th><th>Verdict</th><th>Status</th><th>Endpoint</th><th>Reported</th></tr></thead>
@@ -321,6 +389,7 @@
       </div>
     </div>
   </section>
+
 
   <!-- ══ SETTINGS ══ -->
   <section id="section-settings" class="client-section">
@@ -336,7 +405,7 @@
 <script>
 const WS_URL="{{ws_url}}",CLIENT_NAME="{{client_name}}",REFRESH_INTERVAL={{refresh_interval}},ROLE="{{role}}";
 </script>
-<script src="/static/js/charts.js?v=10"></script>
-<script src="/static/js/dashboard.js?v=10"></script>
+<script src="/static/js/charts.js?v=18"></script>
+<script src="/static/js/dashboard.js?v=18"></script>
 </body>
 </html>

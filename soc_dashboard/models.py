@@ -101,6 +101,12 @@ class ClientSummary(BaseModel):
     blocked_attempts: int = 0
     dfir_cases: int = 0
 
+    # ── SentinelOne-specific KPIs (24hr window) ──
+    s1_total_alerts: int = 0           # total S1 alerts/threats in 24hr
+    s1_vulnerable_endpoints: int = 0   # unique endpoints with active vulnerability risks
+    s1_vulnerable_apps: int = 0        # total vulnerable application risk records
+    s1_blocklisted_hashes: int = 0     # total blocklisted hash restrictions
+
     # Breakdowns
     threat_classifications: list[ThreatClassification] = Field(default_factory=list)
     recent_alerts: list[AlertItem] = Field(default_factory=list)

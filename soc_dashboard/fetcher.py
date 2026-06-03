@@ -74,6 +74,8 @@ class S1Fetcher:
         all_items = []
         cursor = None
 
+        _retry_budget = 3   # max 429 retries per page
+
         while True:
             if cursor:
                 params["cursor"] = cursor
@@ -83,10 +85,24 @@ class S1Fetcher:
                 if resp.status_code == 401:
                     logger.error(f"S1 Auth failed on {endpoint} — token may be expired")
                     break
+
+                # ── Rate-limit handling ──────────────────────────────────────
+                if resp.status_code == 429:
+                    if _retry_budget <= 0:
+                        logger.warning(f"S1 {endpoint} 429 — retry budget exhausted, skipping")
+                        break
+                    wait = int(resp.headers.get("Retry-After", "2"))
+                    wait = min(wait, 10)   # cap at 10 s
+                    logger.debug(f"S1 {endpoint} 429 — sleeping {wait}s (budget={_retry_budget})")
+                    await asyncio.sleep(wait)
+                    _retry_budget -= 1
+                    continue   # retry same page
+
                 if resp.status_code != 200:
                     logger.warning(f"S1 {endpoint} returned {resp.status_code}")
                     break
 
+                _retry_budget = 3  # reset on successful page
                 body = resp.json()
                 data = body.get("data", body)
                 if isinstance(data, dict) and "sites" in data:
@@ -103,7 +119,7 @@ class S1Fetcher:
                 if not cursor:
                     break
 
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(0.05)
 
             except httpx.RequestError as e:
                 logger.warning(f"S1 network error on {endpoint}: {e} — retrying with fresh client")
@@ -158,6 +174,79 @@ class S1Fetcher:
             "sortBy": "createdAt",
             "sortOrder": "desc",
         })
+
+    async def fetch_risks(self, site_id: str, days_back: int | None = None) -> list[dict]:
+        """
+        Fetch application vulnerability risks via /application-management/risks.
+        Returns raw list of risk records — used to compute both vuln endpoints
+        (unique endpoint names) and vuln app count (total records).
+        Falls back to empty list if unavailable.
+        """
+        params = {
+            "siteIds":   site_id,
+            "sortBy":    "detectionDate",
+            "sortOrder": "desc",
+        }
+        if days_back is not None:
+            now = datetime.now(timezone.utc)
+            params["detectionDate__gte"] = (now - timedelta(days=days_back)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            params["detectionDate__lte"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            return await self._paginate(
+                "application-management/risks",
+                params,
+                max_items=5000,
+            )
+        except Exception as e:
+            logger.debug(f"S1 application risks unavailable for site {site_id}: {e}")
+            return []
+
+    async def fetch_blocklisted_hashes(self, site_id: str) -> int:
+        """
+        Count blocklisted hash restrictions via /restrictions?type=black_hash.
+        Counts only restrictions scoped to this site to avoid inherited account/group totals.
+        Falls back to 0 if the endpoint is unavailable.
+        Uses limit=1 and pagination.totalItems to avoid downloading all hashes.
+        """
+        client = await self._get_client()
+        params = {
+            "siteIds":         site_id,
+            "type":            "black_hash",
+            "includeParents":  "false",
+            "includeChildren": "false",
+            "limit":           1,
+        }
+        _retry_budget = 3
+        while True:
+            try:
+                resp = await client.get(f"{self.base_url}/restrictions", params=params)
+                if resp.status_code == 401:
+                    logger.error("S1 Auth failed on restrictions — token may be expired")
+                    return 0
+                if resp.status_code == 429:
+                    if _retry_budget <= 0:
+                        logger.warning("S1 restrictions 429 — retry budget exhausted, skipping")
+                        return 0
+                    wait = int(resp.headers.get("Retry-After", "2"))
+                    wait = min(wait, 10)
+                    logger.debug(f"S1 restrictions 429 — sleeping {wait}s (budget={_retry_budget})")
+                    await asyncio.sleep(wait)
+                    _retry_budget -= 1
+                    continue
+                if resp.status_code != 200:
+                    logger.warning(f"S1 restrictions returned {resp.status_code}")
+                    return 0
+                
+                body = resp.json()
+                pagination = body.get("pagination", {}) or {}
+                if "totalItems" in pagination:
+                    return int(pagination["totalItems"])
+                data = body.get("data", [])
+                return len(data)
+            except Exception as e:
+                logger.debug(f"S1 blocklisted hashes unavailable for site {site_id}: {e}")
+                return 0
+
 
     async def fetch_alerts(self, site_id: str, days_back: int = 7) -> list[dict]:
         """Fetch cloud detection alerts for a site."""
@@ -732,9 +821,12 @@ class DashboardAggregator:
 
     async def _build_s1_client(self, site_id: str, site_name: str) -> ClientSummary:
         """Build client summary from SentinelOne data — 24h threat window."""
-        agents, threats_24h = await asyncio.gather(
+        agents, threats_24h, alerts_24h, risks, blocklisted_count = await asyncio.gather(
             self.s1.fetch_agents(site_id),
-            self.s1.fetch_threats(site_id, days_back=1),   # 24 hours only
+            self.s1.fetch_threats(site_id, days_back=1),      # 24 hours only
+            self.s1.fetch_alerts(site_id, days_back=1),        # cloud detection alerts (24hr)
+            self.s1.fetch_risks(site_id, days_back=1),         # app-mgmt risks detected in 24hr
+            self.s1.fetch_blocklisted_hashes(site_id),         # blocklisted hash count
             return_exceptions=True,
         )
 
@@ -744,8 +836,41 @@ class DashboardAggregator:
         if isinstance(threats_24h, Exception):
             logger.warning(f"S1 threats error for {site_name}: {threats_24h}")
             threats_24h = []
+        if isinstance(alerts_24h, Exception):
+            logger.warning(f"S1 alerts error for {site_name}: {alerts_24h}")
+            alerts_24h = []
+        if isinstance(risks, Exception):
+            logger.debug(f"S1 risks unavailable for {site_name}: {risks}")
+            risks = []
+        if isinstance(blocklisted_count, Exception):
+            logger.debug(f"S1 blocklisted hashes unavailable for {site_name}: {blocklisted_count}")
+            blocklisted_count = 0
 
-        logger.info(f"S1 [{site_name}]: {len(agents)} endpoints, {len(threats_24h)} threats (24h)")
+        # ── Derive vuln counts from application-management/risks ──
+        vuln_ep_set: set[str] = set()
+        vuln_app_set: set[str] = set()
+        for r in risks:
+            ep = (r.get("endpointName") or r.get("endpoint")
+                  or r.get("agentName")  or r.get("hostName") or "")
+            if ep:
+                vuln_ep_set.add(ep)
+            app = (
+                r.get("applicationName") or r.get("application")
+                or r.get("appName") or r.get("name")
+                or r.get("packageName") or r.get("softwareName") or ""
+            )
+            version = r.get("applicationVersion") or r.get("version") or ""
+            if app:
+                vuln_app_set.add(f"{app}|{version}")
+        vuln_eps  = len(vuln_ep_set)   # unique endpoints with a risk record
+        vuln_apps = len(vuln_app_set) or len(risks)
+
+        logger.info(
+            f"S1 [{site_name}]: {len(agents)} endpoints, {len(threats_24h)} threats (24h), "
+            f"{len(alerts_24h)} alerts (24h), "
+            f"{vuln_eps} vuln endpoints, {vuln_apps} vuln app risks, {blocklisted_count} blocklisted hashes"
+        )
+
 
         # ── Threat classifications from 24h threats ──
         class_counter = Counter()
@@ -832,6 +957,49 @@ class DashboardAggregator:
                 platform="SentinelOne",
             ))
 
+        seen_alert_ids = {a.id for a in recent_alerts if a.id}
+        for alert in alerts_24h:
+            ai = alert.get("alertInfo", {}) or {}
+            ari = alert.get("agentRealtimeInfo", {}) or {}
+            alert_id = str(alert.get("id") or ai.get("id") or ai.get("alertId") or "")
+            display_id = f"S1A-{alert_id[:6]}" if alert_id else ""
+            if display_id and display_id in seen_alert_ids:
+                continue
+
+            alert_name = (
+                ai.get("alertName") or ai.get("name") or ai.get("ruleName")
+                or alert.get("name") or alert.get("title") or "Cloud Detection Alert"
+            )
+            severity_raw = str(ai.get("severity") or alert.get("severity") or "").lower()
+            confidence_raw = str(ai.get("confidenceLevel") or alert.get("confidenceLevel") or "").lower()
+            confidence_label = confidence_raw.title() if confidence_raw else (severity_raw.title() if severity_raw else "Unknown")
+            status_label = (
+                ai.get("statusDescription") or ai.get("status")
+                or alert.get("statusDescription") or alert.get("status") or "Unknown"
+            )
+            verdict_label = (
+                ai.get("analystVerdictDescription") or ai.get("analystVerdict")
+                or alert.get("analystVerdictDescription") or alert.get("analystVerdict") or "Pending"
+            )
+            created = ai.get("createdAt") or alert.get("createdAt") or ai.get("updatedAt") or alert.get("updatedAt") or ""
+            endpoint = (
+                ari.get("agentComputerName") or ai.get("agentName") or ai.get("computerName")
+                or alert.get("agentName") or alert.get("computerName") or ""
+            )
+
+            recent_alerts.append(AlertItem(
+                id=display_id,
+                alert_type=alert_name,
+                source=endpoint,
+                severity=severity_raw or "medium",
+                confidence=confidence_label,
+                analyst_verdict=str(verdict_label).replace("_", " ").title(),
+                status=str(status_label).replace("_", " ").title(),
+                time=_format_relative_time(created),
+                reported_at=_format_exact_time(created),
+                platform="SentinelOne",
+            ))
+
         # ── KPIs ──
         blocked = 0
         for t in threats_24h:
@@ -851,7 +1019,11 @@ class DashboardAggregator:
             s1_site_id=site_id,
             total_endpoints=len(agents),
             total_threats=len(threats_24h),
-            total_alerts=len(threats_24h),   # 24h threat count as alerts
+            total_alerts=len(alerts_24h),
+            s1_total_alerts=len(alerts_24h),
+            s1_vulnerable_endpoints=vuln_eps,
+            s1_vulnerable_apps=vuln_apps,
+            s1_blocklisted_hashes=blocklisted_count,
             events_processed=len(agents) * 1000 + len(threats_24h) * 50,
             blocked_attempts=blocked,
             dfir_cases=dfir,
@@ -864,12 +1036,13 @@ class DashboardAggregator:
                     is_active=True,
                     total_endpoints=len(agents),
                     total_threats=len(threats_24h),
-                    total_alerts=len(threats_24h),
+                    total_alerts=len(alerts_24h),
                     events_processed=len(agents) * 1000,
                     blocked_attempts=blocked,
                 ),
             ],
         )
+
 
     def _build_av_summary(self, alarms: list[dict], events: list[dict],
                           name: str, sensor_map: dict | None = None) -> ClientSummary:
