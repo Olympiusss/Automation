@@ -365,11 +365,23 @@ if uploaded_files:
 
         df = pd.concat(all_dfs, ignore_index=True)
 
+        # Define helper to clean Personnel ID and prevent merge float/str errors
+        def clean_id(val):
+            if pd.isna(val):
+                return ""
+            val_str = str(val).strip()
+            if val_str.endswith('.0'):
+                val_str = val_str[:-2]
+            return val_str
+
         # Validate
         for col in ['Event Description', 'Time', 'Door Name']:
             if col not in df.columns:
                 st.error(f"Missing required column: **{col}**")
                 st.stop()
+
+        if 'Personnel ID' in df.columns:
+            df['Personnel ID'] = df['Personnel ID'].apply(clean_id)
 
         # Parse timestamps
         df['Parsed_Time'] = pd.to_datetime(df['Time'], errors='coerce', dayfirst=True)
@@ -423,7 +435,7 @@ if uploaded_files:
                 st.warning("Master List must contain 'Personnel ID' and 'Expected Days' columns. Absentee tracking disabled.")
                 df_roster = None
             else:
-                df_roster['Personnel ID'] = df_roster['Personnel ID'].astype(str).str.strip()
+                df_roster['Personnel ID'] = df_roster['Personnel ID'].apply(clean_id)
                 df_roster['Expected Days'] = df_roster['Expected Days'].astype(str).str.strip()
                 # Identify SOC staff (Expected Days = "SOC")
                 soc_mask = df_roster['Expected Days'].str.upper() == 'SOC'
@@ -450,7 +462,7 @@ if uploaded_files:
                 df_soc = df_soc.dropna(subset=['Date']).copy()
                 df_soc['Shift_Lower'] = df_soc['Shift'].astype(str).str.strip().str.lower()
                 df_soc['Shift_Start'] = df_soc['Shift_Lower'].map(SOC_SHIFT_TIMES)
-                df_soc['Personnel ID'] = df_soc['Personnel ID'].astype(str).str.strip()
+                df_soc['Personnel ID'] = df_soc['Personnel ID'].apply(clean_id)
                 fn_cols = [c for c in ['First Name', 'Last Name'] if c in df_soc.columns]
                 df_soc['Full Name'] = df_soc[fn_cols].fillna('').astype(str).apply(
                     lambda r: ' '.join(r).strip(), axis=1) if fn_cols else ''
@@ -826,4 +838,3 @@ if uploaded_files:
 
     except Exception as e:
         st.error(f"An error occurred while processing: {e}")
-
