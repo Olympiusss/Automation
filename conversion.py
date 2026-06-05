@@ -393,7 +393,7 @@ st.markdown("""
     margin-bottom: 0.5rem;
 }
 </style>
-<div class="gradient-text">📄 PDF to XLSX Converter</div>
+<div class="gradient-text">📄 WAF CONVERSION SOLUTION</div>
 """, unsafe_allow_html=True)
 
 st.markdown("Securely extract tables and convert security threat report PDFs to structured Excel spreadsheets.")
