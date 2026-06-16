@@ -524,22 +524,17 @@ if uploaded_files:
                 if df_late_f.empty:
                     st.info("No late arrivals for the selected period.")
                 else:
-                    # Build the aggregated table with Expected/Week
-                    # Add ISO week to compute weekly default count
-                    df_late_f['ISO_Week'] = df_late_f['Parsed_Time'].dt.isocalendar().year.astype(str) + '-W' + \
-                        df_late_f['Parsed_Time'].dt.isocalendar().week.astype(str).str.zfill(2)
-
+                    # Aggregate: who was late, on which dates, at what times
                     late_agg = (
                         df_late_f.sort_values(['Date', 'Time_Only'])
                         .groupby(['Personnel ID', 'Full Name'])
                         .agg(
-                            Default_Count=('Date', 'nunique'),
-                            Weeks_Defaulted=('ISO_Week', 'nunique'),
-                            Dates_Defaulted=('Date_Str', lambda x: ', '.join(x)),
-                            Times_Defaulted=('Time_Str', lambda x: ', '.join(x)),
+                            Times_Late=('Date', 'nunique'),
+                            Dates_Late=('Date_Str', lambda x: ', '.join(x)),
+                            Times_In=('Time_Str', lambda x: ', '.join(x)),
                         )
                         .reset_index()
-                        .sort_values('Default_Count', ascending=False)
+                        .sort_values('Times_Late', ascending=False)
                     )
 
                     # Attach Expected Days/Week from roster if available
@@ -550,11 +545,12 @@ if uploaded_files:
                         )
                         late_agg['Days_Per_Week'] = late_agg['Days_Per_Week'].fillna('–')
                         late_agg = late_agg[['Personnel ID', 'Full Name', 'Days_Per_Week',
-                                            'Default_Count', 'Weeks_Defaulted', 'Dates_Defaulted', 'Times_Defaulted']]
+                                            'Times_Late', 'Dates_Late', 'Times_In']]
                         late_agg.columns = ['Personnel ID', 'Full Name', 'Expected/Week',
-                                            'Days Late', 'Weeks Defaulted', 'Dates Late', 'Times In']
+                                            'Times Late', 'Dates Late', 'Times In']
                     else:
-                        late_agg.columns = ['Personnel ID', 'Full Name', 'Days Late', 'Weeks Defaulted', 'Dates Late', 'Times In']
+                        late_agg = late_agg[['Personnel ID', 'Full Name', 'Times_Late', 'Dates_Late', 'Times_In']]
+                        late_agg.columns = ['Personnel ID', 'Full Name', 'Times Late', 'Dates Late', 'Times In']
 
                     st.dataframe(late_agg, hide_index=True, use_container_width=True)
 
@@ -563,127 +559,180 @@ if uploaded_files:
                             late_agg, period_label_late,
                             "Standard Staff Late Arrivals",
                             "Personnel who checked in at or after 08:30 AM on working days.",
-                            [20, 40, 15, 15, 15, 80, 80], "std_late"
+                            [20, 40, 15, 15, 80, 80], "std_late"
                         )
 
-            # ── Absentees (Weekly Compliance) ─────────────────────────────────
+            # ── Weekly Attendance Compliance ──────────────────────────────────
             st.divider()
             st.subheader("Weekly Attendance Compliance — Standard Staff")
 
             if df_roster is None:
                 st.info("Upload the Standard Staff Master List to enable weekly compliance tracking.")
             else:
-                # Build name lookup from access logs
-                name_lookup = df_first[['Personnel ID', 'First Name', 'Last Name']].copy() if \
-                    'First Name' in df_first.columns else None
-                if name_lookup is not None:
-                    name_lookup['Personnel ID'] = name_lookup['Personnel ID'].astype(str).str.strip()
-                    nc = [c for c in ['First Name', 'Last Name'] if c in name_lookup.columns]
-                    name_lookup['Full Name'] = name_lookup[nc].fillna('').astype(str).apply(
+                # Build name lookup {Personnel ID -> Full Name}
+                _name_lkp = {}
+                if 'First Name' in df_first.columns:
+                    _nl = df_first[['Personnel ID', 'First Name', 'Last Name']].copy()
+                    _nl['Personnel ID'] = _nl['Personnel ID'].astype(str).str.strip()
+                    _nc_cols = [c for c in ['First Name', 'Last Name'] if c in _nl.columns]
+                    _nl['Full Name'] = _nl[_nc_cols].fillna('').astype(str).apply(
                         lambda r: ' '.join(r).strip(), axis=1)
-                    name_lookup = name_lookup.drop_duplicates(subset='Personnel ID')[['Personnel ID', 'Full Name']]
+                    _nl = _nl.drop_duplicates(subset='Personnel ID')
+                    _name_lkp = dict(zip(_nl['Personnel ID'], _nl['Full Name']))
 
-                # Get actual attendance per person per ISO week
-                df_std_attendance = df_std_first.copy()
-                df_std_attendance['Personnel ID'] = df_std_attendance['Personnel ID'].astype(str).str.strip()
-                df_std_attendance['ISO_Year'] = df_std_attendance['Parsed_Time'].dt.isocalendar().year.astype(int)
-                df_std_attendance['ISO_Week'] = df_std_attendance['Parsed_Time'].dt.isocalendar().week.astype(int)
-                df_std_attendance['Week_Label'] = df_std_attendance['ISO_Year'].astype(str) + '-W' + \
-                    df_std_attendance['ISO_Week'].astype(str).str.zfill(2)
+                # Workday-only (Mon–Fri) badge-ins for standard staff
+                _df_att = df_std_first[df_std_first['Date_dt'].dt.dayofweek.isin(WORKDAYS)].copy()
+                _df_att['Personnel ID'] = _df_att['Personnel ID'].astype(str).str.strip()
+                _df_att['ISO_Year_n'] = _df_att['Parsed_Time'].dt.isocalendar().year.astype(int)
+                _df_att['ISO_Week_n'] = _df_att['Parsed_Time'].dt.isocalendar().week.astype(int)
+                _df_att['Week_Label'] = (_df_att['ISO_Year_n'].astype(str) + '-W' +
+                                         _df_att['ISO_Week_n'].astype(str).str.zfill(2))
+                _df_att['Date_Str'] = _df_att['Date'].apply(lambda d: d.strftime('%Y-%m-%d'))
+                _df_att['Time_Str'] = _df_att['Time_Only'].apply(lambda t: t.strftime('%H:%M'))
 
-                # Count unique days per person per week
-                actual_weekly = (
-                    df_std_attendance
-                    .groupby(['Personnel ID', 'Week_Label'])
-                    .agg(Actual_Days=('Date', 'nunique'))
-                    .reset_index()
-                )
-
-                # Build all expected weeks from the log date range
-                min_dt = df_std_attendance['Parsed_Time'].min()
-                max_dt = df_std_attendance['Parsed_Time'].max()
-                all_weeks = pd.date_range(min_dt, max_dt, freq='W-MON')
-                week_labels = []
-                for w in all_weeks:
-                    iso = w.isocalendar()
-                    week_labels.append(f"{iso[0]}-W{str(iso[1]).zfill(2)}")
-                if not week_labels:
-                    # Single partial week
-                    iso = min_dt.isocalendar()
-                    week_labels = [f"{iso[0]}-W{str(iso[1]).zfill(2)}"]
-
-                # Cross-product: every standard staff person × every week
-                expected_weeks = pd.MultiIndex.from_product(
-                    [df_std_roster['Personnel ID'].unique(), week_labels],
-                    names=['Personnel ID', 'Week_Label']
-                ).to_frame(index=False)
-
-                # Merge expected days per week from roster
-                expected_weeks = expected_weeks.merge(
-                    df_std_roster[['Personnel ID', 'Days_Per_Week']],
-                    on='Personnel ID', how='left'
-                )
-
-                # Merge actual attendance
-                compliance = expected_weeks.merge(actual_weekly, on=['Personnel ID', 'Week_Label'], how='left')
-                compliance['Actual_Days'] = compliance['Actual_Days'].fillna(0).astype(int)
-                compliance['Deficit'] = compliance['Days_Per_Week'] - compliance['Actual_Days']
-
-                # Only flag non-compliant weeks (deficit > 0)
-                non_compliant = compliance[compliance['Deficit'] > 0].copy()
-
-                # Attach names
-                if name_lookup is not None:
-                    non_compliant = non_compliant.merge(name_lookup, on='Personnel ID', how='left')
-                    non_compliant['Full Name'] = non_compliant['Full Name'].fillna('')
+                if _df_att.empty:
+                    st.info("No workday attendance data found in the uploaded logs.")
                 else:
-                    non_compliant['Full Name'] = ''
+                    _min_dt = _df_att['Parsed_Time'].min()
+                    _max_dt = _df_att['Parsed_Time'].max()
 
-                if non_compliant.empty:
-                    st.markdown(
-                        '<div style="background:rgba(48,209,88,0.1);border-left:5px solid #30d158;padding:15px 20px;border-radius:6px;">'
-                        '<h3 style="margin:0;color:#30d158;">Full Compliance</h3>'
-                        '<p style="margin:5px 0 0;color:#e2e8f0;">All standard staff met their required weekly attendance.</p></div>',
-                        unsafe_allow_html=True
+                    # All ISO week Mondays in the log date range
+                    _wk_starts = pd.date_range(
+                        _min_dt.to_period('W').to_timestamp(),
+                        _max_dt.to_period('W').to_timestamp(),
+                        freq='W-MON'
                     )
-                else:
-                    total_nc_staff = non_compliant['Personnel ID'].nunique()
+                    _iso_weeks = []
+                    for _ws in _wk_starts:
+                        _ic = _ws.isocalendar()
+                        _iso_weeks.append({
+                            'year': int(_ic[0]), 'week': int(_ic[1]),
+                            'label': f"{int(_ic[0])}-W{str(int(_ic[1])).zfill(2)}"
+                        })
+                    if not _iso_weeks:
+                        _ic = _min_dt.isocalendar()
+                        _iso_weeks = [{'year': int(_ic[0]), 'week': int(_ic[1]),
+                                       'label': f"{int(_ic[0])}-W{str(int(_ic[1])).zfill(2)}"}]
+
+                    # Build per-person per-week compliance rows
+                    _comp_rows = []
+                    for _, _pr in df_std_roster.iterrows():
+                        _pid  = str(_pr['Personnel ID'])
+                        _exp  = int(_pr['Days_Per_Week'])
+                        _fname = _name_lkp.get(_pid, '')
+                        _p_att = _df_att[_df_att['Personnel ID'] == _pid]
+
+                        for _wk in _iso_weeks:
+                            try:
+                                _mon = datetime.date.fromisocalendar(_wk['year'], _wk['week'], 1)
+                            except Exception:
+                                continue
+                            # All 5 Mon–Fri calendar dates in this ISO week
+                            _wd_strs = [
+                                (_mon + datetime.timedelta(days=_d)).strftime('%Y-%m-%d')
+                                for _d in range(5)
+                            ]
+                            _wk_att = _p_att[_p_att['Week_Label'] == _wk['label']].sort_values('Date')
+                            _att_strs = set(_wk_att['Date_Str'].tolist())
+                            # "YYYY-MM-DD (HH:MM)" for each day attended
+                            _att_entries = [
+                                f"{_r['Date_Str']} ({_r['Time_Str']})"
+                                for _, _r in _wk_att.iterrows()
+                            ]
+                            # Workdays with NO badge-in recorded
+                            _absent = [_d for _d in _wd_strs if _d not in _att_strs]
+                            _actual  = len(_att_strs)
+                            _deficit = max(0, _exp - _actual)
+                            _comp_rows.append({
+                                'Personnel ID':         _pid,
+                                'Full Name':            _fname,
+                                'Week':                 _wk['label'],
+                                'Expected Days':        _exp,
+                                'Days Present':         _actual,
+                                'Deficit':              _deficit,
+                                'Status':               '✅ Met' if _deficit == 0 else f'⚠️ Short by {_deficit}',
+                                'Days Attended & Times': ', '.join(_att_entries) if _att_entries else '—',
+                                'Absent Dates':         ', '.join(_absent) if _absent else '—',
+                            })
+
+                    _df_comp = pd.DataFrame(_comp_rows)
+
+                    # Summary banner
+                    _nc_count = _df_comp[_df_comp['Deficit'] > 0]['Personnel ID'].nunique()
+                    if _nc_count == 0:
+                        st.markdown(
+                            '<div style="background:rgba(48,209,88,0.1);border-left:5px solid #30d158;'
+                            'padding:15px 20px;border-radius:6px;margin-bottom:1.5rem;">'
+                            '<h3 style="margin:0;color:#30d158;">✅ Full Compliance</h3>'
+                            '<p style="margin:5px 0 0;color:#e2e8f0;">All standard staff met their '
+                            'required weekly attendance.</p></div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.markdown(
+                            f'<div style="background:rgba(255,149,0,0.1);border-left:5px solid #ff9500;'
+                            f'padding:15px 20px;border-radius:6px;margin-bottom:1.5rem;">'
+                            f'<h3 style="margin:0;color:#ff9500;">⚠️ {_nc_count} staff member(s) had '
+                            f'non-compliant weeks</h3>'
+                            f'<p style="margin:5px 0 0;color:#e2e8f0;">Based on required days per week '
+                            f'vs. actual badge-in records.</p></div>',
+                            unsafe_allow_html=True
+                        )
+
+                    # Period selector + export
+                    _pf2_col, _ex2_col = st.columns([4, 1])
+                    _all_wk_opts = sorted(_df_comp['Week'].unique(), reverse=True)
+                    with _pf2_col:
+                        _comp_view = st.radio(
+                            "View period:", ["All Weeks", "Select Week"],
+                            horizontal=True, key="comp_period_radio"
+                        )
+                    if _comp_view == "Select Week" and _all_wk_opts:
+                        _sel_wk = st.selectbox("Select Week", _all_wk_opts, key="comp_week_sel")
+                        _detail_view = _df_comp[_df_comp['Week'] == _sel_wk].copy()
+                    else:
+                        _detail_view = _df_comp.copy()
+
                     st.markdown(
-                        f'<div style="background:rgba(255,149,0,0.1);border-left:5px solid #ff9500;padding:15px 20px;border-radius:6px;margin-bottom:1.5rem;">'
-                        f'<h3 style="margin:0;color:#ff9500;">{total_nc_staff} staff member(s) had non-compliant weeks</h3>'
-                        f'<p style="margin:5px 0 0;color:#e2e8f0;">Based on required days per week vs. actual badge-in records.</p></div>',
-                        unsafe_allow_html=True
+                        "**Weekly Detail** — badge-in dates & times attended, and Mon–Fri dates "
+                        "absent, per person per week."
                     )
+                    st.dataframe(_detail_view, hide_index=True, use_container_width=True)
 
-                    # Detailed weekly breakdown
-                    st.markdown("**Weekly Detail** — each row is a week where the employee fell short.")
-                    detail_df = non_compliant[['Personnel ID', 'Full Name', 'Week_Label', 'Days_Per_Week', 'Actual_Days', 'Deficit']].copy()
-                    detail_df.columns = ['Personnel ID', 'Full Name', 'Week', 'Expected', 'Actual', 'Deficit']
-                    detail_df = detail_df.sort_values(['Personnel ID', 'Week'])
-                    st.dataframe(detail_df, hide_index=True, use_container_width=True)
-
-                    # Aggregated summary
-                    st.markdown("**Summary** — total non-compliant weeks and deficit days per employee.")
-                    summary_agg = (
-                        non_compliant
-                        .groupby(['Personnel ID', 'Full Name'])
+                    # Per-person summary
+                    st.markdown("**Summary** — aggregate compliance per employee.")
+                    _nc_wk_list = (
+                        _df_comp[_df_comp['Deficit'] > 0]
+                        .groupby('Personnel ID')['Week']
+                        .apply(lambda x: ', '.join(sorted(x)))
+                        .reset_index()
+                        .rename(columns={'Week': 'Non-Compliant Weeks'})
+                    )
+                    _summary = (
+                        _df_comp.groupby(['Personnel ID', 'Full Name'])
                         .agg(
-                            Weeks_Non_Compliant=('Week_Label', 'nunique'),
+                            Expected_Per_Week=('Expected Days', 'first'),
+                            Weeks_NC=('Deficit', lambda x: int((x > 0).sum())),
                             Total_Deficit=('Deficit', 'sum'),
-                            Weeks_List=('Week_Label', lambda x: ', '.join(sorted(x))),
                         )
                         .reset_index()
-                        .sort_values('Total_Deficit', ascending=False)
                     )
-                    summary_agg.columns = ['Personnel ID', 'Full Name', 'Weeks Non-Compliant', 'Total Deficit Days', 'Weeks']
-                    st.dataframe(summary_agg, hide_index=True, use_container_width=True)
+                    _summary = _summary.merge(_nc_wk_list, on='Personnel ID', how='left')
+                    _summary['Non-Compliant Weeks'] = _summary['Non-Compliant Weeks'].fillna('—')
+                    _summary = _summary.sort_values('Total_Deficit', ascending=False)
+                    _summary.columns = [
+                        'Personnel ID', 'Full Name', 'Expected/Week',
+                        'Weeks Non-Compliant', 'Total Deficit Days', 'Non-Compliant Weeks'
+                    ]
+                    st.dataframe(_summary, hide_index=True, use_container_width=True)
 
-                    render_export_dropdown(
-                        summary_agg, "All Time",
-                        "Weekly Attendance Compliance",
-                        "Standard staff who did not meet their required days per week.",
-                        [20, 45, 25, 25, 80], "std_compliance"
-                    )
+                    with _ex2_col:
+                        render_export_dropdown(
+                            _detail_view, "All Time",
+                            "Weekly Attendance Compliance",
+                            "Standard staff weekly attendance vs. required days per week.",
+                            [15, 35, 12, 12, 12, 8, 15, 60, 60], "std_compliance"
+                        )
 
 
         # ════════════════════════════════════════════════════════════════════
@@ -706,135 +755,160 @@ if uploaded_files:
                 """)
             else:
                 # Cross-reference SOC schedule with access logs
-                df_soc_pid = df_soc['Personnel ID'].unique()
-                df_soc_logs = df_first[df_first['Personnel ID'].astype(str).str.strip().isin(df_soc_pid)].copy()
-                df_soc_logs['Personnel ID'] = df_soc_logs['Personnel ID'].astype(str).str.strip()
+                _soc_pids = df_soc['Personnel ID'].unique()
+                _soc_logs = df_first[df_first['Personnel ID'].astype(str).str.strip().isin(_soc_pids)].copy()
+                _soc_logs['Personnel ID'] = _soc_logs['Personnel ID'].astype(str).str.strip()
 
-                # Merge schedule with actual logs
-                merged_soc = df_soc.merge(
-                    df_soc_logs[['Personnel ID', 'Date', 'Time_Only', 'Parsed_Time']],
+                # Merge schedule → actual logs (left join keeps every scheduled shift)
+                _merged = df_soc.merge(
+                    _soc_logs[['Personnel ID', 'Date', 'Time_Only', 'Parsed_Time']],
                     on=['Personnel ID', 'Date'],
                     how='left'
                 )
 
-                # ── SOC Late Arrivals ───────────────────────────────────────
-                st.subheader("Late Arrivals — SOC Team")
+                # ── Build unified shift compliance table ────────────────────────
+                _sc = _merged.copy()
+                _sc['Date_Str']        = _sc['Date'].apply(
+                    lambda d: d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d))
+                _sc['Sched_Start_Str'] = _sc['Shift_Start'].apply(
+                    lambda t: t.strftime('%H:%M') if pd.notna(t) else '—')
+                _sc['Actual_In_Str']   = _sc['Time_Only'].apply(
+                    lambda t: t.strftime('%H:%M') if pd.notna(t) else '—')
+                _sc['Shift_Title']     = _sc['Shift'].astype(str).str.strip().str.title()
+                _sc['Date_dt_col']     = pd.to_datetime(_sc['Date_Str'])
 
-                soc_present = merged_soc.dropna(subset=['Time_Only']).copy()
-                soc_present['Shift_Start_dt'] = soc_present.apply(
-                    lambda r: datetime.datetime.combine(r['Date'], r['Shift_Start'])
-                    if pd.notna(r['Shift_Start']) else None, axis=1
-                )
-                soc_present['Is_Late'] = soc_present.apply(
-                    lambda r: r['Time_Only'] > r['Shift_Start'] if r['Shift_Start'] else False, axis=1
-                )
-                soc_present['Minutes_Late'] = soc_present.apply(
-                    lambda r: int(
-                        (datetime.datetime.combine(r['Date'], r['Time_Only']) -
-                         datetime.datetime.combine(r['Date'], r['Shift_Start'])).total_seconds() // 60
-                    ) if r['Is_Late'] and r['Shift_Start'] else 0, axis=1
+                def _soc_status(row):
+                    if pd.isna(row['Time_Only']):
+                        return '🚫 Absent'
+                    if pd.notna(row['Shift_Start']) and row['Time_Only'] > row['Shift_Start']:
+                        return '⚠️ Late'
+                    return '✅ On Time'
+
+                def _soc_mins(row):
+                    if pd.isna(row['Time_Only']) or pd.isna(row['Shift_Start']):
+                        return 0
+                    if row['Time_Only'] > row['Shift_Start']:
+                        return int(
+                            (datetime.datetime.combine(row['Date'], row['Time_Only']) -
+                             datetime.datetime.combine(row['Date'], row['Shift_Start'])
+                             ).total_seconds() / 60
+                        )
+                    return 0
+
+                _sc['Status']    = _sc.apply(_soc_status, axis=1)
+                _sc['Mins Late'] = _sc.apply(_soc_mins, axis=1)
+
+                # Full compliance table (one row per scheduled shift per person)
+                _soc_comp_all = (
+                    _sc[['Personnel ID', 'Full Name', 'Date_Str', 'Shift_Title',
+                          'Sched_Start_Str', 'Actual_In_Str', 'Status', 'Mins Late']]
+                    .rename(columns={
+                        'Date_Str': 'Shift Date', 'Shift_Title': 'Shift',
+                        'Sched_Start_Str': 'Scheduled Start',
+                        'Actual_In_Str':   'Actual Check-in'
+                    })
+                    .sort_values(['Personnel ID', 'Shift Date'])
                 )
 
-                soc_late = soc_present[soc_present['Is_Late']].copy()
-                soc_late['Date_Str'] = soc_late['Date'].apply(lambda d: d.strftime('%Y-%m-%d'))
-                soc_late['Shift_Start_Str'] = soc_late['Shift_Start'].apply(lambda t: t.strftime('%H:%M') if pd.notna(t) else '')
-                soc_late['Time_In_Str'] = soc_late['Time_Only'].apply(lambda t: t.strftime('%H:%M:%S'))
+                # ── Summary banner ──────────────────────────────────────────────
+                _late_pids = _sc[_sc['Status'] == '⚠️ Late']['Personnel ID'].nunique()
+                _abs_pids  = _sc[_sc['Status'] == '🚫 Absent']['Personnel ID'].nunique()
+                _banner    = []
+                if _late_pids:
+                    _banner.append(f"<strong style='color:#ff9500;'>{_late_pids}</strong> member(s) arrived late")
+                if _abs_pids:
+                    _banner.append(f"<strong style='color:#ff453a;'>{_abs_pids}</strong> member(s) had absences")
 
-                if soc_late.empty:
+                if not _banner:
                     st.markdown(
-                        '<div class="output-alert-box" style="background:rgba(48,209,88,0.1);border-left:5px solid #30d158;padding:15px 20px;border-radius:6px;margin-bottom:1.5rem;">'
-                        '<h3 style="margin:0;color:#30d158;">✅ Perfect Punctuality!</h3>'
-                        '<p style="margin:5px 0 0;color:#e2e8f0;">No SOC team members were late for their scheduled shifts.</p></div>',
+                        '<div class="output-alert-box" style="background:rgba(48,209,88,0.1);'
+                        'border-left:5px solid #30d158;padding:15px 20px;border-radius:6px;'
+                        'margin-bottom:1.5rem;">'
+                        '<h3 style="margin:0;color:#30d158;">✅ Perfect SOC Compliance!</h3>'
+                        '<p style="margin:5px 0 0;color:#e2e8f0;">All SOC members were on time '
+                        'for every scheduled shift.</p></div>',
                         unsafe_allow_html=True
                     )
                 else:
                     st.markdown(
-                        f'<div class="output-alert-box" style="background:rgba(255,69,58,0.1);border-left:5px solid #ff453a;padding:15px 20px;border-radius:6px;margin-bottom:1.5rem;">'
-                        f'<h3 style="margin:0;color:#ff6b6b;">⚠️ {len(soc_late)} Late Shift Arrival(s)</h3>'
-                        f'<p style="margin:5px 0 0;color:#e2e8f0;">SOC members who arrived after their scheduled shift start time.</p></div>',
+                        f'<div class="output-alert-box" style="background:rgba(255,69,58,0.1);'
+                        f'border-left:5px solid #ff453a;padding:15px 20px;border-radius:6px;'
+                        f'margin-bottom:1.5rem;">'
+                        f'<h3 style="margin:0;color:#ff6b6b;">SOC Shift Compliance Issues</h3>'
+                        f'<p style="margin:5px 0 0;color:#e2e8f0;">{" · ".join(_banner)}</p></div>',
                         unsafe_allow_html=True
                     )
 
-                    soc_late_f, pl_soc_late = period_filter(soc_late.copy(), 'Date', 'Parsed_Time', 'soc_late_period')
+                # ── Shift Compliance Detail ─────────────────────────────────────
+                st.subheader("Shift Compliance — SOC Team")
+                st.markdown(
+                    "Every row is one **scheduled shift**. &nbsp;"
+                    "✅ On Time &nbsp;·&nbsp; ⚠️ Late (arrived after shift start) "
+                    "&nbsp;·&nbsp; 🚫 Absent (no badge-in recorded)."
+                )
 
-                    if soc_late_f.empty:
-                        st.info("No SOC late arrivals for the selected period.")
-                    else:
-                        soc_late_agg = (
-                            soc_late_f.sort_values('Date')
-                            .groupby(['Personnel ID', 'Full Name'])
-                            .agg(
-                                Late_Count=('Date', 'nunique'),
-                                Dates_Late=('Date_Str', lambda x: ', '.join(x)),
-                                Shifts=('Shift', lambda x: ', '.join(x)),
-                                Scheduled_Start=('Shift_Start_Str', lambda x: ', '.join(x)),
-                                Times_In=('Time_In_Str', lambda x: ', '.join(x)),
-                                Total_Mins_Late=('Minutes_Late', 'sum'),
-                            )
-                            .reset_index()
-                            .sort_values('Late_Count', ascending=False)
-                        )
-                        soc_late_agg.columns = [
-                            'Personnel ID', 'Full Name', 'Late Count',
-                            'Dates Late', 'Shifts', 'Scheduled Start', 'Time In', 'Total Mins Late'
-                        ]
-                        st.dataframe(soc_late_agg, hide_index=True, use_container_width=True)
+                _sc_pf_col, _sc_ex_col = st.columns([4, 1])
+                with _sc_pf_col:
+                    _sc_f, _sc_period = period_filter(
+                        _sc.copy(), 'Date', 'Date_dt_col', 'soc_comp_period'
+                    )
+
+                if _sc_f.empty:
+                    st.info("No SOC shifts found for the selected period.")
+                else:
+                    _sc_display = (
+                        _sc_f[['Personnel ID', 'Full Name', 'Date_Str', 'Shift_Title',
+                                'Sched_Start_Str', 'Actual_In_Str', 'Status', 'Mins Late']]
+                        .rename(columns={
+                            'Date_Str': 'Shift Date', 'Shift_Title': 'Shift',
+                            'Sched_Start_Str': 'Scheduled Start',
+                            'Actual_In_Str':   'Actual Check-in'
+                        })
+                        .sort_values(['Personnel ID', 'Shift Date'])
+                    )
+                    st.dataframe(_sc_display, hide_index=True, use_container_width=True)
+
+                    with _sc_ex_col:
                         render_export_dropdown(
-                            soc_late_agg, pl_soc_late,
-                            "SOC Team Late Arrivals",
-                            "SOC personnel who arrived after their scheduled shift start time.",
-                            [18, 40, 15, 50, 30, 25, 30, 20], "soc_late"
+                            _sc_display, _sc_period,
+                            "SOC Team Shift Compliance",
+                            "SOC personnel shift attendance: On Time, Late, or Absent.",
+                            [18, 40, 14, 14, 16, 16, 14, 12], "soc_compliance"
                         )
 
-                # ── SOC Absentees ───────────────────────────────────────────
+                # ── Per-Person Summary ──────────────────────────────────────────
                 st.divider()
-                st.subheader("Absentees — SOC Team")
+                st.subheader("Compliance Summary — SOC Team")
+                st.markdown(
+                    "Aggregated per person: total scheduled shifts, on-time count, "
+                    "late arrivals, absences, and total minutes late."
+                )
 
-                soc_absent = merged_soc[merged_soc['Time_Only'].isna()].copy()
-                soc_absent['Date_Str'] = soc_absent['Date'].apply(lambda d: d.strftime('%Y-%m-%d'))
-                soc_absent['Date_dt_col'] = pd.to_datetime(soc_absent['Date'])
-
-                if soc_absent.empty:
-                    st.markdown(
-                        '<div style="background:rgba(48,209,88,0.1);border-left:5px solid #30d158;padding:15px 20px;border-radius:6px;">'
-                        '<h3 style="margin:0;color:#30d158;">✅ No SOC Absentees!</h3>'
-                        '<p style="margin:5px 0 0;color:#e2e8f0;">All SOC members were present for every scheduled shift.</p></div>',
-                        unsafe_allow_html=True
+                _soc_summary = (
+                    _soc_comp_all
+                    .groupby(['Personnel ID', 'Full Name'])
+                    .agg(
+                        Scheduled_Shifts=('Shift Date', 'count'),
+                        On_Time=('Status',    lambda x: (x == '✅ On Time').sum()),
+                        Late=   ('Status',    lambda x: x.str.startswith('⚠️').sum()),
+                        Absent= ('Status',    lambda x: (x == '🚫 Absent').sum()),
+                        Total_Mins_Late=('Mins Late', 'sum'),
                     )
-                else:
-                    st.markdown(
-                        f'<div style="background:rgba(255,149,0,0.1);border-left:5px solid #ff9500;padding:15px 20px;border-radius:6px;margin-bottom:1.5rem;">'
-                        f'<h3 style="margin:0;color:#ff9500;">🚫 {soc_absent["Personnel ID"].nunique()} SOC member(s) missed scheduled shifts</h3>'
-                        f'<p style="margin:5px 0 0;color:#e2e8f0;">No badge-in recorded on their scheduled shift day.</p></div>',
-                        unsafe_allow_html=True
-                    )
+                    .reset_index()
+                    .sort_values(['Absent', 'Late'], ascending=False)
+                )
+                _soc_summary.columns = [
+                    'Personnel ID', 'Full Name', 'Scheduled Shifts',
+                    'On Time', 'Late', 'Absent', 'Total Mins Late'
+                ]
+                st.dataframe(_soc_summary, hide_index=True, use_container_width=True)
 
-                    soc_absent_f, pl_soc_abs = period_filter(soc_absent.copy(), 'Date', 'Date_dt_col', 'soc_abs_period')
-
-                    if soc_absent_f.empty:
-                        st.info("No SOC absences for the selected period.")
-                    else:
-                        soc_abs_agg = (
-                            soc_absent_f.sort_values('Date')
-                            .groupby(['Personnel ID', 'Full Name'])
-                            .agg(
-                                Absent_Count=('Date', 'nunique'),
-                                Dates_Absent=('Date_Str', lambda x: ', '.join(sorted(x))),
-                                Shifts_Missed=('Shift', lambda x: ', '.join(x)),
-                            )
-                            .reset_index()
-                            .sort_values('Absent_Count', ascending=False)
-                        )
-                        soc_abs_agg.columns = [
-                            'Personnel ID', 'Full Name', 'Shifts Missed', 'Dates Absent', 'Shifts'
-                        ]
-                        st.dataframe(soc_abs_agg, hide_index=True, use_container_width=True)
-                        render_export_dropdown(
-                            soc_abs_agg, pl_soc_abs,
-                            "SOC Team Absentees",
-                            "SOC personnel with no badge-in on their scheduled shift days.",
-                            [18, 40, 20, 80, 50], "soc_absent"
-                        )
+                render_export_dropdown(
+                    _soc_summary, "All Time",
+                    "SOC Team Compliance Summary",
+                    "Per-person SOC shift compliance overview.",
+                    [18, 40, 20, 14, 14, 14, 20], "soc_summary"
+                )
 
     except Exception as e:
         st.error(f"An error occurred while processing: {e}")
