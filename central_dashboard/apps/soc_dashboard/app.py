@@ -22,8 +22,7 @@ import time
 
 from config import settings
 from auth import (
-    verify_admin_password, verify_totp,
-    verify_client_password, verify_analyst_password,
+    verify_totp,
     resolve_client_name,
     create_session, validate_session, destroy_session,
     get_session_role, get_session_client, get_session_username,
@@ -236,48 +235,55 @@ async def login_submit(
             },
         )
 
-    # ── Admin ────────────────────────────────────────────────────
-    if verify_admin_password(username, password):
+    # ── DB-based auth (bcrypt) ────────────────────────────────────
+    # Credentials are verified against the database (bcrypt hashed).
+    # Env vars (CLIENT_CREDENTIALS, ANALYST_CREDENTIALS) serve only
+    # as a one-time DB seed — they are NOT used here at login time.
+    user = user_db.verify_login(username, password)
+
+    if user:
         _clear_attempts(ip)
-        token = create_session(role="admin", username=username)
-        resp  = RedirectResponse(url="/", status_code=302)
+        role        = user.get("role", "")
+        client_name = user.get("client_name")
+        token       = create_session(role=role, username=username, client_name=client_name)
+
+        user_db.log_access(username, role, client_name, "login", ip)
+        logger.info(f"{role.capitalize()} login: {username} from {ip}")
+
+        resp = None
+        if role == "admin":
+            resp = RedirectResponse(url="/", status_code=302)
+        elif role == "analyst":
+            resp = RedirectResponse(url="/analyst", status_code=302)
+        elif role in ("client", "thirdparty"):
+            dest = client_name or username
+            resp = RedirectResponse(url=f"/client/{dest}", status_code=302)
+        else:
+            # Unknown role — deny
+            logger.warning(f"Login denied: unknown role '{role}' for user '{username}'")
+            await asyncio.sleep(0.8)
+            return templates.TemplateResponse(
+                request=request, name="login.html",
+                context={"step": "credentials", "error": "Access denied.",
+                         "config_error": None, "username": ""},
+            )
+
         resp.set_cookie(SESSION_COOKIE, token, httponly=True,
-                        samesite="lax", secure=True, max_age=8 * 60 * 60)
-        logger.info(f"Admin login: {username} from {ip}")
+                        samesite="lax", secure=True,
+                        max_age=settings.SESSION_TIMEOUT_MINUTES * 60)
         return resp
 
-    # ── Analyst ──────────────────────────────────────────────────
-    if verify_analyst_password(username, password):
-        _clear_attempts(ip)
-        token = create_session(role="analyst", username=username)
-        resp  = RedirectResponse(url="/analyst", status_code=302)
-        resp.set_cookie(SESSION_COOKIE, token, httponly=True,
-                        samesite="lax", secure=True, max_age=8 * 60 * 60)
-        logger.info(f"Analyst login: {username} from {ip}")
-        return resp
-
-    # ── Client ───────────────────────────────────────────────────
-    if verify_client_password(username, password):
-        _clear_attempts(ip)
-        client_name = resolve_client_name(username)
-        token = create_session(role="client", client_name=client_name, username=username)
-        resp  = RedirectResponse(url=f"/client/{client_name}", status_code=302)
-        resp.set_cookie(SESSION_COOKIE, token, httponly=True,
-                        samesite="lax", secure=True, max_age=8 * 60 * 60)
-        logger.info(f"Client login: {username} → {client_name} from {ip}")
-        return resp
-
-    # ── Invalid ──────────────────────────────────────────────────
+    # ── Invalid credentials ───────────────────────────────────────
     _record_failed_attempt(ip)
     logger.warning(f"Failed SOC login: username={username!r} IP={ip}")
-    await asyncio.sleep(0.8)  # Blunt brute-force timing
+    await asyncio.sleep(0.8)   # constant-time blunt against brute force
     return templates.TemplateResponse(
         request=request, name="login.html",
         context={
             "step": "credentials",
             "error": "Invalid credentials. Please check your username and password.",
             "config_error": None,
-            "username": "",  # Don't echo username back — prevents enumeration hint
+            "username": "",  # Never echo back — prevents enumeration hint
         },
     )
 

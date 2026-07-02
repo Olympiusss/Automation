@@ -36,6 +36,17 @@ if not _secret:
                    "Sessions will be lost on restart. Set SECRET_KEY in Railway.")
 app.secret_key = _secret
 
+# ── File upload limits ────────────────────────────────────────────────────────
+# Reject any upload over 10 MB at the Flask/WSGI layer before touching the file
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB
+
+_ALLOWED_ATTENDANCE_EXT = {'.xlsx', '.xls', '.csv'}
+_ALLOWED_CONVERSION_EXT = {'.pdf'}
+
+def _safe_ext(filename: str) -> str:
+    """Return the lowercase file extension, or empty string if none."""
+    return os.path.splitext(filename or '')[1].lower()
+
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 try:
     from flask_limiter import Limiter
@@ -62,6 +73,12 @@ except ImportError:
             def decorator(f): return f
             return decorator
     limiter = _FakeLimiter()
+
+
+@app.errorhandler(413)
+def upload_too_large(e):
+    """Friendly 413 response when upload exceeds MAX_CONTENT_LENGTH."""
+    return jsonify({'error': 'File too large. Maximum upload size is 10 MB.'}), 413
 
 # ── Session auth helpers ──────────────────────────────────────────────────────
 from user_store import get_session, create_session, destroy_session, verify_password
@@ -700,6 +717,15 @@ def alienvault_export():
 @limiter.limit("20 per minute")
 def attendance_process():
     from apps.attendance.logic import process_access_logs, compute_late_standard, compute_soc_late_absent
+
+    # Validate all uploaded files before reading any of them
+    all_uploads = list(request.files.values())
+    if not all_uploads:
+        return jsonify({'error': 'No files uploaded'}), 400
+    for f in all_uploads:
+        if _safe_ext(f.filename) not in _ALLOWED_ATTENDANCE_EXT:
+            return jsonify({'error': f'Invalid file type "{_safe_ext(f.filename)}". Allowed: xlsx, xls, csv'}), 400
+
     logs = [{'name': f.filename, 'data': f.read()}
             for k, f in request.files.items() if k.startswith('log')]
     roster = request.files.get('roster')
@@ -744,9 +770,11 @@ def conversion_convert():
     pdf = request.files.get('pdf')
     if not pdf:
         return jsonify({'error': 'No PDF uploaded'}), 400
+    if _safe_ext(pdf.filename) not in _ALLOWED_CONVERSION_EXT:
+        return jsonify({'error': 'Invalid file type. Only PDF files are accepted.'}), 400
     try:
         buf  = convert_pdf_to_xlsx(pdf.read())
-        name = (pdf.filename or 'file').rsplit('.', 1)[0]
+        name = os.path.splitext(pdf.filename or 'file')[0]
         return send_file(buf, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                          as_attachment=True, download_name=f'{name}_converted.xlsx')
     except Exception:
@@ -773,14 +801,19 @@ def s1_nfr_sites():
 def s1_nfr_fetch():
     from apps.sentinel_nfr.logic import (fetch_endpoints_for_site, fetch_threats_for_site,
         fetch_risks_for_site, fetch_blocklisted_hashes_for_site, build_site_summary)
-    d = request.get_json(force=True)
+    d = request.get_json(silent=True) or {}
+    site_id    = d.get('site_id')
+    start_iso  = d.get('start_iso')
+    end_iso    = d.get('end_iso')
+    if not site_id or not start_iso or not end_iso:
+        return jsonify({'error': 'site_id, start_iso and end_iso are required'}), 400
     try:
-        ep    = fetch_endpoints_for_site(d['site_id'])
-        th    = fetch_threats_for_site(d['site_id'], d['start_iso'], d['end_iso'])
-        ri    = fetch_risks_for_site(d['site_id'], d['start_iso'], d['end_iso'])
-        dh, _ = fetch_blocklisted_hashes_for_site(d['site_id'])
-        summ  = build_site_summary(d.get('site_name',''), th, ri, ep, dh, _)
-        return jsonify({k: (v.to_dict(orient='records') if hasattr(v,'to_dict') else v)
+        ep    = fetch_endpoints_for_site(site_id)
+        th    = fetch_threats_for_site(site_id, start_iso, end_iso)
+        ri    = fetch_risks_for_site(site_id, start_iso, end_iso)
+        dh, _ = fetch_blocklisted_hashes_for_site(site_id)
+        summ  = build_site_summary(d.get('site_name', ''), th, ri, ep, dh, _)
+        return jsonify({k: (v.to_dict(orient='records') if hasattr(v, 'to_dict') else v)
                         for k, v in summ.items()})
     except Exception:
         logger.exception("s1_nfr_fetch error")
