@@ -14,7 +14,7 @@ VAPT Hardening:
 from flask import (Flask, send_from_directory, abort, request,
                    jsonify, send_file, Response, make_response, redirect, g)
 from functools import wraps
-import os, sys, logging, time
+import os, sys, logging, time, re as _re
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -100,12 +100,22 @@ ALLOWED_STATIC = {
 # ── Static files ──────────────────────────────────────────────────────────────
 @app.route('/')
 def root():
-    return send_from_directory('.', 'login.html')
+    nonce = getattr(g, 'csp_nonce', '')
+    with open(os.path.join(os.path.dirname(__file__), 'login.html'), encoding='utf-8') as f:
+        content = _inject_nonce(f.read(), nonce)
+    return Response(content, mimetype='text/html')
 
 @app.route('/<path:filename>')
 def serve_static(filename):
     if filename not in ALLOWED_STATIC:
         abort(404)
+    if filename.endswith('.html'):
+        # Inject CSP nonce into HTML files before serving
+        nonce = getattr(g, 'csp_nonce', '')
+        filepath = os.path.join(os.path.dirname(__file__), filename)
+        with open(filepath, encoding='utf-8') as f:
+            content = _inject_nonce(f.read(), nonce)
+        return Response(content, mimetype='text/html')
     return send_from_directory('.', filename)
 
 # ── App HTML templates ────────────────────────────────────────────────────────
@@ -113,6 +123,18 @@ ALLOWED_APPS = {
     'ri-alienvault', 'ri-s1-nfr', 'ri-s1-exclusive',
     'ri-conversion', 'pc-attendance', 'ops-dashboard',
 }
+
+def _inject_nonce(html: str, nonce: str) -> str:
+    """Inject CSP nonce into every <script> tag in an HTML document."""
+    if not nonce:
+        return html
+    return _re.sub(r'<script(?=[ >])', f'<script nonce="{nonce}"', html)
+
+@app.before_request
+def _generate_csp_nonce():
+    """Generate a unique nonce for this request — used in CSP and injected into HTML."""
+    import secrets as _sec
+    g.csp_nonce = _sec.token_urlsafe(16)
 
 @app.route('/apps/<app_id>')
 @require_session
@@ -125,8 +147,10 @@ def serve_app(app_id):
     tmpl = os.path.join(os.path.dirname(__file__), 'templates', f'{app_id}.html')
     if not os.path.exists(tmpl):
         abort(404)
+    nonce = getattr(g, 'csp_nonce', '')
     with open(tmpl, encoding='utf-8') as f:
-        return Response(f.read(), mimetype='text/html')
+        content = _inject_nonce(f.read(), nonce)
+    return Response(content, mimetype='text/html')
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Authentication endpoints
@@ -732,16 +756,17 @@ def security_headers(response):
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     # Restrict browser features
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
-    # Content Security Policy
+    # Content Security Policy — nonce-based (no unsafe-inline)
+    nonce = getattr(g, 'csp_nonce', '')
     response.headers['Content-Security-Policy'] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+        f"default-src 'self'; "
+        f"script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src https://fonts.gstatic.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data:; "
         "connect-src 'self'; "
-        "frame-src 'self'; "
-        "frame-ancestors 'self';"
+        "frame-src 'none'; "
+        "frame-ancestors 'none';"
     )
     # HSTS — only on Railway (HTTPS termination is handled by Railway proxy)
     if IS_PRODUCTION:
