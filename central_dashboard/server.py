@@ -51,22 +51,20 @@ def _safe_ext(filename: str) -> str:
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
-    # Use PostgreSQL as rate-limit backend if available (survives restarts)
-    _db_url = os.environ.get("DATABASE_URL", "")
-    if _db_url.startswith("postgres://"):
-        _db_url = "postgresql://" + _db_url[len("postgres://"):]
-    _limiter_storage = f"postgresql+psycopg2://{_db_url.split('://',1)[-1]}" if _db_url else "memory://"
+    # NOTE: flask-limiter uses the `limits` library which does NOT support
+    # PostgreSQL as a storage backend. Use memory:// (reliable, no deps).
+    # The SOC app's brute-force protection (IP tracking + lockout) is separate
+    # and does not depend on this limiter.
     limiter = Limiter(
         get_remote_address,
         app=app,
         default_limits=["200 per minute"],
-        storage_uri=_limiter_storage if _db_url else "memory://",
+        storage_uri="memory://",
     )
     LIMITER_AVAILABLE = True
-    logger.info(f"Rate limiter storage: {'postgresql' if _db_url else 'memory'}")
+    logger.info("Rate limiter active (memory storage)")
 except ImportError:
-    logger.warning("flask-limiter not installed — rate limiting disabled. "
-                   "Run: pip install flask-limiter")
+    logger.warning("flask-limiter not installed — rate limiting disabled.")
     LIMITER_AVAILABLE = False
     class _FakeLimiter:
         def limit(self, *a, **kw):
