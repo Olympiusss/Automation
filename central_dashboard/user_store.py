@@ -108,3 +108,19 @@ def get_session(token: str) -> dict | None:
 
 def destroy_session(token: str):
     _sessions.pop(token, None)
+
+def destroy_sessions_for_user(username: str) -> int:
+    """
+    Destroy ALL active sessions for a given username.
+    Call this when a user's role or active status changes so they cannot
+    retain stale elevated access.
+    Returns the number of sessions destroyed.
+    """
+    uname_lower = username.strip().lower()
+    to_delete = [
+        t for t, s in _sessions.items()
+        if s.get("username", "").lower() == uname_lower
+    ]
+    for t in to_delete:
+        del _sessions[t]
+    return len(to_delete)

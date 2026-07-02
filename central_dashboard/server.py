@@ -90,6 +90,35 @@ def require_session(f):
         return f(*args, **kwargs)
     return decorated
 
+def require_dept(*allowed_depts):
+    """
+    Decorator: require session AND correct department (or admin/All-dept role).
+    Prevents horizontal privilege escalation across departments.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            token = _get_session_token()
+            session = get_session(token)
+            if not session:
+                return jsonify({"error": "Authentication required"}), 401
+            g.session = session
+            role = session.get("role", "")
+            dept = session.get("department", "")
+            # Admins and All-department users bypass department checks
+            if role == "admin" or dept == "All":
+                return f(*args, **kwargs)
+            if dept not in allowed_depts:
+                logger.warning(
+                    f"ESCALATION ATTEMPT blocked: user={session.get('username')!r} "
+                    f"dept={dept!r} tried to access {request.method} {request.path} "
+                    f"(requires dept: {allowed_depts}) from {request.remote_addr}"
+                )
+                return jsonify({"error": "Access denied: insufficient department permissions"}), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
 # ── Allowed static files (credentials.js removed) ────────────────────────────
 ALLOWED_STATIC = {
     'index.html', 'login.html', 'styles.css', 'auth.js', 'script.js',
@@ -119,10 +148,17 @@ def serve_static(filename):
     return send_from_directory('.', filename)
 
 # ── App HTML templates ────────────────────────────────────────────────────────
-ALLOWED_APPS = {
-    'ri-alienvault', 'ri-s1-nfr', 'ri-s1-exclusive',
-    'ri-conversion', 'pc-attendance', 'ops-dashboard',
+# App-to-department access map — enforced server-side
+APP_DEPT_MAP = {
+    'ri-alienvault':   'Research and Intelligence',
+    'ri-s1-nfr':       'Research and Intelligence',
+    'ri-s1-exclusive': 'Research and Intelligence',
+    'ri-conversion':   'Research and Intelligence',
+    'pc-attendance':   'People and Culture',
+    'ops-dashboard':   'Operations',
 }
+
+ALLOWED_APPS = set(APP_DEPT_MAP.keys())
 
 def _inject_nonce(html: str, nonce: str) -> str:
     """Inject CSP nonce into every <script> tag in an HTML document."""
@@ -140,10 +176,30 @@ def _generate_csp_nonce():
 @require_session
 def serve_app(app_id):
     if app_id == 'so-soc-dashboard':
+        # SOC dashboard: Security Operations dept only
+        dept = g.session.get("department", "")
+        role = g.session.get("role", "")
+        if role != "admin" and dept not in ("All", "Security Operations"):
+            logger.warning(
+                f"ESCALATION ATTEMPT: {g.session.get('username')!r} "
+                f"(dept={dept!r}) tried to access SOC dashboard from {request.remote_addr}"
+            )
+            return jsonify({"error": "Access denied: insufficient department permissions"}), 403
         return redirect('/soc/', code=302)
     # Strict allowlist — prevents path traversal and unauth access
     if app_id not in ALLOWED_APPS:
         abort(404)
+    # Server-side department check
+    required_dept = APP_DEPT_MAP.get(app_id)
+    dept = g.session.get("department", "")
+    role = g.session.get("role", "")
+    if required_dept and role != "admin" and dept not in ("All", required_dept):
+        logger.warning(
+            f"ESCALATION ATTEMPT: {g.session.get('username')!r} "
+            f"(dept={dept!r}) tried to access app={app_id!r} "
+            f"(requires dept={required_dept!r}) from {request.remote_addr}"
+        )
+        return jsonify({"error": "Access denied: insufficient department permissions"}), 403
     tmpl = os.path.join(os.path.dirname(__file__), 'templates', f'{app_id}.html')
     if not os.path.exists(tmpl):
         abort(404)
@@ -438,7 +494,17 @@ def admin_update_user(email):
         role       = data.get('role'),
         is_active  = data.get('is_active'),
     )
-    logger.info(f"Admin {g.session['username']} updated user: {email}")
+    # Invalidate ALL active sessions for this user if role or active status changed
+    # This prevents a demoted user from retaining elevated access until session expires
+    if 'role' in data or 'is_active' in data:
+        from user_store import destroy_sessions_for_user
+        destroyed = destroy_sessions_for_user(email)
+        logger.info(
+            f"Admin {g.session['username']} updated user: {email} — "
+            f"{destroyed} active session(s) invalidated"
+        )
+    else:
+        logger.info(f"Admin {g.session['username']} updated user: {email}")
     return jsonify({"ok": True})
 
 @app.route('/api/admin/users/<path:email>', methods=['DELETE'])
@@ -460,7 +526,7 @@ def admin_delete_user(email):
 # ════════════════════════════════════════════════════════════════════════════
 
 @app.route('/api/ops/config')
-@require_session
+@require_dept('Operations')
 def ops_config():
     try:
         from apps.ops_agent.logic import get_config
@@ -474,7 +540,7 @@ def ops_config():
 # ════════════════════════════════════════════════════════════════════════════
 
 @app.route('/api/alienvault/deployments', methods=['GET'])
-@require_session
+@require_dept('Research and Intelligence')
 @limiter.limit("10 per minute")
 def alienvault_deployments():
     """Return the list of AV client deployments so the UI can populate a dropdown."""
@@ -496,7 +562,7 @@ def alienvault_deployments():
 
 
 @app.route('/api/alienvault/fetch', methods=['POST'])
-@require_session
+@require_dept('Research and Intelligence')
 @limiter.limit("30 per minute")
 def alienvault_fetch():
     from apps.alienvault.logic import (
@@ -535,7 +601,7 @@ def alienvault_fetch():
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/api/alienvault/export', methods=['POST'])
-@require_session
+@require_dept('Research and Intelligence')
 @limiter.limit("10 per minute")
 def alienvault_export():
     from apps.alienvault.logic import (
@@ -575,7 +641,7 @@ def alienvault_export():
 # ════════════════════════════════════════════════════════════════════════════
 
 @app.route('/api/attendance/process', methods=['POST'])
-@require_session
+@require_dept('People and Culture')
 @limiter.limit("20 per minute")
 def attendance_process():
     from apps.attendance.logic import process_access_logs, compute_late_standard, compute_soc_late_absent
@@ -598,7 +664,7 @@ def attendance_process():
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/api/attendance/export', methods=['POST'])
-@require_session
+@require_dept('People and Culture')
 @limiter.limit("10 per minute")
 def attendance_export():
     from apps.attendance.logic import export_report
@@ -616,7 +682,7 @@ def attendance_export():
 # ════════════════════════════════════════════════════════════════════════════
 
 @app.route('/api/conversion/convert', methods=['POST'])
-@require_session
+@require_dept('Research and Intelligence')
 @limiter.limit("20 per minute")
 def conversion_convert():
     from apps.conversion.logic import convert_pdf_to_xlsx
@@ -637,7 +703,7 @@ def conversion_convert():
 # ════════════════════════════════════════════════════════════════════════════
 
 @app.route('/api/sentinel-nfr/sites')
-@require_session
+@require_dept('Research and Intelligence')
 def s1_nfr_sites():
     from apps.sentinel_nfr.logic import fetch_sites
     try:
@@ -647,7 +713,7 @@ def s1_nfr_sites():
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/api/sentinel-nfr/fetch', methods=['POST'])
-@require_session
+@require_dept('Research and Intelligence')
 @limiter.limit("30 per minute")
 def s1_nfr_fetch():
     from apps.sentinel_nfr.logic import (fetch_endpoints_for_site, fetch_threats_for_site,
@@ -666,7 +732,7 @@ def s1_nfr_fetch():
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/api/sentinel-nfr/export', methods=['POST'])
-@require_session
+@require_dept('Research and Intelligence')
 @limiter.limit("10 per minute")
 def s1_nfr_export():
     from apps.sentinel_nfr.logic import (fetch_endpoints_for_site, fetch_threats_for_site,
@@ -690,7 +756,7 @@ def s1_nfr_export():
 # ════════════════════════════════════════════════════════════════════════════
 
 @app.route('/api/sentinel-excl/sites')
-@require_session
+@require_dept('Research and Intelligence')
 def s1_excl_sites():
     from apps.sentinel_excl.logic import fetch_sites
     try:
@@ -700,7 +766,7 @@ def s1_excl_sites():
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/api/sentinel-excl/fetch', methods=['POST'])
-@require_session
+@require_dept('Research and Intelligence')
 @limiter.limit("30 per minute")
 def s1_excl_fetch():
     from apps.sentinel_excl.logic import (fetch_endpoints_for_site, fetch_threats_for_site,
@@ -720,7 +786,7 @@ def s1_excl_fetch():
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/api/sentinel-excl/export', methods=['POST'])
-@require_session
+@require_dept('Research and Intelligence')
 @limiter.limit("10 per minute")
 def s1_excl_export():
     from apps.sentinel_excl.logic import (fetch_endpoints_for_site, fetch_threats_for_site,
