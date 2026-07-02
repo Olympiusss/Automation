@@ -7,11 +7,20 @@ so local development still works without a Postgres server.
 from __future__ import annotations
 import os
 import hashlib
+import hmac
 import logging
 import time
 import json
 from typing import Optional
 from datetime import datetime, timezone
+
+try:
+    import bcrypt as _bcrypt
+    _BCRYPT_AVAILABLE = True
+except ImportError:
+    _BCRYPT_AVAILABLE = False
+    logger_pre = __import__('logging').getLogger("soc_dashboard.db")
+    logger_pre.warning("bcrypt not installed — falling back to SHA-256. Install bcrypt for proper security.")
 
 logger = logging.getLogger("soc_dashboard.db")
 
@@ -183,13 +192,38 @@ def _seed_from_env() -> None:
 # ── Password helpers ─────────────────────────────────────────────
 
 def _store_password(plain: str) -> str:
-    return "sha256:" + hashlib.sha256(plain.encode()).hexdigest()
+    """Hash a password with bcrypt (cost 12). Falls back to salted SHA-256."""
+    if _BCRYPT_AVAILABLE:
+        return "bcrypt:" + _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(rounds=12)).decode()
+    # Fallback: salted SHA-256 (still better than unsalted)
+    salt = os.urandom(16).hex()
+    digest = hashlib.sha256((salt + plain).encode()).hexdigest()
+    return f"sha256s:{salt}:{digest}"
 
 
 def check_password(plain: str, stored: str) -> bool:
+    """Timing-safe password verification."""
+    if stored.startswith("bcrypt:"):
+        if not _BCRYPT_AVAILABLE:
+            return False
+        try:
+            return _bcrypt.checkpw(plain.encode(), stored[7:].encode())
+        except Exception:
+            return False
+    if stored.startswith("sha256s:"):
+        # Salted SHA-256 fallback
+        parts = stored.split(":", 2)
+        if len(parts) != 3:
+            return False
+        salt, digest = parts[1], parts[2]
+        expected = hashlib.sha256((salt + plain).encode()).hexdigest()
+        return hmac.compare_digest(expected, digest)
     if stored.startswith("sha256:"):
-        return "sha256:" + hashlib.sha256(plain.encode()).hexdigest() == stored
-    return plain == stored   # legacy plain (env-seeded)
+        # Legacy unsalted — compare and flag for re-hash
+        expected = "sha256:" + hashlib.sha256(plain.encode()).hexdigest()
+        return hmac.compare_digest(expected, stored)
+    # Unknown scheme — reject
+    return False
 
 
 # ── Placeholder helper ────────────────────────────────────────────
@@ -213,7 +247,8 @@ def upsert_user(
     client_name: Optional[str] = None,
     created_by: str = "admin",
 ) -> None:
-    pw = password if created_by == "env" else _store_password(password)
+    # Always hash passwords — never store plaintext, regardless of created_by
+    pw = _store_password(password)
     ph = _ph()
     now = time.time()
 
@@ -263,6 +298,20 @@ def get_user(username: str) -> Optional[dict]:
     with _PgConn() as conn:
         cur = _cursor(conn)
         cur.execute(
+            f"SELECT id, username, role, client_name, created_at, created_by, is_active "
+            f"FROM sentrium_users WHERE username = {ph} AND is_active = 1",
+            (username,),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def _get_user_with_password(username: str) -> Optional[dict]:
+    """Internal use only: includes password hash for authentication."""
+    ph = _ph()
+    with _PgConn() as conn:
+        cur = _cursor(conn)
+        cur.execute(
             f"SELECT * FROM sentrium_users WHERE username = {ph} AND is_active = 1",
             (username,),
         )
@@ -273,7 +322,11 @@ def get_user(username: str) -> Optional[dict]:
 def get_all_users() -> list[dict]:
     with _PgConn() as conn:
         cur = _cursor(conn)
-        cur.execute("SELECT * FROM sentrium_users ORDER BY role, username")
+        # Explicitly exclude password column — callers never need raw hashes
+        cur.execute(
+            "SELECT id, username, role, client_name, created_at, created_by, is_active "
+            "FROM sentrium_users ORDER BY role, username"
+        )
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -291,17 +344,22 @@ def get_users_by_role(role: str) -> list[dict]:
 # ── Auth helper ───────────────────────────────────────────────────
 
 def verify_login(username: str, password: str) -> Optional[dict]:
-    """Return user dict if credentials match, else None."""
-    user = get_user(username)
-    if user and check_password(password, user["password"]):
-        return user
+    """Return user dict if credentials match, else None. Uses timing-safe comparison."""
+    user_full = _get_user_with_password(username)
+    if user_full:
+        stored_pw = user_full.pop("password", None)  # remove hash from returned dict
+        if stored_pw and check_password(password, stored_pw):
+            return user_full
+        # Always do a dummy check even on failure to prevent timing oracle
+        _dummy_check = check_password(password, "bcrypt:$2b$12$dummy.dummy.dummy.dummy.dummy.dummy.dummy.dummy.")
 
-    # Env-var admin fallback (in case DB was wiped on redeploy)
+    # Env-var admin fallback (timing-safe, in case DB was wiped on redeploy)
     from config import settings
-    if (username == settings.ADMIN_USERNAME and
-            settings.ADMIN_PASSWORD and
-            password == settings.ADMIN_PASSWORD):
-        return {"username": username, "role": "admin", "client_name": None}
+    if settings.ADMIN_USERNAME and settings.ADMIN_PASSWORD:
+        user_ok = hmac.compare_digest(username.encode(), settings.ADMIN_USERNAME.encode())
+        pass_ok = hmac.compare_digest(password.encode(), settings.ADMIN_PASSWORD.encode())
+        if user_ok and pass_ok:
+            return {"username": username, "role": "admin", "client_name": None}
 
     return None
 

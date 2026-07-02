@@ -674,9 +674,9 @@ async def websocket_endpoint(ws: WebSocket):
 
     role        = get_session_role(token)
     client_name = get_session_client(token)
-    await ws_manager.connect(ws)
+    await ws_manager.connect(ws, role=role, client_name=client_name)
 
-    # Send initial state, filtered by role
+    # Send initial state, filtered by role (manager handles ongoing broadcasts)
     if aggregator.cached_state:
         state_data = aggregator.cached_state.model_dump()
         if role == "client" and client_name:

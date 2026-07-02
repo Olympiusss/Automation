@@ -65,6 +65,32 @@ except ImportError:
 
 # ── Session auth helpers ──────────────────────────────────────────────────────
 from user_store import get_session, create_session, destroy_session, verify_password
+from urllib.parse import urlparse
+
+# SSRF protection: AlienVault dep_url must be from known AV domains only
+_ALLOWED_AV_DOMAINS = ('alienvault.cloud', 'alienvault.com', 'cybervergent-central.alienvault.cloud')
+
+def _validate_av_url(url: str) -> bool:
+    """Reject dep_url values that are not legitimate AlienVault HTTPS endpoints."""
+    if not url:
+        return True  # empty = use global fetch, always safe
+    try:
+        p = urlparse(url)
+        if p.scheme != 'https':
+            return False
+        host = p.netloc.lower().split(':')[0]
+        return any(host == d or host.endswith('.' + d) for d in _ALLOWED_AV_DOMAINS)
+    except Exception:
+        return False
+
+# Valid departments for whitelist checks
+_VALID_DEPTS = {
+    'Security Testing', 'Security Operations', 'Brand & Marketing',
+    'People and Culture', 'Research and Intelligence', 'IT Infrastructure',
+    'Operations', 'Finance', 'Sales', 'Customer Success',
+    'Security Engineering', 'Portfolio Management', 'All',
+}
+
 
 # ── DB init (runs on startup — creates sentrium_users table if absent) ────────
 try:
@@ -375,6 +401,7 @@ def auth_self_password():
     return jsonify({"ok": True, "message": "Password updated. Please log in with your new password."})
 
 @app.route('/api/auth/me', methods=['GET'])
+@limiter.limit("60 per minute")
 def auth_me():
     """Return current session info (used by script.js on page load)."""
     token = _get_session_token()
@@ -397,37 +424,25 @@ def auth_status():
         return err
     result = {
         "database_url_set": bool(os.environ.get("DATABASE_URL")),
-        "url_prefix": os.environ.get("DATABASE_URL", "")[:15] + "...",
         "source": "unavailable",
         "users_loaded": 0,
         "error": None,
     }
     try:
-        from db_users import list_users, is_available, _get_pool, _password_column, _conn, _last_pool_error
+        from db_users import list_users, is_available, _get_pool
         result["db_url_available"] = is_available()
         pool = _get_pool()
         result["pool_created"] = pool is not None
         if pool:
             result["source"] = "postgresql"
-            try:
-                with _conn() as conn:
-                    pw_col = _password_column(conn)
-                    result["password_column"] = pw_col
-                    with conn.cursor() as cur:
-                        cur.execute("SELECT COUNT(*) as n FROM sentrium_users")
-                        result["raw_row_count"] = cur.fetchone()["n"]
-            except Exception as e:
-                result["query_error"] = str(e)
             users = list_users()
             result["users_loaded"] = len(users)
-            # Return count only — never expose email list
             result["user_count"] = len(users)
         else:
             result["source"] = "json_fallback"
-            result["pool_error"] = _last_pool_error
             result["error"] = "PostgreSQL pool could not be created"
-    except Exception as e:
-        result["error"] = str(e)
+    except Exception:
+        result["error"] = "Status check failed"
     return jsonify(result)
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -440,6 +455,7 @@ def _require_admin(session):
 
 @app.route('/api/admin/users', methods=['GET'])
 @require_session
+@limiter.limit("30 per minute")
 def admin_list_users():
     """List all users (no passwords)."""
     err = _require_admin(g.session)
@@ -485,8 +501,29 @@ def admin_update_user(email):
     data = request.get_json(silent=True) or {}
     from db_users import update_user, update_password
 
+    # Validate password complexity if updating
     if 'password' in data:
-        update_password(email, data['password'])
+        new_pw = data['password']
+        if len(new_pw) < 8:
+            return jsonify({"error": "Password must be at least 8 characters"}), 400
+        import re
+        if not re.search(r'[A-Z]', new_pw):
+            return jsonify({"error": "Password must contain at least one uppercase letter"}), 400
+        if not re.search(r'[0-9]', new_pw):
+            return jsonify({"error": "Password must contain at least one digit"}), 400
+        if not re.search(r'[^A-Za-z0-9]', new_pw):
+            return jsonify({"error": "Password must contain at least one special character"}), 400
+        update_password(email, new_pw)
+
+    # Validate role if updating
+    new_role = data.get('role')
+    if new_role is not None and new_role not in ('dept_user', 'admin'):
+        return jsonify({"error": "Role must be dept_user or admin"}), 400
+
+    # Validate department if updating
+    new_dept = data.get('department')
+    if new_dept is not None and new_dept not in _VALID_DEPTS:
+        return jsonify({"error": f"Invalid department value"}), 400
 
     ok = update_user(
         email,
@@ -509,10 +546,13 @@ def admin_update_user(email):
 
 @app.route('/api/admin/users/<path:email>', methods=['DELETE'])
 @require_session
+@limiter.limit("10 per minute")
 def admin_delete_user(email):
     """Permanently delete a user."""
     err = _require_admin(g.session)
     if err: return err
+    if '@' not in email:
+        return jsonify({"error": "Invalid email"}), 400
     if email.lower() == g.session['username'].lower():
         return jsonify({"error": "Cannot delete your own account"}), 400
     from db_users import delete_user
@@ -577,6 +617,10 @@ def alienvault_fetch():
         end_ms   = d.get('end_ms')
         if start_ms is None or end_ms is None:
             return jsonify({"error": "start_ms and end_ms are required"}), 400
+        # SSRF protection: validate dep_url is a legitimate AlienVault endpoint
+        if dep_url and not _validate_av_url(dep_url):
+            logger.warning(f"SSRF attempt blocked: dep_url={dep_url!r} from {request.remote_addr}")
+            return jsonify({"error": "Invalid deployment URL"}), 400
         token = get_token()
         if dep_url:
             alarms = fetch_alarms_for_deployment(dep_url, token, int(start_ms), int(end_ms))
@@ -609,10 +653,21 @@ def alienvault_export():
         fetch_alarms_for_deployment, fetch_events_for_deployment,
         process_alarms, process_events, export_to_excel,
     )
-    d        = request.get_json(force=True)
-    dep_url  = d.get('dep_url', '').strip()
-    start_ms = d['start_ms']
-    end_ms   = d['end_ms']
+    d        = request.get_json(force=True, silent=True) or {}
+    dep_url  = str(d.get('dep_url', '')).strip()
+    start_ms = d.get('start_ms')
+    end_ms   = d.get('end_ms')
+    if start_ms is None or end_ms is None:
+        return jsonify({"error": "start_ms and end_ms are required"}), 400
+    # Type-cast and SSRF protection
+    try:
+        start_ms = int(start_ms)
+        end_ms   = int(end_ms)
+    except (TypeError, ValueError):
+        return jsonify({"error": "start_ms and end_ms must be integers"}), 400
+    if dep_url and not _validate_av_url(dep_url):
+        logger.warning(f"SSRF attempt blocked (export): dep_url={dep_url!r} from {request.remote_addr}")
+        return jsonify({"error": "Invalid deployment URL"}), 400
     try:
         token = get_token()
         if dep_url:

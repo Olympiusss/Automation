@@ -33,7 +33,8 @@ def _parse_json_creds(env_key: str, default: str = "{}") -> dict:
             return {}
         return result
     except json.JSONDecodeError as e:
-        logger.error(f"{env_key}: JSON parse failed — {e} | raw value: {raw!r}")
+        # SECURITY: Never log the raw value — it may contain plaintext passwords
+        logger.error(f"{env_key}: JSON parse failed — {e} (check the env var format: must be valid JSON object)")
         return {}
 
 class Settings:
@@ -85,7 +86,9 @@ class Settings:
 
     @property
     def SESSION_TIMEOUT_MINUTES(self) -> int:
-        return int(os.getenv("SESSION_TIMEOUT_MINUTES", "480"))
+        # Default 60 minutes — NIST SP 800-63B recommends ≤15 min for high-assurance apps
+        # Override via SESSION_TIMEOUT_MINUTES env var
+        return int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
 
     @property
     def REFRESH_INTERVAL(self) -> int:
@@ -102,7 +105,13 @@ class Settings:
     @property
     def SECRET_KEY(self) -> str:
         # SOC dashboard uses SOC_SECRET_KEY exclusively
-        return os.getenv("SOC_SECRET_KEY", "sentrium-soc-dashboard-secret-key-change-me")
+        key = os.getenv("SOC_SECRET_KEY", "")
+        if not key or key == "sentrium-soc-dashboard-secret-key-change-me":
+            raise RuntimeError(
+                "SECURITY: SOC_SECRET_KEY env var is not set or uses the default value. "
+                "Set a strong random secret (e.g. `openssl rand -hex 32`) before deploying."
+            )
+        return key
 
     @property
     def CLIENT_CREDENTIALS(self) -> dict[str, str]:
@@ -145,18 +154,16 @@ class Settings:
         return bool(self.TOTP_SECRET)
 
     def log_startup_summary(self) -> None:
-        """Log a clear summary of resolved credentials at startup."""
-        logger.info("─── SOC Config resolved ───────────────────────────────")
-        logger.info(f"  S1 base URL     : {self.S1_BASE_URL}")
-        logger.info(f"  S1 token        : {'✓ set' if self.S1_API_TOKEN else '✗ MISSING — S1 data unavailable'}")
-        logger.info(f"  AV subdomain    : {self.AV_SUBDOMAIN}")
-        logger.info(f"  AV client ID    : {'✓ set' if self.AV_CLIENT_ID else '✗ MISSING — AV data unavailable'}")
-        logger.info(f"  AV client secret: {'✓ set' if self.AV_CLIENT_SECRET else '✗ MISSING'}")
-        logger.info(f"  Admin username  : {self.ADMIN_USERNAME}")
-        logger.info(f"  Clients         : {list(self.CLIENT_CREDENTIALS.keys()) or '(none)'}")
-        logger.info(f"  Client name map : {dict(self.CLIENT_NAME_MAP) or '(empty — clients will use login username)'}")
-        logger.info(f"  Analysts        : {list(self.ANALYST_CREDENTIALS.keys()) or '(none)'}")
+        """Log a safe startup summary — no usernames, no credentials."""
+        logger.info("─── SOC Config resolved ─────────────────────────────")
+        logger.info(f"  S1 token        : {'set' if self.S1_API_TOKEN else 'MISSING — S1 data unavailable'}")
+        logger.info(f"  AV configured   : {'yes' if self.av_configured() else 'no — AV data unavailable'}")
+        logger.info(f"  TOTP configured : {'yes' if self.totp_configured() else 'no'}")
+        logger.info(f"  Admin creds     : {'set' if self.ADMIN_PASSWORD else 'MISSING'}")
+        logger.info(f"  Client accounts : {len(self.CLIENT_CREDENTIALS)}")
+        logger.info(f"  Analyst accounts: {len(self.ANALYST_CREDENTIALS)}")
         logger.info(f"  Refresh interval: {self.REFRESH_INTERVAL}s")
+        logger.info(f"  Session timeout : {self.SESSION_TIMEOUT_MINUTES} min")
         logger.info("────────────────────────────────────────────────────────")
 
     # ── External Solution SSO ───────────────────────────────────────────
