@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 import jwt as pyjwt
 import uuid
 import time
@@ -102,6 +103,42 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
+# ── Security Headers Middleware ────────────────────────────────
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"]  = "nosniff"
+        response.headers["X-Frame-Options"]          = "DENY"
+        response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"]       = "camera=(), microphone=(), geolocation=()"
+        # HSTS on Railway (always HTTPS)
+        if os.environ.get("RAILWAY_ENVIRONMENT") == "production":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+
+# ── Brute-force tracking (per IP) ──────────────────────────────
+_login_attempts: dict[str, list[float]] = {}
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_WINDOW    = 900  # 15 minutes
+
+def _is_rate_limited(ip: str) -> bool:
+    """Return True if this IP has exceeded the login attempt limit."""
+    now  = time.time()
+    hist = [t for t in _login_attempts.get(ip, []) if now - t < LOCKOUT_WINDOW]
+    _login_attempts[ip] = hist
+    return len(hist) >= MAX_LOGIN_ATTEMPTS
+
+def _record_failed_attempt(ip: str):
+    now = time.time()
+    _login_attempts.setdefault(ip, []).append(now)
+
+def _clear_attempts(ip: str):
+    _login_attempts.pop(ip, None)
+
+
 # ── Global error handler — logs full traceback to Railway ──────
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse as _JSONResponse
@@ -110,10 +147,11 @@ from starlette.requests import Request as _Request
 @app.exception_handler(Exception)
 async def global_exception_handler(request: _Request, exc: Exception):
     tb = traceback.format_exc()
-    logger.error(f"Unhandled exception on {request.method} {request.url}:\n{tb}")
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}:\n{tb}")
+    # Never expose internal details to the client
     return _JSONResponse(
         status_code=500,
-        content={"error": str(exc), "type": type(exc).__name__, "path": str(request.url)},
+        content={"error": "Internal server error"},
     )
 
 
@@ -180,56 +218,71 @@ async def login_submit(
     password: str = Form(""),
 ):
     """
-    Authenticate and redirect to the correct view based on role:
-      admin    → /  (client grid)
-      analyst  → /analyst
-      client   → /client/{name}
-    TOTP is disabled per policy — credential check only.
+    Authenticate with brute-force protection.
+    Max 5 attempts per IP per 15 minutes. 0.8s delay on failure.
     """
+    ip       = request.client.host if request.client else "unknown"
     username = username.strip()
+
+    # Rate limit check
+    if _is_rate_limited(ip):
+        logger.warning(f"SOC login rate-limited: IP={ip}")
+        return templates.TemplateResponse(
+            request=request, name="login.html",
+            context={
+                "step": "credentials",
+                "error": "Too many failed attempts. Please try again in 15 minutes.",
+                "config_error": None, "username": "",
+            },
+        )
 
     # ── Admin ────────────────────────────────────────────────────
     if verify_admin_password(username, password):
+        _clear_attempts(ip)
         token = create_session(role="admin", username=username)
-        resp = RedirectResponse(url="/", status_code=302)
+        resp  = RedirectResponse(url="/", status_code=302)
         resp.set_cookie(SESSION_COOKIE, token, httponly=True,
-                        samesite="lax", max_age=8 * 60 * 60)
-        logger.info(f"Admin login: {username}")
+                        samesite="lax", secure=True, max_age=8 * 60 * 60)
+        logger.info(f"Admin login: {username} from {ip}")
         return resp
 
     # ── Analyst ──────────────────────────────────────────────────
     if verify_analyst_password(username, password):
+        _clear_attempts(ip)
         token = create_session(role="analyst", username=username)
-        resp = RedirectResponse(url="/analyst", status_code=302)
+        resp  = RedirectResponse(url="/analyst", status_code=302)
         resp.set_cookie(SESSION_COOKIE, token, httponly=True,
-                        samesite="lax", max_age=8 * 60 * 60)
-        logger.info(f"Analyst login: {username}")
+                        samesite="lax", secure=True, max_age=8 * 60 * 60)
+        logger.info(f"Analyst login: {username} from {ip}")
         return resp
 
     # ── Client ───────────────────────────────────────────────────
     if verify_client_password(username, password):
+        _clear_attempts(ip)
         client_name = resolve_client_name(username)
         token = create_session(role="client", client_name=client_name, username=username)
-        resp = RedirectResponse(url=f"/client/{client_name}", status_code=302)
+        resp  = RedirectResponse(url=f"/client/{client_name}", status_code=302)
         resp.set_cookie(SESSION_COOKIE, token, httponly=True,
-                        samesite="lax", max_age=8 * 60 * 60)
-        logger.info(f"Client login: {username} → {client_name}")
+                        samesite="lax", secure=True, max_age=8 * 60 * 60)
+        logger.info(f"Client login: {username} → {client_name} from {ip}")
         return resp
 
     # ── Invalid ──────────────────────────────────────────────────
-    logger.warning(f"Failed SOC login attempt: '{username}'")
+    _record_failed_attempt(ip)
+    logger.warning(f"Failed SOC login: username={username!r} IP={ip}")
+    await asyncio.sleep(0.8)  # Blunt brute-force timing
     return templates.TemplateResponse(
         request=request, name="login.html",
         context={
             "step": "credentials",
             "error": "Invalid credentials. Please check your username and password.",
             "config_error": None,
-            "username": username,
+            "username": "",  # Don't echo username back — prevents enumeration hint
         },
     )
 
 
-@app.get("/logout")
+@app.api_route("/logout", methods=["GET", "POST"])
 async def logout(request: Request):
     """Destroy the SOC session and return to the login page."""
     destroy_session(_get_token(request))
@@ -491,10 +544,27 @@ async def sso_relay(request: Request):
 async def api_state(request: Request):
     if not _authenticated(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    role  = _role(request)
     state = aggregator.cached_state
-    if state:
-        return JSONResponse(state.model_dump())
-    return JSONResponse({"error": "No data yet."}, status_code=503)
+    if not state:
+        return JSONResponse({"error": "No data yet."}, status_code=503)
+    # Clients only see their own data — never other clients'
+    if role == "client":
+        client_name = _client_name(request)
+        if not client_name:
+            return JSONResponse({"error": "Forbidden"}, status_code=403)
+        client_obj = next(
+            (c for c in state.clients if c.name.lower() == client_name.lower()), None
+        )
+        if not client_obj:
+            return JSONResponse({"error": "No data for your account"}, status_code=404)
+        # Return a state with only this client's data
+        filtered = state.model_dump()
+        filtered["clients"] = [client_obj.model_dump()]
+        logger.info(f"RBAC: client '{client_name}' received filtered /api/state (1 client)")
+        return JSONResponse(filtered)
+    # Admin and Analyst see all clients
+    return JSONResponse(state.model_dump())
 
 
 @app.get("/api/client/{client_name}/data")
@@ -539,15 +609,14 @@ async def health():
 
 
 @app.get("/api/debug/ping")
-async def debug_ping():
-    """Public — no auth needed. Shows credential config status to diagnose login failures."""
+async def debug_ping(request: Request):
+    """Auth diagnostic — admin only to prevent user enumeration."""
+    if not _require_role(request, "admin"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
     return JSONResponse({
-        "admin_username":      settings.ADMIN_USERNAME,
         "admin_password_set":  bool(settings.ADMIN_PASSWORD),
         "analyst_count":       len(settings.ANALYST_CREDENTIALS),
-        "analyst_usernames":   list(settings.ANALYST_CREDENTIALS.keys()),
         "client_count":        len(settings.CLIENT_CREDENTIALS),
-        "client_usernames":    list(settings.CLIENT_CREDENTIALS.keys()),
         "totp_required":       settings.totp_configured(),
         "session_timeout_min": settings.SESSION_TIMEOUT_MINUTES,
     })
@@ -562,7 +631,6 @@ async def debug_auth(request: Request):
     analyst_creds = settings.ANALYST_CREDENTIALS
     name_map      = settings.CLIENT_NAME_MAP
     return JSONResponse({
-        "admin_username":     settings.ADMIN_USERNAME,
         "admin_password_set": bool(settings.ADMIN_PASSWORD),
         "totp_configured":    settings.totp_configured(),
         "client_count":       len(client_creds),
@@ -570,14 +638,13 @@ async def debug_auth(request: Request):
         "client_name_map":    name_map,
         "analyst_count":      len(analyst_creds),
         "analyst_usernames":  list(analyst_creds.keys()),
-        "raw_analyst_env":    repr(os.getenv("ANALYST_CREDENTIALS", "NOT_SET")[:80]),
-        "raw_client_env":     repr(os.getenv("CLIENT_CREDENTIALS",  "NOT_SET")[:80]),
     })
 
 
 @app.get("/api/debug/av")
 async def debug_av(request: Request):
-    if not _authenticated(request):
+    """AV debug — admin only."""
+    if not _require_role(request, "admin"):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     try:
         deployments = await aggregator.av.fetch_deployments()
@@ -586,12 +653,9 @@ async def debug_av(request: Request):
         return JSONResponse({"error": str(e)}, status_code=500)
     sample_alarms = alarms[:3] if alarms else []
     return JSONResponse({
-        "av_base_url": aggregator.av.base_url,
         "deployment_count": len(deployments),
-        "deployments_raw": deployments[:5],
         "alarm_count": len(alarms),
         "alarm_keys": list(sample_alarms[0].keys()) if sample_alarms else [],
-        "alarms_sample": sample_alarms,
     })
 
 
@@ -601,15 +665,50 @@ async def debug_av(request: Request):
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    # Authenticate via session cookie before accepting the connection
+    token = ws.cookies.get(SESSION_COOKIE)
+    if not validate_session(token):
+        await ws.close(code=1008)  # Policy Violation — not authenticated
+        logger.warning(f"WebSocket rejected: no valid session from {ws.client}")
+        return
+
+    role        = get_session_role(token)
+    client_name = get_session_client(token)
     await ws_manager.connect(ws)
+
+    # Send initial state, filtered by role
     if aggregator.cached_state:
-        await ws_manager.send_to(ws, aggregator.cached_state.model_dump())
+        state_data = aggregator.cached_state.model_dump()
+        if role == "client" and client_name:
+            # Clients only receive their own data
+            client_obj = next(
+                (c for c in aggregator.cached_state.clients
+                 if c.name.lower() == client_name.lower()), None
+            )
+            if client_obj:
+                state_data = {**state_data, "clients": [client_obj.model_dump()]}
+            else:
+                state_data = {**state_data, "clients": []}
+        await ws_manager.send_to(ws, state_data)
+
     try:
         while True:
             data = await ws.receive_text()
             if data.startswith("select:"):
-                client_name = data[7:].strip()
-                await _send_client_detail(ws, client_name)
+                requested_client = data[7:].strip()
+                # Clients can only select themselves
+                if role == "client":
+                    if client_name and requested_client.lower() != client_name.lower():
+                        logger.warning(
+                            f"WS ESCALATION ATTEMPT: client '{client_name}' "
+                            f"tried to select '{requested_client}'"
+                        )
+                        await ws_manager.send_to(ws, {
+                            "type": "error",
+                            "message": "Access denied"
+                        })
+                        continue
+                await _send_client_detail(ws, requested_client)
     except WebSocketDisconnect:
         ws_manager.disconnect(ws)
     except Exception:

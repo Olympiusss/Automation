@@ -7,6 +7,7 @@ from __future__ import annotations
 import secrets
 import time
 import logging
+import hmac
 from typing import Optional
 import pyotp
 from config import settings
@@ -19,24 +20,33 @@ _sessions: dict[str, dict] = {}
 # ── Password verification ──────────────────────────────────────
 
 def verify_admin_password(username: str, password: str) -> bool:
-    """Verify admin credentials."""
-    return username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD
+    """Verify admin credentials using timing-safe comparison."""
+    user_ok = hmac.compare_digest(
+        username.encode(), settings.ADMIN_USERNAME.encode()
+    )
+    pass_ok = hmac.compare_digest(
+        password.encode(), settings.ADMIN_PASSWORD.encode()
+    )
+    return user_ok and pass_ok
 
 def verify_client_password(username: str, password: str) -> bool:
-    """Verify a client user's credentials."""
-    creds = settings.CLIENT_CREDENTIALS
+    """Verify a client user's credentials using timing-safe comparison."""
+    creds  = settings.CLIENT_CREDENTIALS
     stored = creds.get(username)
-    if stored and stored == password:
-        return True
-    return False
+    if not stored:
+        # Dummy compare to prevent timing oracle on username existence
+        hmac.compare_digest(password.encode(), b"dummy")
+        return False
+    return hmac.compare_digest(password.encode(), stored.encode())
 
 def verify_analyst_password(username: str, password: str) -> bool:
-    """Verify an analyst user's credentials."""
-    creds = settings.ANALYST_CREDENTIALS
+    """Verify an analyst user's credentials using timing-safe comparison."""
+    creds  = settings.ANALYST_CREDENTIALS
     stored = creds.get(username)
-    if stored and stored == password:
-        return True
-    return False
+    if not stored:
+        hmac.compare_digest(password.encode(), b"dummy")
+        return False
+    return hmac.compare_digest(password.encode(), stored.encode())
 
 def resolve_client_name(username: str) -> str | None:
     """Return the real client display name for this username.
@@ -55,8 +65,11 @@ def resolve_client_name(username: str) -> str | None:
 def verify_totp(code: str) -> bool:
     """Verify a 6-digit TOTP code against the configured secret."""
     if not settings.totp_configured():
-        logger.warning("TOTP not configured — authentication bypassed")
-        return True
+        logger.critical(
+            "TOTP not configured — admin login bypasses MFA. "
+            "Set TOTP_SECRET env var to enable MFA."
+        )
+        return False  # Fail CLOSED — do not bypass auth on misconfiguration
     try:
         totp = pyotp.TOTP(settings.TOTP_SECRET)
         return totp.verify(code, valid_window=1)
