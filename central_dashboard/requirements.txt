@@ -13,7 +13,6 @@ xlsxwriter
 pdfplumber
 fpdf2
 python-docx
-pyotp
 Pillow
 websockets
 aiofiles

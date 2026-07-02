@@ -1,8 +1,8 @@
 """
 Sentrium Enterprise — PostgreSQL User Store
 ==========================================
-Simple schema: email + plain password + department + role.
-Passwords are stored as-is in the DB — add users directly via Railway GUI.
+Simple schema: email + bcrypt-hashed password + department + role.
+All passwords are bcrypt-hashed before storage (min cost 12).
 Handles both 'password' and 'password_hash' column names for compatibility.
 """
 from __future__ import annotations
@@ -172,17 +172,23 @@ def list_users() -> list[dict]:
         logger.error(f"list_users failed: {e}")
         return []
 
+def _hash_password(plaintext: str) -> str:
+    """Return a bcrypt hash of the given plaintext password."""
+    import bcrypt
+    return bcrypt.hashpw(plaintext.encode(), bcrypt.gensalt(rounds=12)).decode()
+
 def add_user(email: str, password: str,
              department: str = "All", role: str = "dept_user") -> tuple[bool, str]:
-    """Insert a new user."""
+    """Insert a new user. Password is bcrypt-hashed before storage."""
     try:
+        hashed = _hash_password(password)
         with _conn() as conn:
             pw_col = _password_column(conn)
             with conn.cursor() as cur:
                 cur.execute(
                     f"""INSERT INTO sentrium_users (email, {pw_col}, department, role)
                         VALUES (LOWER(%s), %s, %s, %s)""",
-                    (email.strip(), password, department, role)
+                    (email.strip(), hashed, department, role)
                 )
         return True, ""
     except psycopg2.errors.UniqueViolation:
@@ -214,13 +220,15 @@ def update_user(email: str, department: str = None,
         logger.error(f"update_user failed: {e}"); return False
 
 def update_password(email: str, new_password: str) -> bool:
+    """Update a user's password. New password is bcrypt-hashed before storage."""
     try:
+        hashed = _hash_password(new_password)
         with _conn() as conn:
             pw_col = _password_column(conn)
             with conn.cursor() as cur:
                 cur.execute(
                     f"UPDATE sentrium_users SET {pw_col} = %s WHERE LOWER(email) = LOWER(%s)",
-                    (new_password, email.strip())
+                    (hashed, email.strip())
                 )
                 return cur.rowcount > 0
     except Exception as e:

@@ -103,10 +103,19 @@ def serve_static(filename):
     return send_from_directory('.', filename)
 
 # ── App HTML templates ────────────────────────────────────────────────────────
+ALLOWED_APPS = {
+    'ri-alienvault', 'ri-s1-nfr', 'ri-s1-exclusive',
+    'ri-conversion', 'pc-attendance', 'ops-dashboard',
+}
+
 @app.route('/apps/<app_id>')
+@require_session
 def serve_app(app_id):
     if app_id == 'so-soc-dashboard':
         return redirect('/soc/', code=302)
+    # Strict allowlist — prevents path traversal and unauth access
+    if app_id not in ALLOWED_APPS:
+        abort(404)
     tmpl = os.path.join(os.path.dirname(__file__), 'templates', f'{app_id}.html')
     if not os.path.exists(tmpl):
         abort(404)
@@ -152,13 +161,13 @@ def auth_verify():
         SESSION_COOKIE, token,
         httponly=True,
         samesite="Lax",
-        secure=os.environ.get("RAILWAY_ENVIRONMENT") == "production",
+        secure=True,          # Always enforce Secure — Railway always serves HTTPS
         max_age=8 * 60 * 60,
         path="/",
     )
     return resp
 
-@app.route('/api/auth/logout', methods=['POST', 'GET'])
+@app.route('/api/auth/logout', methods=['POST'])
 def auth_logout():
     """Destroy the server-side session and clear the cookie."""
     token = _get_session_token()
@@ -188,6 +197,13 @@ def auth_change_password():
         return jsonify({"error": "New passwords do not match"}), 400
     if len(new_password) < 8:
         return jsonify({"error": "New password must be at least 8 characters"}), 400
+    import re
+    if not re.search(r'[A-Z]', new_password):
+        return jsonify({"error": "Password must contain at least one uppercase letter"}), 400
+    if not re.search(r'[0-9]', new_password):
+        return jsonify({"error": "Password must contain at least one digit"}), 400
+    if not re.search(r'[^A-Za-z0-9]', new_password):
+        return jsonify({"error": "Password must contain at least one special character"}), 400
     if new_password == current_password:
         return jsonify({"error": "New password must differ from current password"}), 400
 
@@ -241,12 +257,20 @@ def auth_self_password():
         return jsonify({"error": "New passwords do not match"}), 400
     if len(new_password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
+    import re
+    if not re.search(r'[A-Z]', new_password):
+        return jsonify({"error": "Password must contain at least one uppercase letter"}), 400
+    if not re.search(r'[0-9]', new_password):
+        return jsonify({"error": "Password must contain at least one digit"}), 400
+    if not re.search(r'[^A-Za-z0-9]', new_password):
+        return jsonify({"error": "Password must contain at least one special character"}), 400
     if new_password == current_password:
         return jsonify({"error": "New password must differ from current password"}), 400
 
     # Verify current credentials — this is the identity proof
     user = verify_password(username, current_password)
     if not user:
+        time.sleep(0.5)   # Slow brute-force attempts
         logger.warning(f"Self-password change failed for '{username}' from {request.remote_addr}")
         return jsonify({"error": "Username or current password is incorrect"}), 401
 
@@ -279,24 +303,24 @@ def auth_me():
     })
 
 @app.route('/api/auth/status', methods=['GET'])
+@require_session
 def auth_status():
-    """Detailed diagnostic — shows DB connection state, errors, and user count."""
+    """Diagnostic — admin only. Shows DB state and user count (no passwords)."""
+    err = _require_admin(g.session)
+    if err:
+        return err
     result = {
         "database_url_set": bool(os.environ.get("DATABASE_URL")),
-        "url_prefix": os.environ.get("DATABASE_URL", "")[:15] + "...",  # show scheme only
+        "url_prefix": os.environ.get("DATABASE_URL", "")[:15] + "...",
         "source": "unavailable",
         "users_loaded": 0,
-        "emails": [],
         "error": None,
     }
     try:
         from db_users import list_users, is_available, _get_pool, _password_column, _conn, _last_pool_error
         result["db_url_available"] = is_available()
-
-        # Test raw connection
         pool = _get_pool()
         result["pool_created"] = pool is not None
-
         if pool:
             result["source"] = "postgresql"
             try:
@@ -308,17 +332,16 @@ def auth_status():
                         result["raw_row_count"] = cur.fetchone()["n"]
             except Exception as e:
                 result["query_error"] = str(e)
-
             users = list_users()
             result["users_loaded"] = len(users)
-            result["emails"] = [u.get("email") for u in users]
+            # Return count only — never expose email list
+            result["user_count"] = len(users)
         else:
             result["source"] = "json_fallback"
             result["pool_error"] = _last_pool_error
-            result["error"] = "PostgreSQL pool could not be created — check pool_error field"
+            result["error"] = "PostgreSQL pool could not be created"
     except Exception as e:
         result["error"] = str(e)
-
     return jsonify(result)
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -451,18 +474,18 @@ def alienvault_fetch():
         fetch_alarms_for_deployment, fetch_events_for_deployment,
         process_alarms, process_events,
     )
-    d        = request.get_json(force=True)
-    dep_url  = d.get('dep_url', '').strip()
-    start_ms = d['start_ms']
-    end_ms   = d['end_ms']
     try:
+        d        = request.get_json(force=True, silent=True) or {}
+        dep_url  = str(d.get('dep_url', '')).strip()
+        start_ms = d.get('start_ms')
+        end_ms   = d.get('end_ms')
+        if start_ms is None or end_ms is None:
+            return jsonify({"error": "start_ms and end_ms are required"}), 400
         token = get_token()
         if dep_url:
-            # Per-client mode: fetch only from the selected deployment
-            alarms = fetch_alarms_for_deployment(dep_url, token, start_ms, end_ms)
-            events = fetch_events_for_deployment(dep_url, token, start_ms, end_ms)
+            alarms = fetch_alarms_for_deployment(dep_url, token, int(start_ms), int(end_ms))
+            events = fetch_events_for_deployment(dep_url, token, int(start_ms), int(end_ms))
         else:
-            # Global mode: fetch from central subdomain
             headers = {'Authorization': f'Bearer {token}'}
             params  = {'timestamp_received_gte': start_ms,
                        'timestamp_received_lte': end_ms,
@@ -697,10 +720,8 @@ IS_PRODUCTION = os.environ.get("RAILWAY_ENVIRONMENT") == "production"
 def security_headers(response):
     # Prevent MIME sniffing
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    # Clickjacking protection
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-    # Legacy XSS filter (belt-and-suspenders)
-    response.headers['X-XSS-Protection'] = '1; mode=block'
+    # Clickjacking protection — DENY is more restrictive than SAMEORIGIN
+    response.headers['X-Frame-Options'] = 'DENY'
     # Referrer leakage control
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     # Restrict browser features
