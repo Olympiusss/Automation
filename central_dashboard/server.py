@@ -40,13 +40,19 @@ app.secret_key = _secret
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
+    # Use PostgreSQL as rate-limit backend if available (survives restarts)
+    _db_url = os.environ.get("DATABASE_URL", "")
+    if _db_url.startswith("postgres://"):
+        _db_url = "postgresql://" + _db_url[len("postgres://"):]
+    _limiter_storage = f"postgresql+psycopg2://{_db_url.split('://',1)[-1]}" if _db_url else "memory://"
     limiter = Limiter(
         get_remote_address,
         app=app,
         default_limits=["200 per minute"],
-        storage_uri="memory://",
+        storage_uri=_limiter_storage if _db_url else "memory://",
     )
     LIMITER_AVAILABLE = True
+    logger.info(f"Rate limiter storage: {'postgresql' if _db_url else 'memory'}")
 except ImportError:
     logger.warning("flask-limiter not installed — rate limiting disabled. "
                    "Run: pip install flask-limiter")
@@ -145,7 +151,7 @@ def auth_verify():
     if not user:
         logger.warning(f"Failed login attempt for username: {username!r} from {request.remote_addr}")
         # Generic message — do not reveal whether username exists
-        time.sleep(0.3)  # Slight delay to blunt brute-force timing
+        time.sleep(0.8)  # Blunt brute-force timing attacks
         return jsonify({"ok": False, "error": "Invalid credentials"}), 401
 
     token = create_session(user)
