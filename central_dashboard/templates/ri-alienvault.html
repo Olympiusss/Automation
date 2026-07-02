@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlienVault USM Central Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #080d18; --card: #0f1827; --card2: #141d2e; --border: rgba(255,255,255,0.07);
+    --accent: #3b82f6; --accent2: #06b6d4; --text: #f1f5f9; --muted: #94a3b8;
+    --red: #ef4444; --orange: #f97316; --yellow: #eab308; --green: #22c55e;
+    --radius: 14px; --font: 'Inter', sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+  .app-wrap { max-width: 1400px; margin: 0 auto; padding: 0 24px 60px; }
+
+  /* ── AlienVault Branded Header ── */
+  .av-header {
+    background: linear-gradient(180deg, #060b15 0%, #080d18 100%);
+    border-bottom: 2px solid rgba(26,115,232,0.25);
+    padding: 16px 0 14px;
+    margin: 0 -24px 28px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding-left: 24px;
+    position: relative;
+  }
+  .av-header::after {
+    content: '';
+    position: absolute;
+    bottom: -2px; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, #1a73e8 0%, transparent 60%);
+  }
+  .av-slashes {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-right: 14px;
+  }
+  .av-slash {
+    width: 6px;
+    height: 34px;
+    border-radius: 3px;
+    transform: skewX(-12deg);
+  }
+  .av-slash-1 { background: #1a73e8; box-shadow: 0 0 10px rgba(26,115,232,0.8); }
+  .av-slash-2 { background: #4a9eff; box-shadow: 0 0 10px rgba(74,158,255,0.6); }
+  .av-brand-text { display: flex; flex-direction: column; gap: 3px; }
+  .av-title-row { display: flex; align-items: baseline; gap: 0; line-height: 1; }
+  .av-name {
+    font-size: 1.3rem; font-weight: 900; color: #4a9eff;
+    letter-spacing: -0.3px;
+  }
+  .av-usm {
+    font-size: 1.3rem; font-weight: 900; color: #e8c900;
+    letter-spacing: -0.3px; margin-left: 7px;
+  }
+  .av-subtitle {
+    font-size: 0.73rem;
+    color: rgba(255,255,255,0.4);
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .av-subtitle::before {
+    content: '|';
+    color: #1a73e8;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .controls-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 24px; }
+  .controls-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; align-items: end; }
+  .client-row { margin-bottom: 16px; }
+  .client-select {
+    width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(26,115,232,0.4); border-radius: 10px;
+    color: var(--text); font-family: var(--font); font-size: 0.9rem;
+    cursor: pointer; transition: border-color 0.2s; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2360a5fa' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+    padding-right: 36px;
+  }
+  .client-select:focus { outline: none; border-color: var(--accent); }
+  .client-select option { background: #0f1827; }
+  .dep-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 12px;
+    background: rgba(26,115,232,0.12); border:1px solid rgba(26,115,232,0.25);
+    border-radius:20px; font-size:0.78rem; color:#60a5fa; margin-left:8px; }
+  label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  input[type=date], input[type=time] {
+    width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); font-family: var(--font); font-size: 0.9rem;
+    transition: border-color 0.2s;
+  }
+  input[type=date]:focus, input[type=time]:focus { outline: none; border-color: var(--accent); }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 28px; background: linear-gradient(135deg,#1a55d8,#3b82f6);
+    border: none; border-radius: 10px; color: #fff; font-family: var(--font);
+    font-size: 0.95rem; font-weight: 700; cursor: pointer;
+    transition: all 0.2s; white-space: nowrap;
+    box-shadow: 0 4px 18px rgba(26,85,216,0.45);
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(26,85,216,0.65); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-secondary {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 22px; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); font-family: var(--font);
+    font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+
+  .loader-wrap { display: none; align-items: center; gap: 12px; padding: 20px 0; }
+  .loader-wrap.active { display: flex; }
+  .spinner { width: 22px; height: 22px; border: 2px solid rgba(59,130,246,0.2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .summary-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
+    position: relative; overflow: hidden;
+  }
+  .summary-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: linear-gradient(90deg,#1a73e8,#4a9eff); }
+  .summary-card .val { font-size: 2rem; font-weight: 800; line-height: 1; background: linear-gradient(135deg,#4a9eff,#22d3ee); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .summary-card .lbl { font-size: 0.78rem; color: var(--muted); margin-top: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+
+  .tabs { display: flex; gap: 4px; background: rgba(255,255,255,0.04); border-radius: 12px; padding: 4px; margin-bottom: 20px; width: fit-content; }
+  .tab { padding: 8px 20px; border-radius: 9px; cursor: pointer; font-size: 0.88rem; font-weight: 600; color: var(--muted); transition: all 0.2s; border: none; background: transparent; font-family: var(--font); }
+  .tab.active { background: linear-gradient(135deg,#1a55d8,#3b82f6); color: #fff; }
+
+  .section { margin-bottom: 28px; }
+  .section-title { font-size: 0.85rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .data-table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: rgba(255,255,255,0.03); padding: 11px 14px; font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; text-align: left; border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.04); }
+  tbody td { padding: 10px 14px; font-size: 0.88rem; color: var(--text); }
+
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; }
+  .badge-high    { background: rgba(239,68,68,0.15);  color: #ef4444; }
+  .badge-medium  { background: rgba(249,115,22,0.15); color: #f97316; }
+  .badge-low     { background: rgba(234,179,8,0.15);  color: #eab308; }
+  .badge-info    { background: rgba(59,130,246,0.15); color: #60a5fa; }
+
+  .collapsible-header { cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--card2); border-radius: 10px; margin-bottom: 4px; user-select: none; }
+  .collapsible-header:hover { background: rgba(255,255,255,0.06); }
+  .collapsible-body { display: none; }
+  .collapsible-body.open { display: block; }
+
+  .hidden { display: none !important; }
+  .results-section { animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .empty-state svg { margin-bottom: 12px; opacity: 0.4; }
+  .toast { position: fixed; bottom: 28px; right: 28px; background: #0f1827; border: 1px solid rgba(26,115,232,0.3); border-radius: 12px; padding: 14px 20px; font-size: 0.88rem; color: var(--text); box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 999; animation: slideUp 0.3s ease; }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .tip { background: rgba(26,115,232,0.08); border: 1px solid rgba(26,115,232,0.2); border-radius: 10px; padding: 12px 16px; font-size: 0.84rem; color: #67c4ff; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<div class="app-wrap">
+  <!-- ── AlienVault Branded Header ── -->
+  <div class="av-header">
+    <div class="av-slashes">
+      <div class="av-slash av-slash-1"></div>
+      <div class="av-slash av-slash-2"></div>
+    </div>
+    <div class="av-brand-text">
+      <div class="av-title-row">
+        <span class="av-name">AlienVault</span>
+        <span class="av-usm">USM Central Dashboard</span>
+      </div>
+      <div class="av-subtitle">Enterprise Alarm Visualizer &amp; Report Builder</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-card">
+    <!-- Client / Deployment selector -->
+    <div class="client-row">
+      <label style="display:flex;align-items:center;gap:8px;">
+        🏢 Client / Deployment
+        <span class="dep-badge" id="depCount" style="display:none"></span>
+        <span id="depLoader" style="font-size:0.78rem;color:var(--muted);display:none">Loading clients…</span>
+      </label>
+      <select class="client-select" id="depSelect">
+        <option value="">— All Clients (Global View) —</option>
+      </select>
+    </div>
+    <!-- Date / Time row -->
+    <div class="controls-grid">
+      <div><label>Start Date</label><input type="date" id="startDate"></div>
+      <div><label>Start Time</label><input type="time" id="startTime" value="00:00"></div>
+      <div><label>End Date</label><input type="date" id="endDate"></div>
+      <div><label>End Time</label><input type="time" id="endTime" value="23:59"></div>
+    </div>
+    <div style="margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+      <button class="btn-primary" id="btnFetch" onclick="fetchData()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Fetch Alarms &amp; Events
+      </button>
+      <button class="btn-secondary hidden" id="btnExport" onclick="exportData()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Export to Excel
+      </button>
+      <div class="loader-wrap" id="loader">
+        <div class="spinner"></div>
+        <span style="color:var(--muted);font-size:0.88rem;" id="loaderMsg">Fetching data from AlienVault...</span>
+      </div>
+    </div>
+  </div>
+
+  <p class="tip">💡 Tip: Fetching large datasets (&gt;20,000 events) takes time. Narrow your date/time range for faster results.</p>
+
+  <!-- Results -->
+  <div id="results" class="results-section hidden">
+    <div class="summary-cards" id="summaryCards"></div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('alarms',this)">🔔 Alarms</button>
+      <button class="tab" onclick="switchTab('events',this)">📋 Events</button>
+    </div>
+    <div id="tabAlarms"></div>
+    <div id="tabEvents" class="hidden"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Set default dates
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+  document.getElementById('startDate').value = yesterday.toISOString().split('T')[0];
+  document.getElementById('endDate').value   = today.toISOString().split('T')[0];
+
+  let cachedData = null;
+
+  // ── Load deployments into dropdown ──────────────────────────
+  (async function loadDeployments(){
+    const loader  = document.getElementById('depLoader');
+    const sel     = document.getElementById('depSelect');
+    const badge   = document.getElementById('depCount');
+    loader.style.display = 'inline';
+    try {
+      const r = await fetch('/api/alienvault/deployments');
+      const deps = await r.json();
+      if(Array.isArray(deps) && deps.length){
+        deps.forEach(d => {
+          const opt = document.createElement('option');
+          opt.value = d.url || '';
+          opt.textContent = d.displayName || d.name;
+          sel.appendChild(opt);
+        });
+        badge.textContent = deps.length + ' clients';
+        badge.style.display = 'inline-flex';
+      }
+    } catch(e){ console.warn('Could not load AV deployments:', e); }
+    finally { loader.style.display = 'none'; }
+  })();
+
+  function dt(dateId, timeId){
+    const d = document.getElementById(dateId).value;
+    const t = document.getElementById(timeId).value || '00:00';
+    return new Date(`${d}T${t}:00Z`).getTime();
+  }
+
+  window.fetchData = async function(){
+    const start_ms = dt('startDate','startTime');
+    const end_ms   = dt('endDate','endTime');
+    if(isNaN(start_ms)||isNaN(end_ms)){showToast('Please select valid dates.'); return;}
+    if(start_ms > end_ms){showToast('Start date must be before end date.'); return;}
+    const dep_url = document.getElementById('depSelect').value;
+    const depName = document.getElementById('depSelect').selectedOptions[0]?.text || 'All Clients';
+
+    setLoading(true, dep_url
+      ? `Fetching alarms & events for ${depName}…`
+      : 'Fetching alarms & events from all clients…');
+    document.getElementById('results').classList.add('hidden');
+    document.getElementById('btnExport').classList.add('hidden');
+
+    try {
+      const resp = await fetch('/api/alienvault/fetch',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({start_ms, end_ms, dep_url})
+      });
+      const data = await resp.json();
+      if(data.error){ showToast('Error: '+data.error,'red'); return; }
+      cachedData = {data, start_ms, end_ms, dep_url};
+      renderResults(data);
+      document.getElementById('results').classList.remove('hidden');
+      document.getElementById('btnExport').classList.remove('hidden');
+    } catch(e){ showToast('Network error: '+e.message,'red'); }
+    finally { setLoading(false); }
+  };
+
+  window.exportData = async function(){
+    if(!cachedData){ showToast('Fetch data first.'); return; }
+    showToast('Generating Excel report...');
+    try {
+      const resp = await fetch('/api/alienvault/export',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({start_ms: cachedData.start_ms, end_ms: cachedData.end_ms, dep_url: cachedData.dep_url || ''})
+      });
+      if(!resp.ok){ showToast('Export failed','red'); return; }
+      const blob = await resp.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'alienvault_report.xlsx'; a.click();
+      showToast('Report downloaded!','green');
+    } catch(e){ showToast('Export error: '+e.message,'red'); }
+  };
+
+  function renderResults(data){
+    const ad = data.alarm_data || {}, ed = data.event_data || {};
+    // Summary cards
+    document.getElementById('summaryCards').innerHTML = `
+      <div class="summary-card"><div class="val">${(data.alarm_count||0).toLocaleString()}</div><div class="lbl">Total Alarms</div></div>
+      <div class="summary-card"><div class="val">${(data.event_count||0).toLocaleString()}</div><div class="lbl">Total Events</div></div>
+      <div class="summary-card"><div class="val">${(ad.top_methods||[]).length}</div><div class="lbl">Unique Methods</div></div>
+      <div class="summary-card"><div class="val">${(ed.sensor_list||[]).length}</div><div class="lbl">Unique Sensors</div></div>
+    `;
+    // Alarms tab
+    let alarmsHtml = '';
+    alarmsHtml += renderTableSection('Top 30 Alarms by Method',ad.top_methods||[],'Method','Count');
+    alarmsHtml += renderTableSection('Top 30 Alarms by Strategy',ad.top_strategy||[],'Strategy','Count');
+    alarmsHtml += renderTableSection('Top 30 Alarms by Intent',ad.top_intent||[],'Intent','Count');
+    alarmsHtml += renderTableSection('Failed Logons Summary',ad.failed_logons||[],'Failed Logon Type','Count');
+    alarmsHtml += renderTableSection('User Activities Summary',ad.user_activities||[],'Activity','Count');
+    alarmsHtml += renderTableSection('Unlocked Accounts',ad.unlocked_users||[],'Username','Count');
+    alarmsHtml += renderTableSection('Disabled Accounts',ad.disabled_users||[],'Username','Count');
+    alarmsHtml += renderSeverityTable('Alarms by Severity',ad.severity||[]);
+    document.getElementById('tabAlarms').innerHTML = alarmsHtml;
+
+    // Events tab
+    let eventsHtml = '';
+    if((ed.sensor_list||[]).length){
+      eventsHtml += renderTableSection('Available Sensors',ed.sensor_list||[],'Sensor Name',null);
+      eventsHtml += renderTableSection('Top 20 Event Names (Overall)',ed.top_event_names||[],'Event Name','Count');
+      const bySensor = ed.events_by_sensor || {};
+      if(Object.keys(bySensor).length){
+        eventsHtml += '<div class="section"><div class="section-title">Events by Sensor</div>';
+        for(const[sensor,rows] of Object.entries(bySensor)){
+          eventsHtml += `<div class="collapsible-header" onclick="toggleCollapse(this)">
+            <span>🔍 ${sensor} (${rows.length} event types)</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="collapsible-body" style="margin-bottom:10px;padding:0 4px;">
+            ${renderTable(rows,'Event Name','Count')}
+          </div>`;
+        }
+        eventsHtml += '</div>';
+      }
+    } else {
+      eventsHtml = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>No event data found for this period.</p></div>`;
+    }
+    document.getElementById('tabEvents').innerHTML = eventsHtml;
+  }
+
+  function renderTableSection(title, rows, col1, col2){
+    if(!rows||!rows.length) return '';
+    return `<div class="section"><div class="section-title">${title}</div>${renderTable(rows,col1,col2)}</div>`;
+  }
+
+  function renderTable(rows, col1, col2){
+    if(!rows||!rows.length) return '<p style="color:var(--muted);padding:12px;font-size:0.85rem;">No data.</p>';
+    let h = `<div class="data-table-wrap"><table><thead><tr><th>${col1}</th>${col2?`<th>${col2}</th>`:''}</tr></thead><tbody>`;
+    for(const r of rows){
+      h += `<tr><td>${r[col1]||''}</td>${col2?`<td style="font-weight:700;color:var(--accent2);">${Number(r[col2]||0).toLocaleString()}</td>`:''}</tr>`;
+    }
+    return h + '</tbody></table></div>';
+  }
+
+  function renderSeverityTable(title, rows){
+    if(!rows||!rows.length) return '';
+    const colorMap={'High':'badge-high','Medium':'badge-medium','Low':'badge-low','Informational':'badge-info'};
+    let h = `<div class="section"><div class="section-title">${title}</div><div class="data-table-wrap"><table><thead><tr><th>Severity</th><th>Count</th></tr></thead><tbody>`;
+    for(const r of rows){
+      const cls = colorMap[r.Severity]||'badge-info';
+      h += `<tr><td><span class="badge ${cls}">${r.Severity}</span></td><td style="font-weight:700;">${Number(r.Count||0).toLocaleString()}</td></tr>`;
+    }
+    return h + '</tbody></table></div></div>';
+  }
+
+  window.switchTab = function(tab, el){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tabAlarms').classList.toggle('hidden', tab!=='alarms');
+    document.getElementById('tabEvents').classList.toggle('hidden',  tab!=='events');
+  };
+
+  window.toggleCollapse = function(el){
+    const body = el.nextElementSibling;
+    body.classList.toggle('open');
+    el.querySelector('svg').style.transform = body.classList.contains('open') ? 'rotate(180deg)' : '';
+  };
+
+  function setLoading(on, msg=''){
+    document.getElementById('loader').classList.toggle('active',on);
+    document.getElementById('loaderMsg').textContent = msg;
+    document.getElementById('btnFetch').disabled = on;
+  }
+
+  let toastTimer;
+  function showToast(msg, type=''){
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.style.borderColor = type==='red'?'rgba(239,68,68,0.3)':type==='green'?'rgba(34,197,94,0.3)':'var(--border)';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>t.remove(), 3500);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,4 +1,43 @@
-.streamlit/secrets.toml
+# Dependencies
+node_modules/
 __pycache__/
 *.pyc
-chat_history/
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environments
+.env
+.env.*
+*.env
+venv/
+.venv/
+env/
+
+# Database & secrets
+*.db
+*.sqlite3
+google_credentials.json*
+sentrium_users.db
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs & temp
+*.log
+*.tmp
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Misc
+Downloads*.lnk

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentrium — Secure Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --blue-dark:  #0f172a;
+            --blue-deep:  #1e3a8a;
+            --blue-mid:   #2563eb;
+            --blue-light: #60a5fa;
+            --cyan:       #06b6d4;
+            --glass:      rgba(255,255,255,0.04);
+            --glass-border: rgba(255,255,255,0.1);
+            --error:      #f87171;
+            --success:    #34d399;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--blue-dark);
+            background-image:
+                radial-gradient(at 0% 0%,   rgba(6,182,212,0.18) 0, transparent 55%),
+                radial-gradient(at 100% 0%,  rgba(37,99,235,0.2)  0, transparent 55%),
+                radial-gradient(at 100% 100%,rgba(79,70,229,0.18) 0, transparent 55%),
+                radial-gradient(at 0% 100%,  rgba(30,58,138,0.2)  0, transparent 55%);
+            background-attachment: fixed;
+            overflow: hidden;
+        }
+
+        /* Floating ambient blobs */
+        .blob { position:fixed; border-radius:50%; filter:blur(80px); z-index:0; pointer-events:none; }
+        .blob-1 { width:400px;height:400px; background:rgba(6,182,212,0.12); top:-100px; left:-100px; animation: drift 20s ease-in-out infinite alternate; }
+        .blob-2 { width:350px;height:350px; background:rgba(79,70,229,0.15); bottom:-80px; right:-80px; animation: drift 25s ease-in-out infinite alternate-reverse; }
+        .blob-3 { width:250px;height:250px; background:rgba(37,99,235,0.1); top:50%; left:60%; animation: drift 18s ease-in-out infinite alternate; }
+        @keyframes drift { 0%{transform:translate(0,0) scale(1);} 100%{transform:translate(40px,60px) scale(1.2);} }
+
+        /* Card wrapper */
+        .login-card {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 460px;
+            padding: 50px 44px;
+            background: rgba(15,23,42,0.7);
+            backdrop-filter: blur(30px);
+            border: 1px solid var(--glass-border);
+            border-radius: 28px;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.5), inset 0 0 60px rgba(255,255,255,0.02);
+            animation: card-in 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+        }
+        @keyframes card-in { from{opacity:0;transform:translateY(40px) scale(0.96);} to{opacity:1;transform:none;} }
+
+        /* Logo area */
+        .logo-area {
+            text-align: center;
+            margin-bottom: 36px;
+        }
+        .logo-area img {
+            height: 72px;
+            width: auto;
+            object-fit: contain;
+            filter: drop-shadow(0 8px 20px rgba(37,99,235,0.5));
+            margin-bottom: 16px;
+        }
+        .logo-area h1 {
+            font-size: 1.55rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff, var(--blue-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .logo-area p {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.4);
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        /* Step indicator */
+        .steps {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 32px;
+        }
+        .step-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            transition: all 0.3s;
+        }
+        .step-dot.active  { background: var(--blue-mid); width: 24px; border-radius: 4px; }
+        .step-dot.done    { background: var(--success); }
+
+        /* Info banner (matches screenshot) */
+        .info-banner {
+            background: rgba(37,99,235,0.15);
+            border: 1px solid rgba(37,99,235,0.3);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 24px;
+            font-size: 0.92rem;
+            color: var(--blue-light);
+            font-weight: 500;
+            line-height: 1.5;
+            display: none;
+        }
+        .info-banner.visible { display: block; }
+
+        /* Form */
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: block;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.55);
+            margin-bottom: 8px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+        .input-wrap {
+            position: relative;
+        }
+        .input-wrap input {
+            width: 100%;
+            padding: 15px 48px 15px 18px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 14px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            color: #ffffff;
+            outline: none;
+            transition: border-color 0.25s, box-shadow 0.25s;
+            letter-spacing: 0.3px;
+        }
+        .input-wrap input::placeholder { color: rgba(255,255,255,0.2); }
+        .input-wrap input:focus {
+            border-color: var(--blue-mid);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.2);
+        }
+        /* OTP input styling */
+        .input-wrap input.otp-input {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: 10px;
+            text-align: center;
+            padding: 18px 18px;
+        }
+        .toggle-pw {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.3);
+            cursor: pointer;
+            font-size: 1.1rem;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+        .toggle-pw:hover { color: rgba(255,255,255,0.7); }
+
+        /* Error/Success messages */
+        .msg {
+            font-size: 0.88rem;
+            font-weight: 600;
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 18px;
+            display: none;
+        }
+        .msg.error   { display:block; background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.3); color:var(--error); }
+        .msg.success { display:block; background:rgba(52,211,153,0.15); border:1px solid rgba(52,211,153,0.3); color:var(--success); }
+
+        /* Submit button */
+        .btn-primary {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--blue-deep), var(--blue-mid));
+            border: none;
+            border-radius: 14px;
+            color: #ffffff;
+            font-size: 1rem;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            letter-spacing: 0.3px;
+            transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 8px 24px rgba(37,99,235,0.35);
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 32px rgba(37,99,235,0.5);
+        }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        /* Spinner inside button */
+        .btn-primary .spinner {
+            display: none;
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            margin: 0 auto;
+        }
+        .btn-primary.loading .btn-text { display: none; }
+        .btn-primary.loading .spinner  { display: block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Back link */
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 18px;
+            font-size: 0.88rem;
+            color: rgba(255,255,255,0.3);
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: var(--blue-light); }
+
+        /* Department badge */
+        .dept-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(37,99,235,0.15);
+            border: 1px solid rgba(37,99,235,0.3);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--blue-light);
+            margin-bottom: 20px;
+        }
+
+        /* Step panels */
+        .step-panel { display: none; }
+        .step-panel.active { display: block; animation: step-in 0.4s ease both; }
+        @keyframes step-in { from{opacity:0;transform:translateX(20px);} to{opacity:1;transform:none;} }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            font-size: 0.78rem;
+            color: rgba(255,255,255,0.18);
+        }
+
+        /* Change-password link */
+        .link-btn {
+            display: block;
+            text-align: center;
+            margin-top: 16px;
+            font-size: 0.84rem;
+            color: rgba(255,255,255,0.28);
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-family: 'Inter', sans-serif;
+            transition: color 0.2s;
+            width: 100%;
+        }
+        .link-btn:hover { color: var(--blue-light); }
+
+        /* Change-password panel */
+        .cp-panel { display: none; }
+        .cp-panel.active { display: block; animation: step-in 0.4s ease both; }
+        .cp-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .cp-header .cp-icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+        .cp-header h2 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+        .cp-header p {
+            font-size: 0.82rem;
+            color: rgba(255,255,255,0.35);
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<div class="login-card">
+    <!-- Logo -->
+    <div class="logo-area">
+        <img src="logo_transparent.png" alt="Sentrium Logo" onerror="this.style.display='none'">
+        <h1>Sentrium Enterprise</h1>
+        <p>Secure Portal Access</p>
+    </div>
+
+    <!-- Step Dots -->
+    <div class="steps">
+        <div class="step-dot active" id="dot-1"></div>
+        <div class="step-dot" id="dot-2"></div>
+    </div>
+
+    <!-- Error / Success message -->
+    <div class="msg" id="msg-box"></div>
+
+    <!-- ─── Step 1: Email + Password ─── -->
+    <div class="step-panel active" id="step-1">
+        <div class="form-group">
+            <label>Email Address</label>
+            <div class="input-wrap">
+                <input type="email" id="inp-username" placeholder="you@esentry.io" autocomplete="email" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <div class="input-wrap">
+                <input type="password" id="inp-password" placeholder="Enter your password" autocomplete="current-password" />
+                <button class="toggle-pw" id="toggle-pw" type="button" title="Show/hide password">👁</button>
+            </div>
+        </div>
+        <button class="btn-primary" id="btn-login">
+            <span class="btn-text">Continue</span>
+            <div class="spinner"></div>
+        </button>
+        <button class="link-btn" id="btn-show-cp" type="button">🔑 Change your password?</button>
+    </div>
+
+    <!-- ─── Step 2: Google Authenticator 2FA ─── -->
+    <div class="step-panel" id="step-2">
+        <div class="form-group">
+            <label>Enter 6-digit code</label>
+            <div class="input-wrap">
+                <input type="password" id="inp-totp" class="otp-input" maxlength="6" placeholder="······" inputmode="numeric" autocomplete="one-time-code"/>
+                <button class="toggle-pw" id="toggle-totp" type="button" title="Show/hide code">👁</button>
+            </div>
+        </div>
+        <button class="btn-primary" id="btn-verify">
+            <span class="btn-text">Verify</span>
+            <div class="spinner"></div>
+        </button>
+        <span class="back-link" id="btn-back">← Back to login</span>
+    </div>
+
+    <!-- ─── Change Password Panel ─── -->
+    <div class="cp-panel" id="cp-panel">
+        <div class="cp-header">
+            <div class="cp-icon">🔐</div>
+            <h2>Change Password</h2>
+            <p>Verify your identity, then set a new password</p>
+        </div>
+        <div class="form-group">
+            <label>Email Address</label>
+            <div class="input-wrap">
+                <input type="email" id="cp-email" placeholder="you@esentry.io" autocomplete="email"/>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Current Password</label>
+            <div class="input-wrap">
+                <input type="password" id="cp-current" placeholder="Your current password"/>
+                <button class="toggle-pw" type="button" id="toggle-cp-current">👁</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>New Password</label>
+            <div class="input-wrap">
+                <input type="password" id="cp-new" placeholder="Min. 8 characters"/>
+                <button class="toggle-pw" type="button" id="toggle-cp-new">👁</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Confirm New Password</label>
+            <div class="input-wrap">
+                <input type="password" id="cp-confirm" placeholder="Repeat new password"/>
+                <button class="toggle-pw" type="button" id="toggle-cp-confirm">👁</button>
+            </div>
+        </div>
+        <button class="btn-primary" id="btn-do-cp">
+            <span class="btn-text">Update Password</span>
+            <div class="spinner"></div>
+        </button>
+        <span class="back-link" id="btn-cp-back">← Back to login</span>
+    </div>
+
+    <div class="footer">Sentrium Enterprise Solution &copy; 2026 &mdash; Secured by Sentrium</div>
+</div>
+
+<!-- Load credentials and auth engine -->
+<script src="credentials.js?v=6"></script>
+<script src="auth.js?v=6"></script>
+<script>
+(function () {
+    // If already authenticated, skip login
+    if (SentriumAuth.isAuthenticated()) {
+        window.location.replace('index.html');
+        return;
+    }
+
+    const $ = id => document.getElementById(id);
+    const msgBox = $('msg-box');
+
+    function showMsg(text, type) {
+        msgBox.textContent = text;
+        msgBox.className   = `msg ${type}`;
+    }
+    function clearMsg() {
+        msgBox.className = 'msg';
+        msgBox.textContent = '';
+    }
+
+    function setLoading(btn, on) {
+        btn.disabled = on;
+        btn.classList.toggle('loading', on);
+    }
+
+    // Toggle password visibility
+    $('toggle-pw').addEventListener('click', () => {
+        const inp = $('inp-password');
+        inp.type  = inp.type === 'password' ? 'text' : 'password';
+    });
+
+
+    // ── Login handler (server-side auth, no TOTP) ──
+    async function handleLogin() {
+        const username = $('inp-username').value.trim();
+        const password = $('inp-password').value;
+        if (!username || !password) { showMsg('Please enter both username and password.', 'error'); return; }
+
+        const btn = $('btn-login');
+        setLoading(btn, true);
+        clearMsg();
+
+        try {
+            const result = await SentriumAuth.serverLogin(username, password);
+            if (!result.ok) {
+                showMsg(result.error || 'Invalid credentials. Please try again.', 'error');
+            } else {
+                showMsg('Access granted! Redirecting…', 'success');
+                setTimeout(() => window.location.replace('index.html'), 600);
+            }
+        } catch (e) {
+            showMsg('Authentication error. Please try again.', 'error');
+        } finally {
+            setLoading(btn, false);
+        }
+    }
+
+    // ── Back to login (clears all fields) ──
+    function goToStep1() {
+        $('inp-password').value = '';
+        $('inp-username').value = '';
+        clearMsg();
+        setTimeout(() => $('inp-username').focus(), 80);
+    }
+
+    // ── Login event listeners ──
+    $('btn-login').addEventListener('click', handleLogin);
+    if ($('btn-back')) $('btn-back').addEventListener('click', goToStep1);
+    $('inp-password').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+    $('inp-username').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+
+    // ── Toggle password visibility helpers ──
+    function mkToggle(inputId, btnId) {
+        const btn = $(btnId);
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+            const inp = $(inputId);
+            inp.type = inp.type === 'password' ? 'text' : 'password';
+        });
+    }
+    mkToggle('cp-current', 'toggle-cp-current');
+    mkToggle('cp-new',     'toggle-cp-new');
+    mkToggle('cp-confirm', 'toggle-cp-confirm');
+
+    // ── Change Password panel ──
+    function showCpPanel() {
+        $('step-1').classList.remove('active');
+        $('step-2').classList.remove('active');
+        $('cp-panel').classList.add('active');
+        clearMsg();
+        // Pre-fill email from whatever is already typed
+        const existing = $('inp-username').value.trim();
+        if (existing) $('cp-email').value = existing;
+        setTimeout(() => ($('cp-email').value ? $('cp-current') : $('cp-email')).focus(), 80);
+    }
+
+    function hideCpPanel() {
+        $('cp-panel').classList.remove('active');
+        $('step-1').classList.add('active');
+        clearMsg();
+        ['cp-current','cp-new','cp-confirm'].forEach(id => $(id).value = '');
+        setTimeout(() => $('inp-username').focus(), 80);
+    }
+
+    async function handleChangePw() {
+        const email   = $('cp-email').value.trim();
+        const current = $('cp-current').value;
+        const newPw   = $('cp-new').value;
+        const confirm = $('cp-confirm').value;
+
+        if (!email || !current || !newPw || !confirm) {
+            showMsg('Please fill in all fields.', 'error'); return;
+        }
+        if (newPw.length < 8) {
+            showMsg('New password must be at least 8 characters.', 'error'); return;
+        }
+        if (newPw !== confirm) {
+            showMsg('New passwords do not match.', 'error'); return;
+        }
+
+        const btn = $('btn-do-cp');
+        setLoading(btn, true);
+        clearMsg();
+
+        try {
+            const resp = await fetch('/api/auth/self-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username:         email,
+                    current_password: current,
+                    new_password:     newPw,
+                    confirm_password: confirm
+                })
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                showMsg(data.error || 'Failed to update password.', 'error');
+            } else {
+                showMsg('✓ Password updated! Returning to login…', 'success');
+                setTimeout(() => {
+                    $('inp-username').value = email;
+                    $('inp-password').value = '';
+                    hideCpPanel();
+                }, 2000);
+            }
+        } catch (e) {
+            showMsg('Network error. Please try again.', 'error');
+        } finally {
+            setLoading(btn, false);
+        }
+    }
+
+    $('btn-show-cp').addEventListener('click', showCpPanel);
+    $('btn-cp-back').addEventListener('click', hideCpPanel);
+    $('btn-do-cp').addEventListener('click', handleChangePw);
+    ['cp-current','cp-new','cp-confirm'].forEach(id => {
+        $(id).addEventListener('keydown', e => { if (e.key === 'Enter') handleChangePw(); });
+    });
+
+})();
+</script>
+</body>
+</html>
