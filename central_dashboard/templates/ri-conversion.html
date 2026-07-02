@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>WAF Conversion Solution — Sentrium</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+:root{--bg:#0c0c0f;--card:#131318;--card2:#1a1a22;--border:rgba(255,255,255,0.07);--accent:#7c3aed;--accent2:#9333ea;--text:#f1f5f9;--muted:#94a3b8;--radius:14px;--font:'Inter',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;display:flex;flex-direction:column;}
+.app-wrap{max-width:860px;margin:0 auto;padding:20px 24px 80px;flex:1;}
+
+/* ── Upload card ── */
+.upload-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;margin-bottom:20px}
+.upload-label{font-size:0.82rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.upload-label-help{width:20px;height:20px;border-radius:50%;border:1.5px solid rgba(255,255,255,0.2);display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--muted);cursor:default;}
+.drop-zone-row{display:flex;align-items:center;gap:0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 16px;cursor:pointer;transition:all 0.2s;position:relative;}
+.drop-zone-row:hover{border-color:rgba(124,58,237,0.4);background:rgba(124,58,237,0.05);}
+.drop-zone-row.has-file{border-color:rgba(124,58,237,0.5);background:rgba(124,58,237,0.06);}
+.drop-zone-row input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.dz-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--text);font-family:var(--font);font-size:0.85rem;font-weight:600;white-space:nowrap;flex-shrink:0;pointer-events:none;}
+.dz-hint{font-size:0.82rem;color:var(--muted);margin-left:14px;}
+/* legacy drop-zone styles (kept for compat) */
+.drop-zone{border:2px dashed rgba(124,58,237,0.3);border-radius:14px;padding:40px 32px;text-align:center;cursor:pointer;transition:all 0.25s;position:relative;background:rgba(124,58,237,0.03)}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--accent);background:rgba(124,58,237,0.07)}
+.drop-zone.has-file{border-color:var(--accent);border-style:solid;background:rgba(124,58,237,0.06)}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz-icon{font-size:36px;margin-bottom:12px;display:block}
+.dz-title{font-size:1rem;font-weight:700;color:var(--text);margin-bottom:5px}
+.dz-sub{font-size:0.82rem;color:var(--muted)}
+.dz-pill{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:5px 14px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:20px;font-size:0.78rem;font-weight:700;color:#a78bfa}
+
+.file-info{display:none;align-items:center;gap:14px;padding:14px 18px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.2);border-radius:12px;margin-top:14px}
+.file-info.show{display:flex}
+.file-info-icon{font-size:26px}
+.file-info-details{flex:1}
+.file-info-name{font-size:0.95rem;font-weight:700;color:var(--text)}
+.file-info-size{font-size:0.78rem;color:var(--muted);margin-top:2px}
+.btn-clear{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:4px;line-height:1;transition:color 0.2s}
+.btn-clear:hover{color:var(--text)}
+
+.convert-section{display:flex;align-items:center;gap:14px;margin-top:24px;flex-wrap:wrap}
+.btn-convert{display:inline-flex;align-items:center;gap:10px;padding:14px 32px;background:linear-gradient(135deg,#0891b2,#06b6d4);border:none;border-radius:12px;color:#fff;font-family:var(--font);font-size:1rem;font-weight:700;cursor:pointer;transition:all 0.2s;box-shadow:0 4px 18px rgba(6,182,212,0.4)}
+.btn-convert:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(6,182,212,0.55)}
+.btn-convert:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+
+.progress-bar-wrap{height:6px;background:rgba(255,255,255,0.06);border-radius:10px;margin:16px 0;overflow:hidden;display:none}
+.progress-bar-wrap.show{display:block}
+.progress-bar{height:100%;border-radius:10px;background:linear-gradient(90deg,#0891b2,#06b6d4,#38bdf8);background-size:200% 100%;animation:shimmer 1.4s linear infinite;width:60%}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+.loader-wrap{display:none;align-items:center;gap:10px}
+.loader-wrap.active{display:flex}
+.spinner{width:20px;height:20px;border:2px solid rgba(6,182,212,0.2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.success-card{display:none;flex-direction:column;align-items:center;text-align:center;padding:36px 24px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:var(--radius);margin-top:24px;animation:fadeIn 0.4s ease}
+.success-card.show{display:flex}
+.success-icon{font-size:52px;margin-bottom:16px}
+.success-title{font-size:1.2rem;font-weight:800;color:#4ade80;margin-bottom:8px}
+.success-sub{font-size:0.88rem;color:var(--muted);margin-bottom:20px}
+.btn-download{display:inline-flex;align-items:center;gap:10px;padding:13px 28px;background:linear-gradient(135deg,#15803d,#22c55e);border:none;border-radius:11px;color:#fff;font-family:var(--font);font-size:0.95rem;font-weight:700;cursor:pointer;transition:all 0.2s;box-shadow:0 4px 16px rgba(34,197,94,0.35);text-decoration:none}
+.btn-download:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(34,197,94,0.5)}
+
+.error-card{display:none;padding:20px 24px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius);margin-top:20px}
+.error-card.show{display:block}
+.error-card h3{font-size:0.95rem;font-weight:700;color:#f87171;margin-bottom:6px}
+.error-card p{font-size:0.84rem;color:var(--muted)}
+
+.tips-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-top:24px}
+.tips-title{font-size:0.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:14px}
+.tip-item{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:0.84rem;color:var(--muted)}
+.tip-item span:first-child{font-size:16px;flex-shrink:0}
+
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<!-- WAF Header -->
+<header style="background:#0c0c0f;border-bottom:1px solid rgba(255,255,255,0.06);padding:18px 0;margin-bottom:0;">
+  <div style="max-width:900px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="#6d28d9" opacity="0.9"/>
+        <polyline points="14 2 14 8 20 8" stroke="#a78bfa" stroke-width="1.5" fill="none"/>
+        <line x1="8" y1="13" x2="16" y2="13" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="8" y1="17" x2="13" y2="17" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span style="font-size:0.72rem;font-weight:700;color:rgba(255,255,255,0.3);letter-spacing:1.5px;text-transform:uppercase;">Research &amp; Intelligence</span>
+    </div>
+    <div style="font-size:0.7rem;color:rgba(255,255,255,0.2);letter-spacing:0.5px;">Proactive by design, intelligence with impact</div>
+  </div>
+</header>
+
+<div class="app-wrap">
+  <!-- WAF Branded Hero Section -->
+  <div style="text-align:center;padding:32px 0 28px;">
+    <div style="display:inline-flex;align-items:center;justify-content:center;width:90px;height:90px;background:linear-gradient(135deg,rgba(109,40,217,0.15),rgba(147,51,234,0.08));border:1px solid rgba(109,40,217,0.25);border-radius:20px;margin-bottom:24px;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="#7c3aed"/>
+        <polyline points="14 2 14 8 20 8" stroke="#a78bfa" stroke-width="1.5" fill="none"/>
+        <line x1="8" y1="13" x2="16" y2="13" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="8" y1="17" x2="13" y2="17" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h1 style="font-size:2.2rem;font-weight:900;letter-spacing:-0.5px;color:#ffffff;text-transform:uppercase;margin-bottom:12px;">WAF Conversion Solution</h1>
+    <p style="font-size:0.95rem;color:rgba(255,255,255,0.5);max-width:560px;margin:0 auto 28px;line-height:1.6;">Securely extract tables and convert security threat report PDFs to structured Excel spreadsheets.</p>
+    <div style="width:60px;height:2px;background:linear-gradient(90deg,#7c3aed,#9333ea);border-radius:2px;margin:0 auto;"></div>
+  </div>
+
+  <div class="upload-card">
+    <div class="drop-zone" id="dropZone" ondragover="dz(event)" ondragleave="dl()" ondrop="dp(event)">
+      <input type="file" id="pdfInput" accept=".pdf" onchange="handleFile(this.files[0])">
+      <span class="dz-icon">📄</span>
+      <div class="dz-title">Drop your PDF report here</div>
+      <div class="dz-sub">or click to browse — accepts .pdf files</div>
+      <div class="dz-pill">📁 PDF Threat Reports Supported</div>
+    </div>
+
+    <div class="file-info" id="fileInfo">
+      <div class="file-info-icon">📑</div>
+      <div class="file-info-details">
+        <div class="file-info-name" id="fileName">report.pdf</div>
+        <div class="file-info-size" id="fileSize">—</div>
+      </div>
+      <button class="btn-clear" onclick="clearFile()" title="Remove file">✕</button>
+    </div>
+
+    <div class="progress-bar-wrap" id="progressWrap"><div class="progress-bar"></div></div>
+
+    <div class="convert-section">
+      <button class="btn-convert" id="btnConvert" onclick="convertFile()" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+        Convert to Excel
+      </button>
+      <div class="loader-wrap" id="loader">
+        <div class="spinner"></div>
+        <span style="color:var(--muted);font-size:0.88rem;">Processing PDF — extracting tables &amp; metrics...</span>
+      </div>
+    </div>
+
+    <div class="success-card" id="successCard">
+      <div class="success-icon">✅</div>
+      <div class="success-title">Conversion Complete!</div>
+      <div class="success-sub" id="successMsg">Your Excel report is ready to download.</div>
+      <a class="btn-download" id="downloadLink" href="#" download>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Excel Report
+      </a>
+      <button onclick="resetApp()" style="margin-top:12px;background:none;border:none;color:var(--muted);font-family:var(--font);font-size:0.84rem;cursor:pointer;text-decoration:underline">Convert another file</button>
+    </div>
+
+    <div class="error-card" id="errorCard">
+      <h3>⚠️ Conversion Failed</h3>
+      <p id="errorMsg">An unexpected error occurred. Please check your PDF and try again.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  let selectedFile=null;
+
+  window.handleFile=function(file){
+    if(!file||!file.name.toLowerCase().endsWith('.pdf')){alert('Please upload a PDF file.');return}
+    selectedFile=file;
+    document.getElementById('dropZone').classList.add('has-file');
+    document.getElementById('fileInfo').classList.add('show');
+    document.getElementById('fileName').textContent=file.name;
+    document.getElementById('fileSize').textContent=(file.size/1024/1024).toFixed(2)+' MB';
+    document.getElementById('btnConvert').disabled=false;
+    document.getElementById('successCard').classList.remove('show');
+    document.getElementById('errorCard').classList.remove('show');
+  };
+
+  window.clearFile=function(){
+    selectedFile=null;
+    document.getElementById('pdfInput').value='';
+    document.getElementById('dropZone').classList.remove('has-file');
+    document.getElementById('fileInfo').classList.remove('show');
+    document.getElementById('btnConvert').disabled=true;
+    document.getElementById('successCard').classList.remove('show');
+    document.getElementById('errorCard').classList.remove('show');
+  };
+
+  window.dz=function(e){e.preventDefault();document.getElementById('dropZone').classList.add('dragover')};
+  window.dl=function(){document.getElementById('dropZone').classList.remove('dragover')};
+  window.dp=function(e){e.preventDefault();dl();const f=e.dataTransfer.files[0];if(f)handleFile(f)};
+
+  window.convertFile=async function(){
+    if(!selectedFile){return}
+    setLoading(true);
+    document.getElementById('successCard').classList.remove('show');
+    document.getElementById('errorCard').classList.remove('show');
+    document.getElementById('progressWrap').classList.add('show');
+    const fd=new FormData();fd.append('pdf',selectedFile,selectedFile.name);
+    try{
+      const resp=await fetch('/api/conversion/convert',{method:'POST',body:fd});
+      if(!resp.ok){
+        let errMsg='Conversion failed (HTTP '+resp.status+')';
+        try{const j=await resp.json();errMsg=j.error||errMsg}catch{}
+        document.getElementById('errorMsg').textContent=errMsg;
+        document.getElementById('errorCard').classList.add('show');
+        return;
+      }
+      const blob=await resp.blob();
+      const url=URL.createObjectURL(blob);
+      const link=document.getElementById('downloadLink');
+      link.href=url;
+      link.download=selectedFile.name.replace(/\.pdf$/i,'_converted.xlsx');
+      document.getElementById('successMsg').textContent=`"${selectedFile.name}" has been converted successfully.`;
+      document.getElementById('successCard').classList.add('show');
+      // Auto-trigger download
+      link.click();
+    }catch(e){
+      document.getElementById('errorMsg').textContent='Network error: '+e.message;
+      document.getElementById('errorCard').classList.add('show');
+    }finally{setLoading(false);document.getElementById('progressWrap').classList.remove('show')}
+  };
+
+  window.resetApp=function(){
+    clearFile();
+  };
+
+  function setLoading(on){
+    document.getElementById('loader').classList.toggle('active',on);
+    document.getElementById('btnConvert').disabled=on||!selectedFile;
+  }
+})();
+</script>
+
+<!-- Brand Footer -->
+<footer style="border-top:1px solid rgba(255,255,255,0.06);padding:16px 24px;background:#0c0c0f;text-align:center;">
+  <p style="font-size:0.72rem;color:rgba(255,255,255,0.2);letter-spacing:0.3px;">
+    &bull; Research &amp; Intelligence &nbsp;&bull;&nbsp; Proactive by design, intelligence with impact &nbsp;&bull;&nbsp; Committed to ensuring Greatness
+  </p>
+</footer>
+</body>
+</html>

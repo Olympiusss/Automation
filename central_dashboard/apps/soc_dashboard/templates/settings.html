@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Admin Settings — Sentrium SOC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080d18;--surface:#0e1525;--card:#111d2e;--card2:#152236;
+  --border:#1c2d45;--border2:#243650;
+  --accent:#3b82f6;--accent-dim:rgba(59,130,246,.1);
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --green:#10b981;--amber:#f59e0b;--red:#ef4444;--purple:#8b5cf6;
+  --sidebar:220px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:13.5px;-webkit-font-smoothing:antialiased}
+
+/* Sidebar */
+.sidebar{width:var(--sidebar);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;bottom:0;z-index:10}
+.sb-logo{padding:22px 20px 20px;border-bottom:1px solid var(--border);font-size:13px;font-weight:700;letter-spacing:.12em;color:var(--text2)}
+.sb-logo b{color:var(--text)}
+.sb-nav{padding:12px 10px;flex:1}
+.sb-link{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;color:var(--text3);text-decoration:none;font-size:12.5px;font-weight:500;transition:.12s;margin-bottom:1px}
+.sb-link:hover{background:rgba(255,255,255,.04);color:var(--text2)}
+.sb-link.on{background:var(--accent-dim);color:var(--accent)}
+.sb-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.sb-foot{padding:14px 20px;border-top:1px solid var(--border)}
+.sb-logout{display:block;text-align:center;padding:7px 12px;border-radius:6px;background:rgba(239,68,68,.08);color:var(--red);font-size:12px;font-weight:500;text-decoration:none;transition:.12s;letter-spacing:.02em}
+.sb-logout:hover{background:rgba(239,68,68,.15)}
+
+/* Main */
+.main{margin-left:var(--sidebar);flex:1;padding:28px 40px;}
+
+
+
+/* Stat cards */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+.stat-l{font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.stat-v{font-size:28px;font-weight:700;line-height:1}
+.c-blue{color:var(--accent)}.c-green{color:var(--green)}.c-amber{color:var(--amber)}.c-purple{color:var(--purple)}
+
+/* Tabs */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px}
+.tab{padding:9px 20px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text3);font-size:12.5px;font-weight:500;cursor:pointer;margin-bottom:-1px;letter-spacing:.01em;transition:.12s}
+.tab:hover{color:var(--text2)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.panel{display:none}.panel.on{display:block}
+
+/* Card */
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.card-hd{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.card-title{font-size:13.5px;font-weight:600}
+.hd-right{display:flex;align-items:center;gap:10px}
+.search{padding:7px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12.5px;font-family:inherit;outline:none;width:200px;transition:.12s}
+.search:focus{border-color:var(--accent)}
+.search::placeholder{color:var(--text3)}
+
+/* Table */
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text3);padding:11px 16px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody tr{border-bottom:1px solid rgba(255,255,255,.03);transition:.1s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:rgba(255,255,255,.02)}
+td{padding:15px 18px;font-size:13.5px}
+td strong{font-weight:600;color:var(--text)}
+.td-muted{color:var(--text3)}
+.empty{text-align:center;padding:40px;color:var(--text3);font-size:12.5px}
+
+/* Role badges */
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.b-admin{background:rgba(139,92,246,.12);color:#a78bfa}
+.b-client{background:rgba(59,130,246,.1);color:#93c5fd}
+.b-analyst{background:rgba(16,185,129,.1);color:#6ee7b7}
+.b-thirdparty{background:rgba(245,158,11,.1);color:#fcd34d}
+.b-active{background:rgba(16,185,129,.08);color:var(--green)}
+.b-inactive{background:rgba(239,68,68,.08);color:var(--red)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:inherit;transition:.12s;letter-spacing:.01em}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#2563eb}
+.btn-danger{background:rgba(239,68,68,.1);color:var(--red)}.btn-danger:hover{background:rgba(239,68,68,.18)}
+.btn-ghost{background:rgba(255,255,255,.05);color:var(--text2)}.btn-ghost:hover{background:rgba(255,255,255,.09)}
+.btn-sm{padding:4px 10px;font-size:11.5px}
+.btn-success{background:rgba(16,185,129,.1);color:var(--green)}.btn-success:hover{background:rgba(16,185,129,.18)}
+.act-row{display:flex;gap:4px}
+
+/* Client rows */
+.cl-row{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid rgba(255,255,255,.03);transition:.1s}
+.cl-row:last-child{border-bottom:none}
+.cl-row:hover{background:rgba(255,255,255,.02)}
+.cl-left{display:flex;align-items:center;gap:14px}
+.cl-idx{width:22px;text-align:right;font-size:11px;color:var(--text3);font-weight:500}
+.cl-name{font-weight:600;font-size:13px;margin-bottom:3px}
+.cl-meta{font-size:11.5px;color:var(--text3)}
+.cl-meta span{color:var(--accent);font-weight:600}
+.cl-right{display:flex;align-items:center;gap:8px}
+.plat-tag{font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;letter-spacing:.05em}
+.pt-s1{background:rgba(99,102,241,.1);color:#a5b4fc}
+.pt-av{background:rgba(249,115,22,.1);color:#fb923c}
+
+/* Modal */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+.overlay.on{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:460px;max-height:88vh;overflow-y:auto;padding:28px}
+.modal-title{font-size:15px;font-weight:700;margin-bottom:22px;letter-spacing:-.2px}
+.modal-div{height:1px;background:var(--border);margin:18px 0}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fg{margin-bottom:14px}
+.fl{display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;letter-spacing:.06em;text-transform:uppercase}
+.fi,.fs{width:100%;padding:8px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:.12s}
+.fi:focus,.fs:focus{border-color:var(--accent)}
+.fi::placeholder{color:var(--text3)}
+.fs option{background:var(--surface)}
+.fl-hint{font-size:11px;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px}
+.m-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+
+/* Export */
+.exp-row{margin-bottom:14px}
+.exp-label{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.07em;text-transform:uppercase;margin-bottom:6px}
+.exp-wrap{display:flex;gap:8px}
+.exp-input{flex:1;padding:8px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:12px;font-family:monospace;outline:none}
+.exp-note{color:var(--text3);font-size:12px;margin-bottom:20px;line-height:1.6}
+
+/* Toast */
+#toast{position:fixed;bottom:22px;right:22px;padding:10px 16px;border-radius:8px;font-size:12.5px;font-weight:500;z-index:200;transform:translateY(60px);opacity:0;transition:.25s;background:var(--card);border:1px solid var(--border)}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.ok{border-color:var(--green);color:var(--green)}
+#toast.err{border-color:var(--red);color:var(--red)}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sb-logo"><b>SENTRIUM</b> &nbsp;SOC</div>
+  <nav class="sb-nav">
+    <a href="/soc/" class="sb-link"><span class="sb-dot"></span> Dashboard</a>
+    <a href="/soc/settings" class="sb-link on"><span class="sb-dot"></span> Settings</a>
+  </nav>
+  <div class="sb-foot">
+    <a href="/soc/logout" class="sb-logout">Sign Out</a>
+  </div>
+</aside>
+
+<main class="main">
+
+  {% if flash %}<script>window._flashMsg='{{ flash }}';window._flashType='ok';</script>{% endif %}
+  {% if error %}<script>window._flashMsg='{{ error }}';window._flashType='err';</script>{% endif %}
+
+  <div class="stats">
+    <div class="stat"><div class="stat-l">Total Accounts</div><div class="stat-v c-blue">{{ stats.total }}</div></div>
+    <div class="stat"><div class="stat-l">Client Logins</div><div class="stat-v c-green">{{ stats.clients }}</div></div>
+    <div class="stat"><div class="stat-l">Analysts</div><div class="stat-v c-amber">{{ stats.analysts }}</div></div>
+    <div class="stat"><div class="stat-l">Third Party</div><div class="stat-v c-purple">{{ stats.thirdparty }}</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" onclick="sw('users',this)">Accounts</button>
+    <button class="tab" onclick="sw('clients',this)">Environments</button>
+    <button class="tab" onclick="sw('log',this)">Access Log</button>
+    <button class="tab" onclick="sw('export',this)">Export</button>
+  </div>
+
+  <!-- Users -->
+  <div class="panel on" id="panel-users">
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-title">All Login Accounts</div>
+        <div class="hd-right">
+          <input class="search" placeholder="Filter by username…" oninput="filterTbl('utbl',this.value)">
+          <button class="btn btn-primary" onclick="openM('m-add')">+ New Account</button>
+        </div>
+      </div>
+      <table id="utbl">
+        <thead><tr>
+          <th>Username</th><th>Role</th><th>Client Mapping</th>
+          <th>Last Access</th><th>Status</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+        {% for u in users %}
+        <tr>
+          <td><strong>{{ u.username }}</strong></td>
+          <td><span class="badge b-{{ u.role }}">{{ u.role }}</span></td>
+          <td class="td-muted">{{ u.client_name or '—' }}</td>
+          <td class="td-muted">{{ u.last_access_fmt or 'Never' }}</td>
+          <td><span class="badge {{ 'b-active' if u.is_active else 'b-inactive' }}">{{ 'Active' if u.is_active else 'Inactive' }}</span></td>
+          <td>
+            <div class="act-row">
+              <button class="btn btn-ghost btn-sm"
+                onclick="openEdit('{{ u.username }}','{{ u.role }}','{{ u.client_name or '' }}')">Edit</button>
+              <form method="POST" action="/soc/settings/user/toggle" style="display:inline">
+                <input type="hidden" name="username" value="{{ u.username }}">
+                <input type="hidden" name="active" value="{{ '0' if u.is_active else '1' }}">
+                <button class="btn btn-ghost btn-sm" type="submit">{{ 'Deactivate' if u.is_active else 'Activate' }}</button>
+              </form>
+              {% if u.role != 'admin' %}
+              <form method="POST" action="/soc/settings/user/delete" style="display:inline"
+                    onsubmit="return confirm('Delete {{ u.username }}?')">
+                <input type="hidden" name="username" value="{{ u.username }}">
+                <button class="btn btn-danger btn-sm" type="submit">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No accounts found.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Clients -->
+  <div class="panel" id="panel-clients">
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-title">Client Environments &nbsp;<span style="color:var(--text3);font-weight:400;font-size:12px;">({{ client_envs|length }} environments)</span></div>
+        <input class="search" placeholder="Filter clients…" oninput="filterCl(this.value)">
+      </div>
+      <div id="cl-list">
+      {% for c in client_envs %}
+      <div class="cl-row" data-nm="{{ c.name|lower }}">
+        <div class="cl-left">
+          <div class="cl-idx">{{ loop.index }}</div>
+          <div>
+            <div class="cl-name">{{ c.name }}</div>
+            <div class="cl-meta">
+              <span>{{ c.login_count }}</span> credential(s) &nbsp;·&nbsp;
+              <span>{{ c.analyst_count }}</span> analyst(s) &nbsp;·&nbsp;
+              {{ c.total_accesses }} access event(s)
+            </div>
+          </div>
+        </div>
+        <div class="cl-right">
+          {% for p in c.platforms %}
+            {% if 'sentinel' in p|lower %}<span class="plat-tag pt-s1">S1</span>
+            {% elif 'alien' in p|lower %}<span class="plat-tag pt-av">AV</span>{% endif %}
+          {% endfor %}
+          <button class="btn btn-primary btn-sm" onclick="quickAdd('{{ c.name }}')">Assign Credential</button>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty">No client environments detected yet. Data loads after the first fetch cycle (~30s).</div>
+      {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Access Log -->
+  <div class="panel" id="panel-log">
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-title">Access Log</div>
+        <span style="color:var(--text3);font-size:12px;">Last {{ access_log|length }} events</span>
+      </div>
+      <table>
+        <thead><tr><th>Timestamp</th><th>Username</th><th>Role</th><th>Client</th><th>Action</th><th>IP Address</th></tr></thead>
+        <tbody>
+        {% for e in access_log %}
+        <tr>
+          <td class="td-muted" style="white-space:nowrap;font-size:12px;">{{ e.time_fmt }}</td>
+          <td><strong>{{ e.username }}</strong></td>
+          <td><span class="badge b-{{ e.role }}">{{ e.role }}</span></td>
+          <td class="td-muted">{{ e.client_name or '—' }}</td>
+          <td style="color:{{ 'var(--green)' if e.action=='login' else 'var(--text3)' }};font-size:12px;font-weight:500;">{{ e.action }}</td>
+          <td class="td-muted" style="font-size:12px;">{{ e.ip_address or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No access events recorded yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Export -->
+  <div class="panel" id="panel-export">
+    <div class="card" style="padding:24px">
+      <div class="card-title" style="margin-bottom:8px">Export to Railway Variables</div>
+      <p class="exp-note">
+        Copy these JSON values into Railway → Variables to persist user accounts across deployments.
+        The hashed passwords will not match the UI passwords — use the <strong>Export Config</strong>
+        values as the new source of truth after any changes.
+      </p>
+      {% for key, val in export_vars.items() %}
+      <div class="exp-row">
+        <div class="exp-label">{{ key }}</div>
+        <div class="exp-wrap">
+          <input class="exp-input" readonly value="{{ val }}" id="ev-{{ key }}">
+          <button class="btn btn-ghost btn-sm" onclick="cp('ev-{{ key }}')">Copy</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</main>
+
+<!-- Modal: Add Account -->
+<div class="overlay" id="m-add">
+  <div class="modal">
+    <div class="modal-title">Create New Account</div>
+    <form method="POST" action="/soc/settings/user/create">
+      <div class="frow">
+        <div class="fg"><label class="fl">Username</label>
+          <input class="fi" name="username" placeholder="e.g. client-acme" required></div>
+        <div class="fg"><label class="fl">Password</label>
+          <input class="fi" type="password" name="password" placeholder="••••••••" required></div>
+      </div>
+      <div class="fg"><label class="fl">Role</label>
+        <select class="fs" name="role" onchange="toggleCF(this,'add')">
+          <option value="client">Client</option>
+          <option value="analyst">Analyst</option>
+          <option value="thirdparty">Third Party</option>
+        </select>
+      </div>
+      <div class="fg" id="cf-add"><label class="fl">Client Environment</label>
+        <select class="fs" name="client_name" id="cn-add">
+          <option value="">— Select environment —</option>
+          {% for c in client_envs %}
+          <option value="{{ c.name }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="m-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeM('m-add')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Account</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Edit Account -->
+<div class="overlay" id="m-edit">
+  <div class="modal">
+    <div class="modal-title">Edit Account</div>
+    <form method="POST" action="/soc/settings/user/update">
+      <input type="hidden" name="original_username" id="eu-orig">
+      <div class="fg"><label class="fl">Username</label>
+        <input class="fi" name="username" id="eu-name"></div>
+      <div class="fg"><label class="fl">Password <span class="fl-hint">(leave blank to keep current)</span></label>
+        <input class="fi" type="password" name="password" placeholder="••••••••"></div>
+      <div class="fg"><label class="fl">Role</label>
+        <select class="fs" name="role" id="eu-role" onchange="toggleCF(this,'edit')">
+          <option value="client">Client</option>
+          <option value="analyst">Analyst</option>
+          <option value="thirdparty">Third Party</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="fg" id="cf-edit"><label class="fl">Client Environment</label>
+        <select class="fs" name="client_name" id="eu-client">
+          <option value="">— None —</option>
+          {% for c in client_envs %}
+          <option value="{{ c.name }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="m-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeM('m-edit')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+function sw(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('panel-' + name).classList.add('on');
+}
+function openM(id) { document.getElementById(id).classList.add('on'); }
+function closeM(id) { document.getElementById(id).classList.remove('on'); }
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('on'); });
+});
+function openEdit(u, role, client) {
+  document.getElementById('eu-orig').value  = u;
+  document.getElementById('eu-name').value  = u;
+  document.getElementById('eu-role').value  = role;
+  document.getElementById('eu-client').value = client;
+  toggleCF(document.getElementById('eu-role'), 'edit');
+  openM('m-edit');
+}
+function toggleCF(sel, suffix) {
+  const g = document.getElementById('cf-' + suffix);
+  g.style.display = (sel.value === 'admin') ? 'none' : '';
+}
+function quickAdd(name) {
+  openM('m-add');
+  setTimeout(() => { document.getElementById('cn-add').value = name; }, 50);
+}
+function filterTbl(id, q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#' + id + ' tbody tr').forEach(r => {
+    r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+function filterCl(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.cl-row').forEach(r => {
+    r.style.display = (r.dataset.nm || '').includes(q) ? '' : 'none';
+  });
+}
+function cp(id) {
+  navigator.clipboard.writeText(document.getElementById(id).value);
+  showToast('Copied to clipboard', 'ok');
+}
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  setTimeout(() => t.className = '', 3000);
+}
+// Auto-show server flash as dismissing toast
+if (window._flashMsg) showToast(window._flashMsg, window._flashType || 'ok');
+</script>
+</body>
+</html>

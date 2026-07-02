@@ -1,0 +1,24 @@
+flask>=3.0
+uvicorn[standard]
+starlette
+fastapi
+a2wsgi
+python-dotenv
+python-multipart
+PyJWT
+requests
+pandas
+openpyxl
+xlsxwriter
+pdfplumber
+fpdf2
+python-docx
+pyotp
+Pillow
+websockets
+aiofiles
+# Security additions
+bcrypt>=4.0
+flask-limiter>=3.0
+psycopg2-binary>=2.9
+httpx>=0.27

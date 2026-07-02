@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Sentrium SOC ΓÇö Client Overview</title>
+<meta name="description" content="Sentrium Integrated Security Operations Center ΓÇö Client Overview">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/soc/static/css/dashboard.css?v=17">
+<style>
+.clients-page .sidebar .brand { padding-bottom: 20px; }
+</style>
+</head>
+<body class="clients-page">
+
+<div class="notification-container" id="notification-container"></div>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<!-- ΓòÉΓòÉΓòÉ SIDEBAR ΓòÉΓòÉΓòÉ -->
+<aside class="sidebar" id="sidebar">
+  <div class="brand-logo">
+  <svg class="brand-shield" viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="sg" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0%" stop-color="#3B6FE8"/>
+      <stop offset="45%" stop-color="#1438C2"/>
+      <stop offset="100%" stop-color="#08158A"/>
+    </linearGradient>
+    <linearGradient id="sg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.30)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+  </defs>
+  <!-- Shield body -->
+  <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#sg)"/>
+  <!-- Gloss highlight top-left -->
+  <path d="M24 3 L43 11 L43 24 C32 21 14 18 5 20 L5 11 Z" fill="url(#sg2)" opacity="0.7"/>
+  <!-- Shield border -->
+  <path d="M24 2 L44 11 L44 33 C44 46 35 53 24 54 C13 53 4 46 4 33 L4 11 Z" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
+  <!-- 4 vertical pill bars (white) ΓÇö varying heights like the logo -->
+  <!-- Bar 1 -->
+  <rect x="9"  y="17" width="6" height="24" rx="3" fill="white"/>
+  <!-- Bar 2 -->
+  <rect x="18" y="13" width="6" height="28" rx="3" fill="white"/>
+  <!-- Bar 3 -->
+  <rect x="27" y="15" width="6" height="26" rx="3" fill="white"/>
+  <!-- Bar 4 -->
+  <rect x="36" y="18" width="6" height="22" rx="3" fill="white"/>
+</svg>
+  <div class="brand-text">
+    <span class="brand-name">Sentrium</span><span class="brand-soc">SOC</span>
+  </div>
+</div>
+  <div class="sidebar-search">
+    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" placeholder="Search clients..." id="search-input">
+  </div>
+  <nav class="sidebar-nav">
+    <a href="/soc/" class="nav-item active">
+      <span>Dashboard</span>
+    </a>
+    <a href="/soc/settings" class="nav-item">
+      <span>Settings</span>
+    </a>
+  </nav>
+  <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" style="margin-top:auto;">
+    <svg id="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+    <svg id="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <span class="tl" id="theme-label">Dark</span>
+  </button>
+</aside>
+
+<!-- ΓòÉΓòÉΓòÉ MAIN ΓòÉΓòÉΓòÉ -->
+<main class="main-content">
+  <header class="topbar">
+    <div class="topbar-left" style="display:flex;align-items:center;">
+      <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div>
+        <div class="page-title">Client Overview</div>
+        <div class="page-sub">Sentrium Security Operations Center</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <a href="/soc/logout" class="user-btn" title="Sign Out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+    </div>
+  </header>
+
+  <!-- Summary strip -->
+  <div class="summary-strip" id="summary-strip">
+    <div class="strip-item">
+      <div class="strip-icon si-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
+      <div><div class="strip-val" id="total-clients"><span class="skeleton skeleton-value" style="width:36px;"></span></div><div class="strip-lbl">Total Clients</div></div>
+    </div>
+    <div class="strip-item">
+      <div class="strip-icon si-indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+      <div><div class="strip-val" id="s1-count"><span class="skeleton skeleton-value" style="width:28px;"></span></div><div class="strip-lbl">SentinelOne</div></div>
+    </div>
+    <div class="strip-item">
+      <div class="strip-icon si-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+      <div><div class="strip-val" id="av-count"><span class="skeleton skeleton-value" style="width:28px;"></span></div><div class="strip-lbl">AlienVault</div></div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filter-bar">
+    <button class="filter-pill active" data-filter="all">All Clients</button>
+    <button class="filter-pill filter-pill-s1" data-filter="SentinelOne">SentinelOne</button>
+    <button class="filter-pill filter-pill-av" data-filter="AlienVault">AlienVault</button>
+    <button class="filter-pill" data-filter="both">Both Platforms</button>
+  </div>
+
+  <!-- Count -->
+  <div class="list-header">
+    <h2>Managed Clients</h2>
+    <span class="client-count" id="client-count"><span class="skeleton skeleton-pill"></span></span>
+  </div>
+
+  <!-- Table -->
+  <div class="client-list-card">
+    <table class="client-list-table" id="client-list-table">
+      <thead><tr><th>#</th><th>Client Name</th><th>Platform</th><th>Status</th><th></th></tr></thead>
+      <tbody id="clients-tbody">
+        <tr><td colspan="5"><div class="loading-state" id="loading-skeleton">
+          <div style="padding:16px;">
+            <div class="skeleton skeleton-row" style="width:94%"></div>
+            <div class="skeleton skeleton-row" style="width:88%"></div>
+            <div class="skeleton skeleton-row" style="width:82%"></div>
+            <div class="skeleton skeleton-row" style="width:90%"></div>
+            <div class="skeleton skeleton-row" style="width:85%"></div>
+          </div>
+          <p id="loading-msg" style="font-size:0.74rem;color:var(--text-muted);margin-top:2px;">Connecting to data sources…</p>
+        </div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</main>
+
+<script>
+const WS_URL = "{{ ws_url }}";
+let ws = null, lastUpdateTime = null, currentFilter = 'all', allClients = [];
+
+function getTheme() { return localStorage.getItem('soc-theme') || 'dark'; }
+function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('soc-theme', t);
+    const di = document.getElementById('theme-icon-dark');
+    const li = document.getElementById('theme-icon-light');
+    const lb = document.getElementById('theme-label');
+    if (t === 'dark') { if(di)di.style.display=''; if(li)li.style.display='none'; if(lb)lb.textContent='Dark'; }
+    else { if(di)di.style.display='none'; if(li)li.style.display=''; if(lb)lb.textContent='Light'; }
+}
+function toggleTheme() { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); }
+(function(){ setTheme(getTheme()); })();
+
+function showNotification(title, desc, type) {
+    const c = document.getElementById('notification-container'); if(!c) return;
+    const icons={success:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',error:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',warning:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',info:'<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'};
+    const t = document.createElement('div');
+    t.className='toast toast-'+type;
+    t.innerHTML=(icons[type]||icons.info)+'<div class="toast-content"><div class="toast-title">'+escHtml(title)+'</div>'+(desc?'<div class="toast-desc">'+escHtml(desc)+'</div>':'')+'</div><svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    c.appendChild(t);
+    t.addEventListener('click',()=>{if(!t.classList.contains('toast-out')){t.classList.add('toast-out');setTimeout(()=>t.remove(),250);}});
+    setTimeout(()=>{if(!t.classList.contains('toast-out')){t.classList.add('toast-out');setTimeout(()=>t.remove(),250);}},5000);
+}
+
+document.querySelectorAll('.filter-pill').forEach(p => p.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-pill').forEach(x=>x.classList.remove('active'));
+    p.classList.add('active'); currentFilter=p.dataset.filter; renderTable(allClients);
+}));
+document.getElementById('search-input').addEventListener('input', e => renderTable(allClients, e.target.value.toLowerCase().trim()));
+
+function toggleMobileMenu() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebar-overlay').classList.toggle('visible');
+    document.getElementById('hamburger').classList.toggle('active');
+}
+document.getElementById('sidebar-overlay').addEventListener('click', toggleMobileMenu);
+
+let _pollTimer = null;
+let _pollAttempts = 0;
+const MAX_POLL = 40; // ~2 min at 3s intervals
+
+async function fetchStateNow() {
+    try {
+        const r = await fetch('/soc/api/state');
+        if (r.ok) {
+            const data = await r.json();
+            handleState(data);
+            // Data arrived — stop any retry polling
+            if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+            _pollAttempts = 0;
+            return true;
+        }
+        // 503 = cache not ready yet, keep retrying
+        if (r.status === 503) return false;
+    } catch(_) {}
+    return false;
+}
+
+function startPolling() {
+    if (_pollTimer) return; // already polling
+    _pollAttempts = 0;
+    _pollTimer = setInterval(async () => {
+        _pollAttempts++;
+        const ok = await fetchStateNow();
+        if (ok || _pollAttempts >= MAX_POLL) {
+            clearInterval(_pollTimer);
+            _pollTimer = null;
+        }
+    }, 3000);
+}
+
+function connectWS() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = async () => {
+        const ok = await fetchStateNow();
+        if (!ok) startPolling(); // server not ready yet — poll until it is
+    };
+    ws.onmessage = e => {
+        try {
+            handleState(JSON.parse(e.data));
+            lastUpdateTime = new Date();
+            // WS broadcast received — stop polling
+            if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+        } catch(_) {}
+    };
+    ws.onclose = () => { setTimeout(connectWS, 3000); };
+    ws.onerror = () => ws.close();
+}
+
+// ── Progressive loading messages ─────────────────────────────────────────
+// Cleared automatically the moment data arrives (handleState calls clearLoadingTimers)
+const _loadTimers = [];
+function clearLoadingTimers() {
+    _loadTimers.forEach(t => clearTimeout(t));
+    _loadTimers.length = 0;
+}
+function _setLoadMsg(msg) {
+    const el = document.getElementById('loading-msg');
+    if (el) el.textContent = msg;
+}
+_loadTimers.push(setTimeout(() => _setLoadMsg('Fetching SentinelOne data…'), 8000));
+_loadTimers.push(setTimeout(() => _setLoadMsg('Building client list — first load takes 30–90 s…'), 25000));
+_loadTimers.push(setTimeout(() => _setLoadMsg('Merging AlienVault data — this can take up to 2 minutes on first run…'), 60000));
+_loadTimers.push(setTimeout(() => _setLoadMsg('Still loading. If this persists beyond 3 minutes, try refreshing the page.'), 120000));
+
+function handleState(state) {
+    clearLoadingTimers();   // cancel any pending "still loading…" messages
+    allClients = state.clients || [];
+    document.getElementById('loading-skeleton')?.style.setProperty('display','none');
+    document.getElementById('total-clients').textContent = allClients.length;
+    document.getElementById('s1-count').textContent = allClients.filter(c => c.platforms.includes('SentinelOne')).length;
+    document.getElementById('av-count').textContent = allClients.filter(c => c.platforms.includes('AlienVault')).length;
+    document.getElementById('client-count').textContent = allClients.length + ' clients monitored';
+    renderTable(allClients, document.getElementById('search-input').value.toLowerCase().trim());
+}
+
+function renderTable(clients, search) {
+    const tb = document.getElementById('clients-tbody');
+    const f = clients.filter(c => {
+        if(search && !c.name.toLowerCase().includes(search)) return false;
+        if(currentFilter==='SentinelOne') return c.platforms.includes('SentinelOne')&&!c.platforms.includes('AlienVault');
+        if(currentFilter==='AlienVault') return c.platforms.includes('AlienVault')&&!c.platforms.includes('SentinelOne');
+        if(currentFilter==='both') return c.platforms.includes('SentinelOne')&&c.platforms.includes('AlienVault');
+        return true;
+    }).sort((a,b)=>a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    if(!f.length){ tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:36px;color:var(--text-muted);">No clients match filter.</td></tr>'; return; }
+    tb.innerHTML = f.map((c,i)=>{
+        const pills = (c.platforms||[]).map(p => p==='SentinelOne'?'<span class="plat-pill plat-pill-s1"><span class="plat-dot"></span>S1</span>':'<span class="plat-pill plat-pill-av"><span class="plat-dot"></span>AV</span>').join('');
+        let dc='',sl='Healthy';
+        if(c.total_threats>10){dc='critical';sl='Critical';}else if(c.total_threats>0){dc='warning';sl='Alert';}
+        const enc=encodeURIComponent(c.name);
+        return '<tr onclick="window.location=\'/soc/client/'+enc+'\'"><td><span class="cl-index">'+(i+1)+'</span></td><td><span class="cl-name">'+escHtml(c.name)+'</span></td><td><div class="plat-pills">'+pills+'</div></td><td><span class="cl-status"><span class="cl-status-dot '+dc+'"></span>'+sl+'</span></td><td style="text-align:right;"><a href="/soc/client/'+enc+'" class="view-action" onclick="event.stopPropagation()">View <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></a></td></tr>';
+    }).join('');
+}
+
+
+
+function escHtml(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+
+fetchStateNow();
+connectWS();
+</script>
+</body>
+</html>

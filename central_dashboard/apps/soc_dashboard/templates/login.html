@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentrium SOC — Sign In</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* ══════════════════════════════════════
+           CURTAIN ANIMATION
+        ══════════════════════════════════════ */
+        .curtain {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            pointer-events: none;
+        }
+        .curtain-left, .curtain-right {
+            width: 50%;
+            height: 100%;
+        }
+        .curtain-left {
+            background: linear-gradient(145deg, #050D30 0%, #0B1B72 50%, #0A1560 100%);
+            animation: curtainLeft 1.8s cubic-bezier(0.77, 0, 0.18, 1) 0.3s forwards;
+        }
+        .curtain-right {
+            background: #EEF0F7;
+            animation: curtainRight 1.8s cubic-bezier(0.77, 0, 0.18, 1) 0.3s forwards;
+        }
+        @keyframes curtainLeft  { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+        @keyframes curtainRight { from { transform: translateX(0); } to { transform: translateX(100%); } }
+
+        /* Curtain center — logo + name only */
+        .curtain-center {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            animation: curtainFade 0.5s ease 1.65s forwards;
+            opacity: 1;
+        }
+        @keyframes curtainFade { to { opacity: 0; } }
+
+        .curtain-logo-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            animation: curtainLogoPop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
+        }
+        @keyframes curtainLogoPop {
+            from { transform: scale(0.6) translateY(10px); opacity: 0; }
+            to   { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .curtain-logo-wrap svg {
+            width: 70px;
+            height: 82px;
+            filter: drop-shadow(0 0 28px rgba(59,111,232,0.65)) drop-shadow(0 4px 16px rgba(0,0,0,0.5));
+        }
+        .curtain-logo-wrap .cl-name {
+            font-size: 1.7rem;
+            font-weight: 900;
+            letter-spacing: 0.14em;
+            color: #FFFFFF;
+            text-shadow: 0 2px 12px rgba(59,111,232,0.5);
+        }
+
+        /* ══════════════════════════════════════
+           PAGE LAYOUT
+        ══════════════════════════════════════ */
+        .page-wrap {
+            display: flex;
+            width: 100%;
+            min-height: 100vh;
+            opacity: 0;
+            animation: pageReveal 0.6s ease 1.85s forwards;
+        }
+        @keyframes pageReveal { to { opacity: 1; } }
+
+        /* ════════════════════════════════════════
+           LEFT PANEL — Clean gradient, no content
+        ════════════════════════════════════════ */
+        .login-left {
+            flex: 0 0 50%;
+            position: relative;
+            background: linear-gradient(145deg, #04092C 0%, #0B1B72 45%, #0D21A1 100%);
+            overflow: hidden;
+        }
+
+        /* Central ambient glow — matches reference */
+        .login-left::before {
+            content: '';
+            position: absolute;
+            top: 35%;
+            left: 20%;
+            width: 55%;
+            height: 40%;
+            background: radial-gradient(ellipse at center, rgba(60,100,255,0.45) 0%, rgba(20,50,180,0.2) 45%, transparent 75%);
+            pointer-events: none;
+        }
+
+        /* ════════════════════════════════════════
+           RIGHT PANEL — Light gray bg + white card
+        ════════════════════════════════════════ */
+        .login-right {
+            flex: 0 0 50%;
+            background: #ECEEF5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 32px;
+        }
+
+        /* White card */
+        .login-card {
+            width: 100%;
+            max-width: 420px;
+            background: #FFFFFF;
+            border-radius: 20px;
+            padding: 44px 40px 36px;
+            box-shadow:
+                0 4px 6px rgba(0,0,0,0.04),
+                0 12px 40px rgba(0,0,0,0.10),
+                0 1px 2px rgba(0,0,0,0.06);
+        }
+
+        /* Logo inside card */
+        .login-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+        .login-logo svg { width: 42px; height: 49px; }
+        .login-logo-wordmark { display: flex; flex-direction: column; line-height: 1; }
+        .lw-sentrium {
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+            color: #07133A;
+            line-height: 1.15;
+        }
+        .lw-soc {
+            font-size: 0.88rem;
+            font-weight: 800;
+            letter-spacing: 0.3em;
+            color: #2563EB;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+
+        .login-tagline {
+            text-align: center;
+            font-size: 0.84rem;
+            color: #8492A6;
+            margin-bottom: 28px;
+            line-height: 1.5;
+        }
+
+        /* Step indicator */
+        .step-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 26px;
+        }
+        .step-dot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            background: #D1D9E6;
+            transition: all 0.3s;
+        }
+        .step-dot.active { background: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+        .step-dot.done   { background: #16A34A; }
+        .step-line { width: 36px; height: 1px; background: #D1D9E6; }
+
+        /* Alerts */
+        .error-msg {
+            background: #FEF2F2; border: 1px solid #FECACA; color: #DC2626;
+            padding: 10px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 500;
+            text-align: center; margin-bottom: 18px;
+            animation: shake 0.4s ease;
+        }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
+        .config-warning {
+            background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E;
+            padding: 12px 14px; border-radius: 8px; font-size: 0.78rem; font-weight: 500;
+            text-align: center; margin-bottom: 16px; line-height: 1.5;
+        }
+
+        /* Form */
+        .form-step { display: none; }
+        .form-step.active { display: block; }
+
+        .form-group { margin-bottom: 18px; }
+        .form-group label {
+            display: block;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #3D4B60;
+            margin-bottom: 7px;
+        }
+        .input-wrap { position: relative; }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 0.88rem;
+            font-weight: 400;
+            font-family: 'Inter', sans-serif;
+            color: #1A2540;
+            background: #F4F6FA;
+            border: 1.5px solid #E4E8F0;
+            border-radius: 10px;
+            outline: none;
+            transition: all 0.18s;
+        }
+        input[type="text"]:focus, input[type="password"]:focus {
+            border-color: #2563EB;
+            background: #FFFFFF;
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+        }
+        input[type="text"]::placeholder,
+        input[type="password"]::placeholder { color: #ADBACF; }
+        input[type="password"] { padding-right: 46px; }
+        .input-eye {
+            position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer; color: #ADBACF;
+            padding: 2px; display: flex; transition: color 0.15s;
+        }
+        .input-eye:hover { color: #6B7280; }
+        .input-eye svg { width: 18px; height: 18px; }
+
+        .forgot-link {
+            font-size: 0.8rem;
+            color: #2563EB;
+            font-weight: 600;
+            text-decoration: none;
+            display: block;
+            margin-top: -8px;
+            margin-bottom: 22px;
+        }
+        .forgot-link:hover { text-decoration: underline; }
+
+        /* Login button */
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #1D3FBF;
+            color: #FFFFFF;
+            letter-spacing: 0.3px;
+        }
+        .btn:hover {
+            background: #1634A8;
+            box-shadow: 0 6px 20px rgba(29,63,191,0.38);
+            transform: translateY(-1px);
+        }
+        .btn:active  { transform: translateY(0); box-shadow: none; }
+        .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none !important; }
+
+        .btn-outline {
+            width: 100%; padding: 11px; margin-top: 10px;
+            border: 1.5px solid #E4E8F0; border-radius: 10px;
+            font-size: 0.84rem; font-weight: 500; font-family: inherit;
+            cursor: pointer; transition: all 0.18s;
+            background: transparent; color: #6B7280;
+        }
+        .btn-outline:hover { border-color: #2563EB; color: #2563EB; background: rgba(37,99,235,0.04); }
+
+        /* OTP */
+        .totp-info { text-align: center; font-size: 0.82rem; color: #6B7280; margin-bottom: 20px; line-height: 1.65; }
+        .otp-d {
+            width: 48px; height: 56px; text-align: center; font-size: 1.4rem; font-weight: 700;
+            font-family: 'Inter', monospace; color: #1A2540; background: #F4F6FA;
+            border: 1.5px solid #E4E8F0; border-radius: 10px; outline: none; transition: all 0.18s;
+        }
+        .otp-d:focus { border-color: #2563EB; background: #FFFFFF; box-shadow: 0 0 0 3px rgba(37,99,235,0.10); }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.73rem;
+            color: #ADBACF;
+        }
+        .footer a { color: #2563EB; font-weight: 600; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+
+        @media(max-width: 860px) {
+            .login-left { display: none; }
+            .login-right { flex: 0 0 100%; }
+            .curtain-left { display: none; }
+            .curtain-right { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ══ CURTAIN ══ -->
+<div class="curtain" id="curtain" aria-hidden="true">
+    <div class="curtain-left"></div>
+    <div class="curtain-right"></div>
+</div>
+<div class="curtain-center" id="curtain-center" aria-hidden="true">
+    <div class="curtain-logo-wrap">
+        <svg viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="csg" x1="0" y1="0" x2="0.6" y2="1">
+                    <stop offset="0%"   stop-color="#3B6FE8"/>
+                    <stop offset="45%"  stop-color="#1438C2"/>
+                    <stop offset="100%" stop-color="#08158A"/>
+                </linearGradient>
+                <linearGradient id="csg2" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%"   stop-color="rgba(255,255,255,0.28)"/>
+                    <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+                </linearGradient>
+            </defs>
+            <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#csg)"/>
+            <path d="M24 3 L43 11 L43 24 C32 21 14 18 5 20 L5 11 Z" fill="url(#csg2)" opacity="0.7"/>
+            <path d="M24 2 L44 11 L44 33 C44 46 35 53 24 54 C13 53 4 46 4 33 L4 11 Z" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
+            <rect x="9"  y="17" width="6" height="24" rx="3" fill="white"/>
+            <rect x="18" y="13" width="6" height="28" rx="3" fill="white"/>
+            <rect x="27" y="15" width="6" height="26" rx="3" fill="white"/>
+            <rect x="36" y="18" width="6" height="22" rx="3" fill="white"/>
+        </svg>
+        <div class="cl-name">SENTRIUM</div>
+    </div>
+</div>
+
+<!-- ══ PAGE ══ -->
+<div class="page-wrap">
+
+    <!-- Left: clean gradient only -->
+    <div class="login-left"></div>
+
+    <!-- Right: light bg + white card -->
+    <div class="login-right">
+        <div class="login-card">
+
+            <!-- Logo -->
+            <div class="login-logo">
+                <svg viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="sg3" x1="0" y1="0" x2="0.6" y2="1">
+                            <stop offset="0%"   stop-color="#3B6FE8"/>
+                            <stop offset="45%"  stop-color="#1438C2"/>
+                            <stop offset="100%" stop-color="#08158A"/>
+                        </linearGradient>
+                        <linearGradient id="sg4" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%"   stop-color="rgba(255,255,255,0.28)"/>
+                            <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M24 1 L45 10 L45 33 C45 46 36 54 24 55 C12 54 3 46 3 33 L3 10 Z" fill="url(#sg3)"/>
+                    <path d="M24 3 L43 11 L43 24 C32 21 14 18 5 20 L5 11 Z" fill="url(#sg4)" opacity="0.7"/>
+                    <path d="M24 2 L44 11 L44 33 C44 46 35 53 24 54 C13 53 4 46 4 33 L4 11 Z" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
+                    <rect x="9"  y="17" width="6" height="24" rx="3" fill="white"/>
+                    <rect x="18" y="13" width="6" height="28" rx="3" fill="white"/>
+                    <rect x="27" y="15" width="6" height="26" rx="3" fill="white"/>
+                    <rect x="36" y="18" width="6" height="22" rx="3" fill="white"/>
+                </svg>
+                <div class="login-logo-wordmark">
+                    <span class="lw-sentrium">Sentrium</span>
+                    <span class="lw-soc">SOC</span>
+                </div>
+            </div>
+
+            <p class="login-tagline">Welcome back! Please login to your account.</p>
+
+            <div class="step-indicator">
+                <div class="step-dot {% if step == 'totp' %}done{% else %}active{% endif %}" id="sd-1"></div>
+                <div class="step-line"></div>
+                <div class="step-dot {% if step == 'totp' %}active{% endif %}" id="sd-2"></div>
+            </div>
+
+            {% if config_error %}
+            <div class="config-warning">⚠ {{ config_error }}</div>
+            {% endif %}
+
+            {% if error %}
+            <div class="error-msg">{{ error }}</div>
+            {% endif %}
+
+            <!-- Credentials -->
+            <form method="POST" action="/soc/login" autocomplete="off">
+                <input type="hidden" name="step" value="credentials">
+                <div class="form-step {% if step != 'totp' %}active{% endif %}" id="step-credentials">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username"
+                               placeholder="Enter your username"
+                               value="{{ username or '' }}"
+                               autocomplete="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <div class="input-wrap">
+                            <input type="password" id="password" name="password"
+                                   placeholder="Enter your password"
+                                   autocomplete="current-password" required>
+                            <button type="button" class="input-eye" onclick="togglePwd()" title="Show/hide password">
+                                <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <a href="#" class="forgot-link">Forgot Password</a>
+                    <button type="submit" class="btn" id="btn-login">Login</button>
+                </div>
+            </form>
+
+            <!-- TOTP -->
+            {% if step == 'totp' %}
+            <form method="POST" action="/soc/login" autocomplete="off">
+                <input type="hidden" name="step" value="totp">
+                <div class="form-step active" id="step-totp">
+                    <p class="totp-info">Enter the 6-digit code from your authenticator app.</p>
+                    <div class="otp-row" style="display:flex;gap:8px;justify-content:center;margin-bottom:20px;">
+                        <input class="otp-d" name="totp_code" maxlength="6" inputmode="numeric"
+                               placeholder="——————"
+                               style="width:auto;flex:1;letter-spacing:0.5em;font-size:1.1rem;"
+                               autofocus>
+                    </div>
+                    <button type="submit" class="btn">Verify Code</button>
+                    <a href="/soc/login" class="btn-outline" style="display:block;text-align:center;text-decoration:none;padding:11px;margin-top:10px;border:1.5px solid #E4E8F0;border-radius:10px;font-size:0.84rem;color:#6B7280;">← Back</a>
+                </div>
+            </form>
+            {% endif %}
+
+            <div class="footer">Sentrium Security Operations Portal &nbsp;·&nbsp; <a href="#">Sentrium</a></div>
+
+        </div>
+    </div>
+
+</div><!-- /.page-wrap -->
+
+<script>
+setTimeout(() => {
+    const c  = document.getElementById('curtain');
+    const cc = document.getElementById('curtain-center');
+    if (c)  c.remove();
+    if (cc) cc.remove();
+}, 2400);
+
+function togglePwd() {
+    const inp = document.getElementById('password');
+    const ico = document.getElementById('eye-icon');
+    if (!inp) return;
+    if (inp.type === 'password') {
+        inp.type = 'text';
+        ico.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
+    } else {
+        inp.type = 'password';
+        ico.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+    }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Local only — never push these
+START_DASHBOARD.bat
+setup/
+test_canvas.html
+change_password.py
+clean_logo.py
+setup_2fa.py
+verify_totp.py
+debug_totp.html
+
+# Environment & secrets — NEVER commit these
+.env
+*.env
+sentrium_users_generated.json
+
+# Databases — ephemeral, use Railway volume or Postgres instead
+*.db
+*.sqlite
+*.sqlite3
+
+# SOC dashboard venv — too large, install via requirements.txt on Railway
+apps/soc_dashboard/.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Virtual environments & package dirs (install via requirements.txt / npm install)
+.venv/
+venv/
+node_modules/
+
+# Logs
+*.log

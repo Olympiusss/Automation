@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Sentrium Attendance Tracker</title>
+<style>
+:root{
+  --bg:#0f172a;--card:#1e293b;--card2:#263348;--border:rgba(255,255,255,0.08);
+  --accent:#3b82f6;--green:#22c55e;--red:#ef4444;--orange:#f97316;
+  --text:#f1f5f9;--muted:#94a3b8;--radius:14px;--font:'Inter',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh}
+.app-wrap{max-width:1300px;margin:0 auto;padding:28px 24px 60px}
+.app-header{display:flex;align-items:center;gap:16px;margin-bottom:28px;padding:20px 0 20px;border-bottom:1px solid var(--border)}
+.header-icon{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(59,130,246,0.4);flex-shrink:0;}
+.app-header h1{font-size:1.7rem;font-weight:800;letter-spacing:-0.5px;background:linear-gradient(135deg,#60a5fa,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.app-header .subtitle{font-size:0.88rem;color:var(--muted);margin-top:6px;line-height:1.7;}
+.tag-orange{background:rgba(249,115,22,0.15);color:#f97316;border-radius:5px;padding:1px 7px;font-weight:700;font-size:0.86em;white-space:nowrap;}
+.tag-blue{color:#60a5fa;font-weight:700;text-decoration:underline;text-underline-offset:2px;cursor:default;}
+.tag-teal{background:rgba(20,184,166,0.12);color:#2dd4bf;border:1px solid rgba(20,184,166,0.25);border-radius:5px;padding:1px 7px;font-weight:700;font-size:0.86em;white-space:nowrap;}
+.upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+.upload-zone{background:var(--card);border:2px dashed rgba(255,255,255,0.12);border-radius:var(--radius);padding:24px 16px;text-align:center;cursor:pointer;transition:all 0.2s;position:relative}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:rgba(59,130,246,0.06)}
+.upload-zone.has-files{border-color:var(--green);border-style:solid;background:rgba(34,197,94,0.05)}
+.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-zone .uz-icon{font-size:28px;margin-bottom:10px}
+.upload-zone .uz-title{font-size:0.9rem;font-weight:700;margin-bottom:4px}
+.upload-zone .uz-sub{font-size:0.78rem;color:var(--muted)}
+.upload-zone .uz-badge{display:inline-block;margin-top:8px;padding:4px 12px;background:rgba(34,197,94,0.15);color:var(--green);border-radius:20px;font-size:0.75rem;font-weight:700}
+.upload-zone .uz-optional{display:inline-block;margin-top:6px;padding:3px 10px;background:rgba(148,163,184,0.1);color:var(--muted);border-radius:20px;font-size:0.72rem}
+
+.action-bar{display:flex;align-items:center;gap:14px;margin-bottom:28px;flex-wrap:wrap}
+.btn-primary{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:linear-gradient(135deg,#2563eb,#3b82f6);border:none;border-radius:10px;color:#fff;font-family:var(--font);font-size:0.95rem;font-weight:700;cursor:pointer;transition:all 0.2s;box-shadow:0 4px 14px rgba(59,130,246,0.35)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(59,130,246,0.5)}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.btn-export{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:0.84rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-export:hover{background:rgba(255,255,255,0.1)}
+
+.loader-wrap{display:none;align-items:center;gap:12px}
+.loader-wrap.active{display:flex}
+.spinner{width:20px;height:20px;border:2px solid rgba(59,130,246,0.2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,0.04);border-radius:12px;padding:4px;margin-bottom:20px;width:fit-content}
+.tab{padding:9px 22px;border-radius:9px;cursor:pointer;font-size:0.88rem;font-weight:600;color:var(--muted);transition:all 0.2s;border:none;background:transparent;font-family:var(--font)}
+.tab.active{background:var(--accent);color:#fff}
+
+.section{margin-bottom:28px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.section-title{font-size:0.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;display:flex;align-items:center;gap:8px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.alert-box{padding:16px 20px;border-radius:12px;margin-bottom:16px;border-left:4px solid}
+.alert-green{background:rgba(34,197,94,0.08);border-color:var(--green);color:#bbf7d0}
+.alert-red{background:rgba(239,68,68,0.08);border-color:var(--red);color:#fecaca}
+.alert-orange{background:rgba(249,115,22,0.08);border-color:var(--orange);color:#fed7aa}
+.alert-box h3{font-size:1rem;font-weight:700;margin-bottom:4px}
+.alert-box p{font-size:0.85rem;opacity:0.85}
+
+.data-table-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:auto;max-height:450px}
+table{width:100%;border-collapse:collapse;min-width:500px}
+thead th{background:rgba(255,255,255,0.04);padding:10px 14px;font-size:0.73rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;text-align:left;border-bottom:1px solid var(--border);position:sticky;top:0}
+tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.15s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:rgba(255,255,255,0.04)}
+tbody td{padding:9px 14px;font-size:0.86rem;color:var(--text)}
+.num-cell{font-weight:700;color:var(--accent)}
+.dates-cell{font-size:0.78rem;color:var(--muted);max-width:280px;word-break:break-all}
+
+.hidden{display:none!important}
+.results-section{animation:fadeIn 0.4s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.info-banner{background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:14px 18px;font-size:0.85rem;color:#93c5fd;margin-bottom:20px}
+.toast{position:fixed;bottom:28px;right:28px;background:#1e293b;border:1px solid var(--border);border-radius:12px;padding:14px 20px;font-size:0.88rem;color:var(--text);box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:999;animation:slideUp 0.3s ease}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+</style>
+</head>
+<body>
+<div class="app-wrap">
+  <div class="app-header">
+    <!-- Sentrium Shield Logo -->
+    <div class="header-icon">
+      <svg width="30" height="30" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 2L3 7.5V15c0 7.5 5.5 14.5 13 16.5C23.5 29.5 29 22.5 29 15V7.5L16 2z" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.6)" stroke-width="1.2"/>
+        <path d="M16 2L3 7.5V15c0 7.5 5.5 14.5 13 16.5C23.5 29.5 29 22.5 29 15V7.5L16 2z" fill="url(#shieldGrad)"/>
+        <defs><linearGradient id="shieldGrad" x1="3" y1="2" x2="29" y2="31" gradientUnits="userSpaceOnUse"><stop stop-color="#1e40af" stop-opacity="0.7"/><stop offset="1" stop-color="#3b82f6" stop-opacity="0.4"/></linearGradient></defs>
+        <path d="M11 15.5l3 3 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Sentrium Attendance Tracker</h1>
+      <div class="subtitle">
+        Upload your daily access control logs to identify personnel who checked in after
+        <span class="tag-orange">8:30 AM</span> through the
+        <span class="tag-blue">Main Entrances</span> via
+        <span class="tag-teal">'Password'</span> or
+        <span class="tag-teal">'Normal Open'</span> events.
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Zones -->
+  <div class="upload-grid">
+    <div class="upload-zone" id="zone-logs" ondragover="dz(event,this)" ondragleave="dl(this)" ondrop="dp(event,this,'log')">
+      <input type="file" id="logFiles" accept=".csv,.xlsx,.xls" multiple onchange="handleFiles(this,'logs')">
+      <div class="uz-icon">📂</div>
+      <div class="uz-title">Access Control Logs</div>
+      <div class="uz-sub">CSV / XLSX — multiple files accepted</div>
+      <div class="uz-badge hidden" id="log-badge">0 files</div>
+    </div>
+    <div class="upload-zone" id="zone-roster" ondragover="dz(event,this)" ondragleave="dl(this)" ondrop="dp(event,this,'roster')">
+      <input type="file" id="rosterFile" accept=".csv,.xlsx,.xls" onchange="handleFiles(this,'roster')">
+      <div class="uz-icon">👥</div>
+      <div class="uz-title">Standard Staff Master List</div>
+      <div class="uz-sub">Personnel ID + Expected Days per Week</div>
+      <div class="uz-optional">Optional — enables compliance tracking</div>
+      <div class="uz-badge hidden" id="roster-badge">Loaded</div>
+    </div>
+    <div class="upload-zone" id="zone-soc" ondragover="dz(event,this)" ondragleave="dl(this)" ondrop="dp(event,this,'soc')">
+      <input type="file" id="socFile" accept=".csv,.xlsx,.xls" onchange="handleFiles(this,'soc')">
+      <div class="uz-icon">🛡️</div>
+      <div class="uz-title">SOC Team Schedule</div>
+      <div class="uz-sub">Personnel ID + Date + Shift (Morning/Afternoon/Night)</div>
+      <div class="uz-optional">Optional — enables SOC-specific tracking</div>
+      <div class="uz-badge hidden" id="soc-badge">Loaded</div>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <button class="btn-primary" id="btnProcess" onclick="processAttendance()" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Process Attendance
+    </button>
+    <div class="loader-wrap" id="loader">
+      <div class="spinner"></div>
+      <span style="color:var(--muted);font-size:0.88rem;">Decrypting Access Logs &amp; Compiling Report...</span>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="results-section hidden">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('std',this)">📊 Standard Staff</button>
+      <button class="tab" onclick="switchTab('soc',this)">🛡️ SOC Team</button>
+    </div>
+
+    <!-- Standard Staff -->
+    <div id="tabStd">
+      <div id="stdLateSection"></div>
+      <div id="stdComplianceSection"></div>
+    </div>
+
+    <!-- SOC Team -->
+    <div id="tabSoc" class="hidden">
+      <div id="socLateSection"></div>
+      <div id="socAbsentSection"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  let logFiles=[], rosterFile=null, socFile=null, resultData=null;
+
+  function updateBtn(){document.getElementById('btnProcess').disabled=logFiles.length===0}
+
+  window.handleFiles=function(input,type){
+    if(type==='logs'){
+      logFiles=Array.from(input.files);
+      const z=document.getElementById('zone-logs');
+      const b=document.getElementById('log-badge');
+      if(logFiles.length){z.classList.add('has-files');b.textContent=logFiles.length+' file'+(logFiles.length>1?'s':'');b.classList.remove('hidden')}
+      else{z.classList.remove('has-files');b.classList.add('hidden')}
+    } else if(type==='roster'){
+      rosterFile=input.files[0]||null;
+      const z=document.getElementById('zone-roster'),b=document.getElementById('roster-badge');
+      if(rosterFile){z.classList.add('has-files');b.classList.remove('hidden')}else{z.classList.remove('has-files');b.classList.add('hidden')}
+    } else {
+      socFile=input.files[0]||null;
+      const z=document.getElementById('zone-soc'),b=document.getElementById('soc-badge');
+      if(socFile){z.classList.add('has-files');b.classList.remove('hidden')}else{z.classList.remove('has-files');b.classList.add('hidden')}
+    }
+    updateBtn();
+  };
+
+  window.dz=(e,el)=>{e.preventDefault();el.classList.add('dragover')};
+  window.dl=(el)=>el.classList.remove('dragover');
+  window.dp=(e,el,type)=>{
+    e.preventDefault();el.classList.remove('dragover');
+    const dt2=e.dataTransfer;
+    if(type==='log'){document.getElementById('logFiles').files=dt2.files;window.handleFiles(document.getElementById('logFiles'),'logs')}
+    else if(type==='roster'){document.getElementById('rosterFile').files=dt2.files;window.handleFiles(document.getElementById('rosterFile'),'roster')}
+    else{document.getElementById('socFile').files=dt2.files;window.handleFiles(document.getElementById('socFile'),'soc')}
+  };
+
+  window.processAttendance=async function(){
+    if(!logFiles.length){showToast('Upload at least one log file.');return}
+    setLoading(true);
+    document.getElementById('results').classList.add('hidden');
+    const fd=new FormData();
+    logFiles.forEach((f,i)=>fd.append(`log${i}`,f,f.name));
+    if(rosterFile) fd.append('roster',rosterFile,rosterFile.name);
+    if(socFile)    fd.append('soc',socFile,socFile.name);
+    try{
+      const resp=await fetch('/api/attendance/process',{method:'POST',body:fd});
+      const data=await resp.json();
+      if(data.error){showToast('Error: '+data.error,'red');return}
+      resultData=data;
+      renderResults(data);
+      document.getElementById('results').classList.remove('hidden');
+    }catch(e){showToast('Network error: '+e.message,'red')}
+    finally{setLoading(false)}
+  };
+
+  function renderResults(data){
+    const std=data.standard||{}, soc=data.soc||{};
+
+    // Standard Late
+    const stdLateH = renderStdLate(std);
+    document.getElementById('stdLateSection').innerHTML=stdLateH;
+    // Standard Compliance
+    const stdCompH = renderStdCompliance(std);
+    document.getElementById('stdComplianceSection').innerHTML=stdCompH;
+    // SOC
+    document.getElementById('socLateSection').innerHTML=renderSocLate(soc);
+    document.getElementById('socAbsentSection').innerHTML=renderSocAbsent(soc);
+  }
+
+  function renderStdLate(std){
+    const count=std.late_count||0, records=std.late_records||[];
+    let h='<div class="section"><div class="section-header"><div class="section-title">Late Arrivals — Standard Staff</div>';
+    if(records.length) h+=`<button class="btn-export" onclick="exportSection('late',${JSON.stringify(records)})">⬇ Export Excel</button>`;
+    h+='</div>';
+    if(count===0){
+      h+='<div class="alert-box alert-green"><h3>✅ Perfect Attendance</h3><p>No standard staff arrived after 8:30 AM on working days.</p></div>';
+    } else {
+      h+=`<div class="alert-box alert-red"><h3>⚠️ ${count} Late Check-in Record(s)</h3><p>Standard staff who arrived at or after <strong>8:30 AM</strong> on a working day.</p></div>`;
+      h+=buildTable(records,['Personnel ID','Full Name','Days_Per_Week','Days_Late','Weeks_Defaulted','Dates_Late','Times_In'],
+                            ['Personnel ID','Full Name','Expected/Week','Days Late','Weeks Defaulted','Dates Late','Times In']);
+    }
+    return h+'</div>';
+  }
+
+  function renderStdCompliance(std){
+    const rows=std.compliance||[];
+    if(!std.roster_loaded) return `<div class="info-banner">📋 Upload the Standard Staff Master List to enable weekly compliance tracking.</div>`;
+    let h='<div class="section"><div class="section-header"><div class="section-title">Weekly Compliance — Standard Staff</div>';
+    if(rows.length) h+=`<button class="btn-export" onclick="exportSection('compliance',${JSON.stringify(rows)})">⬇ Export Excel</button>`;
+    h+='</div>';
+    if(!rows.length){
+      h+='<div class="alert-box alert-green"><h3>✅ Full Compliance</h3><p>All standard staff met their required weekly attendance.</p></div>';
+    } else {
+      h+=`<div class="alert-box alert-orange"><h3>⚠️ Non-Compliant Weeks Found</h3><p>Employees who did not meet their required days per week.</p></div>`;
+      h+=buildTable(rows,['Personnel ID','Week','Expected','Actual','Deficit'],
+                         ['Personnel ID','Week','Expected','Actual','Deficit']);
+    }
+    return h+'</div>';
+  }
+
+  function renderSocLate(soc){
+    if(!soc.soc_loaded) return `<div class="info-banner">🛡️ Upload the SOC Team Schedule to enable SOC-specific tracking.</div>`;
+    const count=soc.late_count||0, records=soc.late_records||[];
+    let h='<div class="section"><div class="section-header"><div class="section-title">Late Arrivals — SOC Team</div>';
+    if(records.length) h+=`<button class="btn-export" onclick="exportSection('soc_late',${JSON.stringify(records)})">⬇ Export Excel</button>`;
+    h+='</div>';
+    if(count===0){
+      h+='<div class="alert-box alert-green"><h3>✅ Perfect Punctuality</h3><p>No SOC team members were late for their scheduled shifts.</p></div>';
+    } else {
+      h+=`<div class="alert-box alert-red"><h3>⚠️ ${count} Late Shift Arrival(s)</h3><p>SOC members who arrived after their scheduled shift start time.</p></div>`;
+      h+=buildTable(records,['Personnel ID','Full Name','Late_Count','Dates_Late','Shifts','Scheduled_Start','Time_In','Total_Mins_Late'],
+                            ['Personnel ID','Full Name','Late Count','Dates Late','Shifts','Scheduled Start','Time In','Mins Late']);
+    }
+    return h+'</div>';
+  }
+
+  function renderSocAbsent(soc){
+    if(!soc.soc_loaded) return '';
+    const count=soc.absent_count||0, records=soc.absent_records||[];
+    let h='<div class="section"><div class="section-header"><div class="section-title">Absentees — SOC Team</div>';
+    if(records.length) h+=`<button class="btn-export" onclick="exportSection('soc_absent',${JSON.stringify(records)})">⬇ Export Excel</button>`;
+    h+='</div>';
+    if(count===0){
+      h+='<div class="alert-box alert-green"><h3>✅ No SOC Absentees</h3><p>All SOC members were present for every scheduled shift.</p></div>';
+    } else {
+      h+=`<div class="alert-box alert-orange"><h3>🚫 ${soc.absent_records?.length||0} SOC Member(s) Missed Shifts</h3><p>No badge-in recorded on their scheduled shift day.</p></div>`;
+      h+=buildTable(records,['Personnel ID','Full Name','Absent_Count','Dates_Absent','Shifts'],
+                            ['Personnel ID','Full Name','Absent Days','Dates Absent','Shifts']);
+    }
+    return h+'</div>';
+  }
+
+  function buildTable(records, keys, headers){
+    if(!records||!records.length) return '<p style="color:var(--muted);padding:12px;font-size:0.85rem;">No records.</p>';
+    let h='<div class="data-table-wrap"><table><thead><tr>';
+    headers.forEach(hd=>h+=`<th>${hd}</th>`);
+    h+='</tr></thead><tbody>';
+    for(const r of records){
+      h+='<tr>';
+      keys.forEach((k,i)=>{
+        const v=r[k]??'';
+        const isNum=i===2||i===3||i===4||k.includes('Count')||k.includes('Deficit')||k.includes('Mins');
+        const isDates=k.includes('Date')||k.includes('Time');
+        h+=`<td class="${isNum?'num-cell':isDates?'dates-cell':''}">${v}</td>`;
+      });
+      h+='</tr>';
+    }
+    return h+'</tbody></table></div>';
+  }
+
+  window.exportSection=async function(type, records){
+    try{
+      const resp=await fetch('/api/attendance/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:{records},type})});
+      if(!resp.ok){showToast('Export failed','red');return}
+      const blob=await resp.blob();
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`attendance_${type}.xlsx`;a.click();
+      showToast('Report downloaded!','green');
+    }catch(e){showToast('Export error: '+e.message,'red')}
+  };
+
+  window.switchTab=function(tab,el){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tabStd').classList.toggle('hidden',tab!=='std');
+    document.getElementById('tabSoc').classList.toggle('hidden',tab!=='soc');
+  };
+
+  function setLoading(on){
+    document.getElementById('loader').classList.toggle('active',on);
+    document.getElementById('btnProcess').disabled=on||logFiles.length===0;
+  }
+
+  let toastTimer;
+  function showToast(msg,type=''){
+    const t=document.createElement('div');t.className='toast';
+    t.style.borderColor=type==='red'?'rgba(239,68,68,0.3)':type==='green'?'rgba(34,197,94,0.3)':'var(--border)';
+    t.textContent=msg;document.body.appendChild(t);
+    clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.remove(),3500);
+  }
+})();
+</script>
+</body>
+</html>

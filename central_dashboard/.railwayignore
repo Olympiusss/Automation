@@ -1,0 +1,7 @@
+# Exclude local-only and sensitive files from Railway deployment
+START_DASHBOARD.bat
+change_password.py
+clean_logo.py
+setup_2fa.py
+setup/
+test_canvas.html
