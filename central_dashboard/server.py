@@ -902,8 +902,9 @@ IS_PRODUCTION = os.environ.get("RAILWAY_ENVIRONMENT") == "production"
 def security_headers(response):
     # Prevent MIME sniffing
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    # Clickjacking protection — DENY is more restrictive than SAMEORIGIN
-    response.headers['X-Frame-Options'] = 'DENY'
+    # Clickjacking protection — SAMEORIGIN allows same-origin iframe embedding
+    # (used by the app viewer). Cross-origin framing is still fully blocked.
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     # Referrer leakage control
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     # Restrict browser features
@@ -917,8 +918,8 @@ def security_headers(response):
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data:; "
         "connect-src 'self'; "
-        "frame-src 'none'; "
-        "frame-ancestors 'none';"
+        "frame-src 'self'; "          # allow same-origin app viewer iframe
+        "frame-ancestors 'self';"     # allow same-origin framing only
     )
     # HSTS — only on Railway (HTTPS termination is handled by Railway proxy)
     if IS_PRODUCTION:

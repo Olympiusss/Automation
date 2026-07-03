@@ -69,97 +69,8 @@
             background: rgba(239,68,68,0.08);
             border-color: #ef4444;
         }
-        .btn-change-pw {
-            background: none;
-            border: 1px solid rgba(99,102,241,0.35);
-            border-radius: 20px;
-            padding: 8px 16px;
-            color: #818cf8;
-            font-size: 0.82rem;
-            font-weight: 600;
-            font-family: 'Inter', sans-serif;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-right: 8px;
-        }
-        .btn-change-pw:hover { background: rgba(99,102,241,0.1); border-color: #818cf8; }
 
-        /* ── Change Password Modal ── */
-        .cp-overlay {
-            display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,0.55); backdrop-filter: blur(6px);
-            z-index: 9999; align-items: center; justify-content: center;
-        }
-        .cp-overlay.open { display: flex; }
-        .cp-box {
-            background: #0f172a;
-            border: 1px solid rgba(99,102,241,0.25);
-            border-radius: 18px;
-            padding: 36px 40px;
-            width: 420px;
-            max-width: 95vw;
-            box-shadow: 0 24px 64px rgba(0,0,0,0.5);
-        }
-        .cp-box h3 {
-            margin: 0 0 6px;
-            font-size: 1.2rem;
-            color: #e2e8f0;
-            font-weight: 700;
-        }
-        .cp-box p.cp-sub {
-            margin: 0 0 24px;
-            font-size: 0.85rem;
-            color: #64748b;
-        }
-        .cp-field { margin-bottom: 16px; }
-        .cp-field label {
-            display: block;
-            font-size: 0.78rem;
-            font-weight: 600;
-            color: #94a3b8;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            margin-bottom: 6px;
-        }
-        .cp-field input {
-            width: 100%; box-sizing: border-box;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 10px;
-            padding: 11px 14px;
-            color: #e2e8f0;
-            font-size: 0.95rem;
-            font-family: 'Inter', sans-serif;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        .cp-field input:focus { border-color: #6366f1; }
-        .cp-msg {
-            font-size: 0.83rem; font-weight: 600;
-            padding: 10px 14px; border-radius: 8px;
-            margin-bottom: 16px; display: none;
-        }
-        .cp-msg.error   { background: rgba(239,68,68,0.1);  color: #f87171; display: block; }
-        .cp-msg.success { background: rgba(34,197,94,0.1);  color: #4ade80; display: block; }
-        .cp-actions { display: flex; gap: 10px; margin-top: 8px; }
-        .cp-btn-submit {
-            flex: 1; padding: 12px;
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            border: none; border-radius: 10px;
-            color: #fff; font-weight: 700; font-size: 0.92rem;
-            font-family: 'Inter', sans-serif; cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        .cp-btn-submit:hover { opacity: 0.88; }
-        .cp-btn-submit:disabled { opacity: 0.4; cursor: not-allowed; }
-        .cp-btn-cancel {
-            padding: 12px 20px;
-            background: none; border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 10px; color: #64748b;
-            font-family: 'Inter', sans-serif; cursor: pointer;
-            font-size: 0.9rem; transition: border-color 0.2s;
-        }
-        .cp-btn-cancel:hover { border-color: #475569; color: #94a3b8; }
+
 
         /* Push content down below topbar */
         .container { padding-top: 100px; }
@@ -257,34 +168,10 @@
         <span id="topbar-name">Loading...</span>
     </div>
     <div class="topbar-dept" id="topbar-dept"></div>
-    <button class="btn-change-pw" id="btn-change-pw" title="Change your password">🔒 Change Password</button>
     <button class="btn-logout" id="btn-logout">Sign Out</button>
 </div>
 
-<!-- ── Change Password Modal ── -->
-<div class="cp-overlay" id="cp-overlay">
-    <div class="cp-box">
-        <h3>Change Password</h3>
-        <p class="cp-sub">Enter your current password and choose a new one.</p>
-        <div class="cp-msg" id="cp-msg"></div>
-        <div class="cp-field">
-            <label>Current Password</label>
-            <input type="password" id="cp-current" placeholder="Your current password" autocomplete="current-password" />
-        </div>
-        <div class="cp-field">
-            <label>New Password</label>
-            <input type="password" id="cp-new" placeholder="At least 8 characters" autocomplete="new-password" />
-        </div>
-        <div class="cp-field">
-            <label>Confirm New Password</label>
-            <input type="password" id="cp-confirm" placeholder="Repeat new password" autocomplete="new-password" />
-        </div>
-        <div class="cp-actions">
-            <button class="cp-btn-submit" id="cp-submit">Update Password</button>
-            <button class="cp-btn-cancel" id="cp-cancel">Cancel</button>
-        </div>
-    </div>
-</div>
+
 
 <!-- ── Access Denied Modal ── -->
 <div class="modal-overlay" id="access-modal">
@@ -387,73 +274,5 @@
 <script src="credentials.js?v=8"></script>
 <script src="auth.js?v=8"></script>
 <script src="script.js?v=8"></script>
-<script>
-// ── Change Password Modal ─────────────────────────────────────────────
-(function () {
-    const overlay  = document.getElementById('cp-overlay');
-    const msgBox   = document.getElementById('cp-msg');
-    const btnOpen  = document.getElementById('btn-change-pw');
-    const btnClose = document.getElementById('cp-cancel');
-    const btnSub   = document.getElementById('cp-submit');
-    const inpCur   = document.getElementById('cp-current');
-    const inpNew   = document.getElementById('cp-new');
-    const inpConf  = document.getElementById('cp-confirm');
-
-    function showMsg(text, type) {
-        msgBox.textContent = text;
-        msgBox.className   = 'cp-msg ' + type;
-    }
-    function clearMsg()  { msgBox.className = 'cp-msg'; msgBox.textContent = ''; }
-    function resetForm() { inpCur.value = ''; inpNew.value = ''; inpConf.value = ''; clearMsg(); }
-
-    btnOpen.addEventListener('click', () => {
-        resetForm();
-        overlay.classList.add('open');
-        setTimeout(() => inpCur.focus(), 100);
-    });
-    btnClose.addEventListener('click', () => { overlay.classList.remove('open'); resetForm(); });
-    overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.classList.remove('open'); resetForm(); } });
-
-    btnSub.addEventListener('click', async () => {
-        const cur  = inpCur.value;
-        const nw   = inpNew.value;
-        const conf = inpConf.value;
-
-        if (!cur || !nw || !conf) { showMsg('All fields are required.', 'error'); return; }
-        if (nw !== conf)          { showMsg('New passwords do not match.', 'error'); return; }
-        if (nw.length < 8)        { showMsg('New password must be at least 8 characters.', 'error'); return; }
-        if (nw === cur)           { showMsg('New password must differ from current password.', 'error'); return; }
-
-        btnSub.disabled = true;
-        btnSub.textContent = 'Updating…';
-        clearMsg();
-
-        try {
-            const resp = await fetch('/api/auth/change-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'same-origin',
-                body: JSON.stringify({ current_password: cur, new_password: nw, confirm_password: conf }),
-            });
-            const data = await resp.json();
-            if (!resp.ok || !data.ok) {
-                showMsg(data.error || 'Failed to update password.', 'error');
-            } else {
-                showMsg('Password updated! Redirecting to login…', 'success');
-                SentriumAuth.clearSession();
-                setTimeout(() => window.location.replace('login.html'), 1800);
-            }
-        } catch (e) {
-            showMsg('Network error. Please try again.', 'error');
-        } finally {
-            btnSub.disabled = false;
-            btnSub.textContent = 'Update Password';
-        }
-    });
-
-    // Enter key on confirm field submits
-    inpConf.addEventListener('keydown', e => { if (e.key === 'Enter') btnSub.click(); });
-})();
-</script>
 </body>
 </html>

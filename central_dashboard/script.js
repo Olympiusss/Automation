@@ -28,14 +28,14 @@ const applications = [
         name: 'SentinelOne NFR Reporting Solution',
         department: 'Research and Intelligence',
         description: 'Standardized data aggregation and Unified interface to query S1 NFR environment.',
-        icon: '<svg viewBox="0 0 44 44" width="44" height="44" style="border-radius:10px;display:block"><defs><linearGradient id="s1g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#4c1d95"/></linearGradient></defs><rect width="44" height="44" rx="10" fill="#f5f0ff"/><path d="M22 5 L37 12 L37 24 C37 33.5 30.5 40 22 43 C13.5 40 7 33.5 7 24 L7 12 Z" fill="url(#s1g)"/><text x="22" y="30" font-family="Arial Black,sans-serif" font-size="13" font-weight="900" fill="white" text-anchor="middle">S1</text></svg>'
+        icon: '<img src="sentinelone-logo.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="SentinelOne">'
     },
     {
         id: 'ri-s1-exclusive',
         name: 'SentinelOne Exclusive Reporting Solution',
         department: 'Research and Intelligence',
         description: 'Standardized data aggregation and Unified interface to query S1 Exclusive environment.',
-        icon: '<svg viewBox="0 0 44 44" width="44" height="44" style="border-radius:10px;display:block"><defs><linearGradient id="s1g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#4c1d95"/></linearGradient></defs><rect width="44" height="44" rx="10" fill="#f5f0ff"/><path d="M22 5 L37 12 L37 24 C37 33.5 30.5 40 22 43 C13.5 40 7 33.5 7 24 L7 12 Z" fill="url(#s1g2)"/><text x="22" y="30" font-family="Arial Black,sans-serif" font-size="13" font-weight="900" fill="white" text-anchor="middle">S1</text></svg>'
+        icon: '<img src="sentinelone-logo.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="SentinelOne">'
     },
     {
         id: 'pc-attendance',
