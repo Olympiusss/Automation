@@ -186,7 +186,7 @@ def serve_static(filename):
         with open(filepath, encoding='utf-8') as f:
             content = _inject_nonce(f.read(), nonce)
         return Response(content, mimetype='text/html')
-    return send_from_directory('.', filename)
+    return send_from_directory(os.path.dirname(__file__), filename)
 
 # ── App HTML templates ────────────────────────────────────────────────────────
 # App-to-department access map — enforced server-side

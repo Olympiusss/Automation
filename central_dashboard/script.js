@@ -21,7 +21,7 @@ const applications = [
         name: 'WAF Conversion Solution',
         department: 'Research and Intelligence',
         description: 'Convert WAF Intelligence Reports into structured Excel spreadsheets.',
-        icon: '<svg viewBox="0 0 44 44" width="44" height="44" style="border-radius:10px;display:block"><defs><linearGradient id="sg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1a6eff"/><stop offset="100%" stop-color="#0041c4"/></linearGradient></defs><rect width="44" height="44" rx="10" fill="#e8f0ff"/><path d="M22 7 L35 13 L35 25 C35 33 29 39 22 41 C15 39 9 33 9 25 L9 13 Z" fill="url(#sg1)"/><path d="M18 22 L21 25 L27 19" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>'
+        icon: '<img src="logo_transparent.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="Sentrium">'
     },
     {
         id: 'ri-s1-nfr',
@@ -42,21 +42,21 @@ const applications = [
         name: 'Sentrium Attendance Tracker',
         department: 'People and Culture',
         description: 'Streamlined employee attendance, seamless daily check-ins, and accurate shift tracking.',
-        icon: '<svg viewBox="0 0 44 44" width="44" height="44" style="border-radius:10px;display:block"><defs><linearGradient id="sg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1a6eff"/><stop offset="100%" stop-color="#0041c4"/></linearGradient></defs><rect width="44" height="44" rx="10" fill="#e8f0ff"/><path d="M22 7 L35 13 L35 25 C35 33 29 39 22 41 C15 39 9 33 9 25 L9 13 Z" fill="url(#sg2)"/><path d="M18 22 L21 25 L27 19" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>'
+        icon: '<img src="logo_transparent.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="Sentrium">'
     },
     {
         id: 'ops-dashboard',
         name: 'Sentrium Operational Assessment Solution',
         department: 'Operations',
         description: 'An evidence-driven Operational Assessment Solution.',
-        icon: '<svg viewBox="0 0 44 44" width="44" height="44" style="border-radius:10px;display:block"><defs><linearGradient id="sg3" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1a6eff"/><stop offset="100%" stop-color="#0041c4"/></linearGradient></defs><rect width="44" height="44" rx="10" fill="#e8f0ff"/><path d="M22 7 L35 13 L35 25 C35 33 29 39 22 41 C15 39 9 33 9 25 L9 13 Z" fill="url(#sg3)"/><path d="M18 22 L21 25 L27 19" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>'
+        icon: '<img src="logo_transparent.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="Sentrium">'
     },
     {
         id: 'so-soc-dashboard',
         name: 'MSSP Client SOC Portal',
         department: 'Security Operations',
         description: 'Real-time client threat visibility, alert triage, and analyst oversight across all monitored environments.',
-        icon: '<svg viewBox="0 0 44 44" width="44" height="44" style="border-radius:10px;display:block"><defs><linearGradient id="sg4" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1a6eff"/><stop offset="100%" stop-color="#0041c4"/></linearGradient></defs><rect width="44" height="44" rx="10" fill="#e8f0ff"/><path d="M22 7 L35 13 L35 25 C35 33 29 39 22 41 C15 39 9 33 9 25 L9 13 Z" fill="url(#sg4)"/><path d="M18 22 L21 25 L27 19" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>'
+        icon: '<img src="logo_transparent.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="Sentrium">'
     }
 ];
 
