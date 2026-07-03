@@ -125,8 +125,44 @@ def init_db():
                     );
                 """)
         logger.info("sentrium_users table ready")
+        _seed_admin_from_env()   # create first admin if table is empty
     except Exception as e:
         logger.error(f"DB init failed: {e}")
+
+
+def _seed_admin_from_env():
+    """
+    If the sentrium_users table is empty, create the first admin account
+    from environment variables so there is always a way to log in on first deploy.
+
+    Reads (in priority order):
+      1. CENTRAL_ADMIN_EMAIL  + CENTRAL_ADMIN_PASSWORD  (central-specific)
+      2. ADMIN_USERNAME       + ADMIN_PASSWORD           (shared with SOC)
+
+    Safe to call repeatedly — does nothing if users already exist.
+    """
+    # Check which env vars are available
+    email    = (os.environ.get("CENTRAL_ADMIN_EMAIL", "").strip() or
+                os.environ.get("ADMIN_USERNAME", "").strip())
+    password = (os.environ.get("CENTRAL_ADMIN_PASSWORD", "").strip() or
+                os.environ.get("ADMIN_PASSWORD", "").strip())
+
+    if not email or not password:
+        logger.info("No admin seed env vars set — skipping Central admin seed.")
+        return
+
+    # Only seed if the table is completely empty
+    existing = list_users()
+    if existing:
+        logger.info(f"Central DB already has {len(existing)} user(s) — skipping seed.")
+        return
+
+    ok, err = add_user(email, password, department="All", role="admin")
+    if ok:
+        logger.info(f"Central admin seeded from env vars: {email}")
+    else:
+        logger.warning(f"Central admin seed failed: {err}")
+
 
 # ── CRUD ─────────────────────────────────────────────────────────────────────
 def get_user(email: str) -> dict | None:
