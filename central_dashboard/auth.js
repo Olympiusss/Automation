@@ -40,6 +40,7 @@ function isAuthenticated() {
 function canAccessDept(session, targetDept) {
     if (!session) return false;
     if (session.role === 'admin') return true;
+    if (session.department === 'All') return true;
     if (targetDept === 'All') return true;
     return session.department === targetDept;
 }
