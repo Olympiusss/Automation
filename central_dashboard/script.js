@@ -136,6 +136,8 @@ function renderTopbar() {
     topbarDept.innerHTML = s.role === 'admin'
         ? `${SVG_ICONS.star} Administrator`
         : `${SVG_ICONS.building} ${s.department}`;
+    // Expose role globally so the User Management panel can show/hide the button
+    window.__userRole = s.role;
 }
 
 // ─── Logout ──────────────────────────────────────────────────

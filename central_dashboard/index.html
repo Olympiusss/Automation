@@ -69,6 +69,122 @@
             background: rgba(239,68,68,0.08);
             border-color: #ef4444;
         }
+        /* ── Manage Users button ── */
+        .btn-manage-users {
+            display: none; /* shown only for admins via JS */
+            background: none;
+            border: 1px solid rgba(37,99,235,0.3);
+            border-radius: 20px;
+            padding: 8px 16px;
+            color: #2563eb;
+            font-size: 0.83rem;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            gap: 6px;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+        .btn-manage-users:hover { background: rgba(37,99,235,0.07); border-color: #2563eb; }
+
+        /* ── User Management Modal ── */
+        .um-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(15,23,42,0.55); backdrop-filter: blur(8px);
+            z-index: 5000; align-items: flex-start; justify-content: center;
+            padding-top: 64px;
+        }
+        .um-overlay.open { display: flex; }
+        .um-panel {
+            background: #ffffff;
+            border-radius: 24px;
+            width: 900px; max-width: 96vw;
+            max-height: 82vh;
+            display: flex; flex-direction: column;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.22);
+            border: 1px solid rgba(0,0,0,0.07);
+            overflow: hidden;
+        }
+        .um-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 22px 28px; border-bottom: 1px solid rgba(0,0,0,0.07);
+            background: #f8faff;
+        }
+        .um-header h3 { font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 0; }
+        .um-header-actions { display: flex; gap: 10px; align-items: center; }
+        .btn-um-add {
+            background: linear-gradient(135deg,#1e3a8a,#2563eb);
+            color: #fff; border: none; border-radius: 12px;
+            padding: 9px 18px; font-weight: 700; font-size: 0.85rem;
+            cursor: pointer; transition: opacity 0.2s;
+        }
+        .btn-um-add:hover { opacity: 0.88; }
+        .btn-um-close {
+            background: none; border: 1px solid rgba(0,0,0,0.12);
+            border-radius: 10px; padding: 8px 14px;
+            font-size: 0.83rem; font-weight: 600; color: #64748b;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-um-close:hover { background: rgba(0,0,0,0.04); }
+        .um-body { overflow-y: auto; flex: 1; padding: 20px 28px; }
+        .um-msg {
+            padding: 10px 16px; border-radius: 10px;
+            font-size: 0.85rem; font-weight: 600;
+            margin-bottom: 14px; display: none;
+        }
+        .um-msg.error   { background: rgba(239,68,68,0.09); color: #dc2626; display: block; }
+        .um-msg.success { background: rgba(34,197,94,0.09); color: #16a34a; display: block; }
+        /* User table */
+        .um-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        .um-table th { text-align: left; padding: 10px 12px; font-size: 0.75rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8;
+            border-bottom: 1px solid rgba(0,0,0,0.07); }
+        .um-table td { padding: 13px 12px; border-bottom: 1px solid rgba(0,0,0,0.05); color: #334155; vertical-align: middle; }
+        .um-table tr:last-child td { border-bottom: none; }
+        .um-table tr:hover td { background: rgba(37,99,235,0.03); }
+        .badge-role {
+            display: inline-block; border-radius: 8px; padding: 3px 10px;
+            font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em;
+        }
+        .badge-role.admin { background: rgba(124,58,237,0.1); color: #7c3aed; }
+        .badge-role.staff { background: rgba(37,99,235,0.1); color: #2563eb; }
+        .badge-active { color: #16a34a; font-size: 1rem; }
+        .badge-inactive { color: #dc2626; font-size: 1rem; }
+        .btn-tbl { background: none; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px;
+            padding: 5px 11px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+            margin-right: 5px; transition: all 0.15s; }
+        .btn-tbl:hover { background: rgba(37,99,235,0.07); border-color: #2563eb; color:#2563eb; }
+        .btn-tbl.del:hover { background: rgba(239,68,68,0.07); border-color: #ef4444; color:#ef4444; }
+        /* Add/Edit form */
+        .um-form { display: none; background: #f8faff; border: 1px solid rgba(37,99,235,0.12);
+            border-radius: 16px; padding: 22px 24px; margin-bottom: 20px; }
+        .um-form.open { display: block; }
+        .um-form h4 { font-size: 0.95rem; font-weight: 800; color: #0f172a; margin: 0 0 16px; }
+        .um-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .um-field label { display: block; font-size: 0.75rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 5px; }
+        .um-field input, .um-field select {
+            width: 100%; box-sizing: border-box;
+            border: 1px solid rgba(0,0,0,0.12); border-radius: 10px;
+            padding: 10px 13px; font-size: 0.9rem; color: #0f172a;
+            font-family: 'Inter', sans-serif; outline: none;
+            transition: border-color 0.2s;
+        }
+        .um-field input:focus, .um-field select:focus { border-color: #2563eb; }
+        .um-form-actions { display: flex; gap: 10px; margin-top: 16px; }
+        .btn-form-save {
+            background: linear-gradient(135deg,#1e3a8a,#2563eb);
+            color: #fff; border: none; border-radius: 10px;
+            padding: 10px 22px; font-weight: 700; font-size: 0.88rem;
+            cursor: pointer; transition: opacity 0.2s;
+        }
+        .btn-form-save:hover { opacity: 0.88; }
+        .btn-form-cancel {
+            background: none; border: 1px solid rgba(0,0,0,0.12);
+            border-radius: 10px; padding: 10px 18px;
+            font-size: 0.88rem; font-weight: 600; color: #64748b;
+            cursor: pointer;
+        }
 
 
 
@@ -168,10 +284,86 @@
         <span id="topbar-name">Loading...</span>
     </div>
     <div class="topbar-dept" id="topbar-dept"></div>
+    <button class="btn-manage-users" id="btn-manage-users" title="Manage user accounts">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:5px"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        Manage Users
+    </button>
     <button class="btn-logout" id="btn-logout">Sign Out</button>
 </div>
 
+<!-- ── User Management Modal ── -->
+<div class="um-overlay" id="um-overlay">
+  <div class="um-panel">
+    <div class="um-header">
+      <h3>👥 User Management</h3>
+      <div class="um-header-actions">
+        <button class="btn-um-add" id="btn-um-add">+ Add User</button>
+        <button class="btn-um-close" id="btn-um-close">Close</button>
+      </div>
+    </div>
+    <div class="um-body">
+      <div class="um-msg" id="um-msg"></div>
 
+      <!-- Add / Edit form -->
+      <div class="um-form" id="um-form">
+        <h4 id="um-form-title">Add New User</h4>
+        <div class="um-form-grid">
+          <div class="um-field">
+            <label>Email (login username)</label>
+            <input type="email" id="um-email" placeholder="user@example.com" autocomplete="off">
+          </div>
+          <div class="um-field">
+            <label>Password</label>
+            <input type="password" id="um-password" placeholder="Min 8 chars, 1 upper, 1 digit, 1 special" autocomplete="new-password">
+          </div>
+          <div class="um-field">
+            <label>Department</label>
+            <select id="um-dept">
+              <option value="All">All Departments (full access)</option>
+              <option value="Security Operations">Security Operations</option>
+              <option value="Security Testing">Security Testing</option>
+              <option value="Security Engineering">Security Engineering</option>
+              <option value="Research and Intelligence">Research and Intelligence</option>
+              <option value="IT Infrastructure">IT Infrastructure</option>
+              <option value="Operations">Operations</option>
+              <option value="Finance">Finance</option>
+              <option value="Sales">Sales</option>
+              <option value="Customer Success">Customer Success</option>
+              <option value="Brand &amp; Marketing">Brand &amp; Marketing</option>
+              <option value="People and Culture">People and Culture</option>
+              <option value="Portfolio Management">Portfolio Management</option>
+            </select>
+          </div>
+          <div class="um-field">
+            <label>Role</label>
+            <select id="um-role">
+              <option value="dept_user">Staff (department access only)</option>
+              <option value="admin">Admin (full access + user management)</option>
+            </select>
+          </div>
+        </div>
+        <div class="um-form-actions">
+          <button class="btn-form-save" id="btn-form-save">Save User</button>
+          <button class="btn-form-cancel" id="btn-form-cancel">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Users table -->
+      <table class="um-table" id="um-table">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Department</th>
+            <th>Role</th>
+            <th>Active</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="um-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 <!-- ── Access Denied Modal ── -->
 <div class="modal-overlay" id="access-modal">
@@ -274,5 +466,171 @@
 <script src="credentials.js?v=8"></script>
 <script src="auth.js?v=8"></script>
 <script src="script.js?v=8"></script>
+<script>
+// ── User Management Panel ────────────────────────────────────────────────────
+(function () {
+    const overlay   = document.getElementById('um-overlay');
+    const btnOpen   = document.getElementById('btn-manage-users');
+    const btnClose  = document.getElementById('btn-um-close');
+    const btnAdd    = document.getElementById('btn-um-add');
+    const form      = document.getElementById('um-form');
+    const formTitle = document.getElementById('um-form-title');
+    const btnSave   = document.getElementById('btn-form-save');
+    const btnCancel = document.getElementById('btn-form-cancel');
+    const tbody     = document.getElementById('um-tbody');
+    const msgBox    = document.getElementById('um-msg');
+
+    let editMode = false;   // false = add, true = editing existing user
+    let editEmail = '';     // email being edited
+
+    function showMsg(text, type) { msgBox.textContent = text; msgBox.className = 'um-msg ' + type; }
+    function clearMsg() { msgBox.className = 'um-msg'; msgBox.textContent = ''; }
+
+    // Show/hide the modal (admin-only — button visibility handled in script.js onAuth)
+    btnOpen.addEventListener('click', () => { overlay.classList.add('open'); loadUsers(); });
+    btnClose.addEventListener('click', closePanel);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closePanel(); });
+    function closePanel() { overlay.classList.remove('open'); form.classList.remove('open'); clearMsg(); }
+
+    // ── Show Add form ──
+    btnAdd.addEventListener('click', () => {
+        editMode = false; editEmail = '';
+        formTitle.textContent = 'Add New User';
+        document.getElementById('um-email').value    = '';
+        document.getElementById('um-password').value = '';
+        document.getElementById('um-dept').value     = 'All';
+        document.getElementById('um-role').value     = 'dept_user';
+        document.getElementById('um-email').disabled = false;
+        form.classList.add('open');
+        clearMsg();
+        document.getElementById('um-email').focus();
+    });
+    btnCancel.addEventListener('click', () => { form.classList.remove('open'); clearMsg(); });
+
+    // ── Load & render users table ──
+    async function loadUsers() {
+        tbody.innerHTML = '<tr><td colspan="5" style="color:#94a3b8;padding:20px;text-align:center;">Loading...</td></tr>';
+        try {
+            const r = await fetch('/api/admin/users', { credentials: 'same-origin' });
+            if (!r.ok) { tbody.innerHTML = '<tr><td colspan="5" style="color:#ef4444;padding:20px;">Failed to load users.</td></tr>'; return; }
+            const users = await r.json();
+            if (!users.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:#94a3b8;padding:20px;">No users yet.</td></tr>'; return; }
+            tbody.innerHTML = users.map(u => `
+              <tr>
+                <td style="font-weight:600;color:#0f172a">${esc(u.email)}</td>
+                <td>${esc(u.department)}</td>
+                <td><span class="badge-role ${u.role==='admin'?'admin':'staff'}">${u.role==='admin'?'Admin':'Staff'}</span></td>
+                <td>${u.is_active ? '<span class="badge-active">●</span>' : '<span class="badge-inactive">●</span>'}</td>
+                <td>
+                  <button class="btn-tbl" onclick="umEdit('${esc(u.email)}','${esc(u.department)}','${u.role}')">Edit</button>
+                  <button class="btn-tbl" onclick="umToggle('${esc(u.email)}',${!u.is_active})">${u.is_active?'Disable':'Enable'}</button>
+                  <button class="btn-tbl del" onclick="umDelete('${esc(u.email)}')">Delete</button>
+                </td>
+              </tr>`).join('');
+        } catch(e) { tbody.innerHTML = '<tr><td colspan="5" style="color:#ef4444;padding:20px;">Network error.</td></tr>'; }
+    }
+
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+    // ── Save (add or edit) ──
+    btnSave.addEventListener('click', async () => {
+        clearMsg();
+        const email    = document.getElementById('um-email').value.trim();
+        const password = document.getElementById('um-password').value;
+        const dept     = document.getElementById('um-dept').value;
+        const role     = document.getElementById('um-role').value;
+
+        if (!editMode) {
+            // ADD
+            if (!email || !email.includes('@')) { showMsg('Valid email required.','error'); return; }
+            if (!password) { showMsg('Password is required.','error'); return; }
+            btnSave.disabled = true; btnSave.textContent = 'Saving…';
+            try {
+                const r = await fetch('/api/admin/users', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ email, password, department: dept, role })
+                });
+                const d = await r.json();
+                if (!r.ok) { showMsg(d.error || 'Failed to create user.','error'); return; }
+                showMsg(`User ${email} created successfully.`,'success');
+                form.classList.remove('open');
+                loadUsers();
+            } catch(e) { showMsg('Network error.','error'); }
+            finally { btnSave.disabled = false; btnSave.textContent = 'Save User'; }
+        } else {
+            // EDIT — only send password if entered
+            const body = { department: dept, role };
+            if (password) body.password = password;
+            btnSave.disabled = true; btnSave.textContent = 'Saving…';
+            try {
+                const r = await fetch('/api/admin/users/' + encodeURIComponent(editEmail), {
+                    method: 'PATCH', credentials: 'same-origin',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(body)
+                });
+                const d = await r.json();
+                if (!r.ok) { showMsg(d.error || 'Failed to update.','error'); return; }
+                showMsg('User updated.','success');
+                form.classList.remove('open');
+                loadUsers();
+            } catch(e) { showMsg('Network error.','error'); }
+            finally { btnSave.disabled = false; btnSave.textContent = 'Save User'; }
+        }
+    });
+
+    // Exposed globally for inline onclick handlers
+    window.umEdit = function(email, dept, role) {
+        editMode = true; editEmail = email;
+        formTitle.textContent = `Edit: ${email}`;
+        document.getElementById('um-email').value    = email;
+        document.getElementById('um-email').disabled = true;
+        document.getElementById('um-password').value = '';
+        document.getElementById('um-dept').value     = dept;
+        document.getElementById('um-role').value     = role;
+        form.classList.add('open');
+        clearMsg();
+        document.getElementById('um-password').focus();
+    };
+
+    window.umToggle = async function(email, newState) {
+        if (!confirm(`${newState?'Enable':'Disable'} user ${email}?`)) return;
+        try {
+            const r = await fetch('/api/admin/users/' + encodeURIComponent(email), {
+                method: 'PATCH', credentials: 'same-origin',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ is_active: newState })
+            });
+            const d = await r.json();
+            if (!r.ok) { showMsg(d.error || 'Failed.','error'); return; }
+            loadUsers();
+        } catch(e) { showMsg('Network error.','error'); }
+    };
+
+    window.umDelete = async function(email) {
+        if (!confirm(`Permanently delete user ${email}? This cannot be undone.`)) return;
+        try {
+            const r = await fetch('/api/admin/users/' + encodeURIComponent(email), {
+                method: 'DELETE', credentials: 'same-origin'
+            });
+            const d = await r.json();
+            if (!r.ok) { showMsg(d.error || 'Failed.','error'); return; }
+            showMsg(`${email} deleted.`,'success');
+            loadUsers();
+        } catch(e) { showMsg('Network error.','error'); }
+    };
+
+    // Show "Manage Users" button only for admin role
+    // script.js sets window.__userRole after auth check
+    function checkAdminVisibility() {
+        const role = window.__userRole || '';
+        if (role === 'admin') {
+            document.getElementById('btn-manage-users').style.display = 'inline-flex';
+        }
+    }
+    // Poll briefly after page load since script.js loads async
+    const t = setInterval(() => { if (window.__userRole !== undefined) { checkAdminVisibility(); clearInterval(t); } }, 200);
+})();
+</script>
 </body>
 </html>
