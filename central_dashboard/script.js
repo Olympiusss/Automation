@@ -24,18 +24,23 @@ const applications = [
         icon: '<img src="logo_transparent.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="Sentrium">'
     },
     {
-        id: 'ri-s1-nfr',
-        name: 'SentinelOne NFR Reporting Solution',
+        id: 'ri-sentinelone',
+        name: 'SentinelOne Reporting Solution',
         department: 'Research and Intelligence',
-        description: 'Standardized data aggregation and Unified interface to query S1 NFR environment.',
-        icon: '<img src="sentinelone-logo.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="SentinelOne">'
-    },
-    {
-        id: 'ri-s1-exclusive',
-        name: 'SentinelOne Exclusive Reporting Solution',
-        department: 'Research and Intelligence',
-        description: 'Standardized data aggregation and Unified interface to query S1 Exclusive environment.',
-        icon: '<img src="sentinelone-logo.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="SentinelOne">'
+        description: 'Unified interface for SentinelOne environments — choose NFR or Exclusive reporting.',
+        icon: '<img src="sentinelone-logo.png" width="44" height="44" style="border-radius:10px;display:block;object-fit:contain;background:#fff;" alt="SentinelOne">',
+        subApps: [
+            {
+                id:          'ri-s1-nfr',
+                label:       'NFR',
+                description: 'Standardized data aggregation and unified interface to query the S1 NFR environment.'
+            },
+            {
+                id:          'ri-s1-exclusive',
+                label:       'Exclusive',
+                description: 'Standardized data aggregation and unified interface to query the S1 Exclusive environment.'
+            }
+        ]
     },
     {
         id: 'pc-attendance',
@@ -207,9 +212,8 @@ function renderCards() {
         // Determine which apps to show
         let filteredApps;
         if (currentFilter === 'All') {
-            // Dept users only see their own dept's apps on All tab
-            // Admin sees everything
-            filteredApps = currentSession.role === 'admin'
+            // Admin + 'All'-dept users see every app; other dept users see their own
+            filteredApps = (currentSession.role === 'admin' || currentSession.department === 'All')
                 ? applications
                 : applications.filter(app => app.department === currentSession.department);
         } else {
@@ -243,12 +247,20 @@ function renderCards() {
             `;
 
             card.addEventListener('click', () => {
-                openApp(app.id);
+                if (app.subApps && app.subApps.length) {
+                    showSubAppPicker(app);
+                } else {
+                    openApp(app.id);
+                }
             });
             card.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    openApp(app.id);
+                    if (app.subApps && app.subApps.length) {
+                        showSubAppPicker(app);
+                    } else {
+                        openApp(app.id);
+                    }
                 }
             });
 
@@ -313,6 +325,109 @@ function openApp(appId) {
 
     // Same-origin iframe — just set the src
     appIframe.src = `/apps/${app.id}`;
+}
+
+// ─── Sub-App Picker ────────────────────────────────────────────
+(function injectPickerStyles() {
+    const s = document.createElement('style');
+    s.textContent = `
+    .sp-overlay {
+        display: none; position: fixed; inset: 0;
+        background: rgba(15,23,42,0.6); backdrop-filter: blur(10px);
+        z-index: 6000; align-items: center; justify-content: center;
+    }
+    .sp-overlay.open { display: flex; animation: sp-in 0.25s ease both; }
+    @keyframes sp-in { from{opacity:0;transform:scale(0.94);} to{opacity:1;transform:none;} }
+    .sp-box {
+        background: #fff; border-radius: 24px;
+        padding: 36px 32px 32px; width: 480px; max-width: 94vw;
+        box-shadow: 0 32px 80px rgba(0,0,0,0.22);
+        border: 1px solid rgba(0,0,0,0.06);
+    }
+    .sp-header { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+    .sp-header-icon { width:46px; height:46px; flex-shrink:0; }
+    .sp-title { font-size:1.15rem; font-weight:800; color:#0f172a; letter-spacing:-0.3px; }
+    .sp-subtitle { font-size:0.85rem; color:#64748b; margin-bottom:24px; margin-top:4px; }
+    .sp-options { display:flex; flex-direction:column; gap:12px; }
+    .sp-option {
+        display: flex; align-items: center; gap: 16px;
+        padding: 18px 20px; border-radius: 16px;
+        border: 1.5px solid rgba(37,99,235,0.15);
+        background: #f8faff; cursor: pointer;
+        transition: all 0.2s ease;
+        text-align: left;
+    }
+    .sp-option:hover {
+        border-color: #2563eb;
+        background: rgba(37,99,235,0.05);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(37,99,235,0.12);
+    }
+    .sp-option-badge {
+        width: 48px; height: 48px; border-radius: 12px;
+        background: linear-gradient(135deg,#1e3a8a,#2563eb);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.78rem; font-weight: 800; color: #fff;
+        letter-spacing: 0.5px; flex-shrink: 0;
+    }
+    .sp-option-label { font-size:1rem; font-weight:700; color:#0f172a; }
+    .sp-option-desc  { font-size:0.8rem; color:#64748b; margin-top:3px; line-height:1.4; }
+    .sp-option-arrow { margin-left:auto; color:#2563eb; opacity:0.6; flex-shrink:0; }
+    .sp-cancel {
+        margin-top:20px; width:100%; padding:11px;
+        background:none; border:1px solid rgba(0,0,0,0.1);
+        border-radius:12px; font-size:0.88rem; font-weight:600;
+        color:#64748b; cursor:pointer; transition:all 0.15s;
+    }
+    .sp-cancel:hover { background:rgba(0,0,0,0.04); }
+    `;
+    document.head.appendChild(s);
+
+    // Create overlay element
+    const overlay = document.createElement('div');
+    overlay.id = 'sp-overlay';
+    overlay.className = 'sp-overlay';
+    overlay.innerHTML = `
+      <div class="sp-box" id="sp-box">
+        <div class="sp-header">
+          <div class="sp-header-icon" id="sp-hdr-icon"></div>
+          <div class="sp-title" id="sp-hdr-title"></div>
+        </div>
+        <div class="sp-subtitle" id="sp-hdr-sub">Select which environment to open:</div>
+        <div class="sp-options" id="sp-options"></div>
+        <button class="sp-cancel" id="sp-cancel">Cancel</button>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', e => { if (e.target === overlay) closePicker(); });
+    document.getElementById('sp-cancel').addEventListener('click', closePicker);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closePicker(); });
+})();
+
+function closePicker() {
+    const overlay = document.getElementById('sp-overlay');
+    if (overlay) overlay.classList.remove('open');
+}
+
+function showSubAppPicker(app) {
+    if (!SentriumAuth.canAccessDept(currentSession, app.department)) {
+        showAccessDenied(app.department);
+        return;
+    }
+    const overlay = document.getElementById('sp-overlay');
+    document.getElementById('sp-hdr-icon').innerHTML = app.icon;
+    document.getElementById('sp-hdr-title').textContent = app.name;
+    const optionsEl = document.getElementById('sp-options');
+    optionsEl.innerHTML = app.subApps.map(sub => `
+        <button class="sp-option" onclick="closePicker(); openApp('${sub.id}')">
+            <div class="sp-option-badge">${sub.label}</div>
+            <div>
+                <div class="sp-option-label">${app.name.replace('Reporting Solution','').trim()} ${sub.label}</div>
+                <div class="sp-option-desc">${sub.description}</div>
+            </div>
+            <svg class="sp-option-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>`).join('');
+    overlay.classList.add('open');
 }
 
 function closeApp() {
