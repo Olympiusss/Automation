@@ -285,7 +285,25 @@ const appIframe      = document.getElementById('app-viewer-content');  // now an
 const btnViewerBack   = document.getElementById('btn-viewer-back');
 
 function openApp(appId) {
-    const app = applications.find(a => a.id === appId);
+    // Search top-level apps first, then inside any subApps arrays
+    let app = applications.find(a => a.id === appId);
+    if (!app) {
+        for (const parent of applications) {
+            if (!parent.subApps) continue;
+            const sub = parent.subApps.find(s => s.id === appId);
+            if (sub) {
+                // Build a virtual app entry from the parent + sub data
+                app = {
+                    id:          sub.id,
+                    name:        parent.name.replace('Reporting Solution', '').trim() + ' ' + sub.label + ' Reporting',
+                    department:  parent.department,
+                    description: sub.description,
+                    icon:        parent.icon,
+                };
+                break;
+            }
+        }
+    }
     if (!app) return;
 
     if (!SentriumAuth.canAccessDept(currentSession, app.department)) {
@@ -365,11 +383,11 @@ function openApp(appId) {
     }
     .sp-option-badge {
         width: 48px; height: 48px; border-radius: 12px;
-        background: linear-gradient(135deg,#1e3a8a,#2563eb);
+        overflow: hidden; flex-shrink: 0;
+        background: #fff;
         display: flex; align-items: center; justify-content: center;
-        font-size: 0.78rem; font-weight: 800; color: #fff;
-        letter-spacing: 0.5px; flex-shrink: 0;
     }
+    .sp-option-badge img { width:48px; height:48px; object-fit:contain; display:block; }
     .sp-option-label { font-size:1rem; font-weight:700; color:#0f172a; }
     .sp-option-desc  { font-size:0.8rem; color:#64748b; margin-top:3px; line-height:1.4; }
     .sp-option-arrow { margin-left:auto; color:#2563eb; opacity:0.6; flex-shrink:0; }
@@ -420,7 +438,7 @@ function showSubAppPicker(app) {
     const optionsEl = document.getElementById('sp-options');
     optionsEl.innerHTML = app.subApps.map(sub => `
         <button class="sp-option" onclick="closePicker(); openApp('${sub.id}')">
-            <div class="sp-option-badge">${sub.label}</div>
+            <div class="sp-option-badge"><img src="sentinelone-logo.png" alt="SentinelOne"></div>
             <div>
                 <div class="sp-option-label">${app.name.replace('Reporting Solution','').trim()} ${sub.label}</div>
                 <div class="sp-option-desc">${sub.description}</div>
