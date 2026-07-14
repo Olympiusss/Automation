@@ -120,12 +120,19 @@ def _get_session_token() -> str | None:
     return request.cookies.get(SESSION_COOKIE)
 
 def require_session(f):
-    """Decorator: reject requests without a valid server-side session."""
+    """Decorator: reject requests without a valid server-side session.
+    - /apps/* routes (loaded in iframes) → redirect to login page
+    - All other routes (API)             → 401 JSON (consumed by JS)
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
         token = _get_session_token()
         session = get_session(token)
         if not session:
+            # Browser-facing app routes: redirect to login so the user
+            # gets a proper login flow instead of raw JSON in an iframe.
+            if request.path.startswith('/apps/'):
+                return redirect('/login.html?expired=1', code=302)
             return jsonify({"error": "Authentication required"}), 401
         g.session = session
         return f(*args, **kwargs)

@@ -126,6 +126,12 @@ def init_db():
                 """)
         logger.info("sentrium_users table ready")
         _seed_admin_from_env()   # create first admin if table is empty
+        # Also ensure the sessions table exists (used by user_store.py)
+        try:
+            from user_store import _ensure_sessions_table
+            _ensure_sessions_table()
+        except Exception as _se:
+            logger.warning(f"sessions table init skipped: {_se}")
     except Exception as e:
         logger.error(f"DB init failed: {e}")
 
