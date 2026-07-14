@@ -756,6 +756,69 @@ async def fetch_status(request: Request):
     })
 
 
+
+# ── Live connection test (admin-only) ─────────────────────────
+
+@app.get("/api/debug/test-connections")
+async def test_connections(request: Request):
+    """Admin-only: makes real API calls to S1 and AV and returns HTTP status codes.
+    Use this to diagnose whether credentials are valid or connections are blocked."""
+    if not _require_role(request, "admin"):
+        return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+    import httpx as _hx
+    results: dict = {}
+
+    # ── SentinelOne ──────────────────────────────────────────
+    s1_url  = settings.S1_BASE_URL.rstrip("/") + "/sites?limit=1"
+    s1_token = settings.S1_API_TOKEN
+    try:
+        async with _hx.AsyncClient(verify=False, timeout=_hx.Timeout(20.0, connect=10.0)) as c:
+            r = await c.get(s1_url, headers={
+                "Authorization": f"ApiToken {s1_token}",
+                "Content-Type": "application/json",
+            })
+        body = r.json() if r.headers.get("content-type","").startswith("application/json") else r.text[:300]
+        results["s1"] = {
+            "url": s1_url,
+            "status": r.status_code,
+            "sites_found": len(body.get("data", {}).get("sites", [])) if isinstance(body, dict) else 0,
+            "error": body.get("errors") if isinstance(body, dict) else None,
+            "ok": r.status_code == 200,
+        }
+    except Exception as e:
+        results["s1"] = {"url": s1_url, "status": None, "error": str(e), "ok": False}
+
+    # ── AlienVault OAuth ─────────────────────────────────────
+    av_base  = f"https://{settings.AV_SUBDOMAIN}"
+    for ep in ("/api/1.1/oauth/token", "/api/2.0/oauth/token"):
+        try:
+            async with _hx.AsyncClient(verify=False, timeout=_hx.Timeout(15.0, connect=10.0)) as c:
+                r = await c.post(
+                    av_base + ep,
+                    data={"grant_type": "client_credentials"},
+                    auth=(settings.AV_CLIENT_ID, settings.AV_CLIENT_SECRET),
+                )
+            body = r.json() if r.headers.get("content-type","").startswith("application/json") else r.text[:300]
+            results[f"av_auth{ep}"] = {
+                "url": av_base + ep,
+                "status": r.status_code,
+                "token_received": bool(isinstance(body, dict) and body.get("access_token")),
+                "error": body.get("error") if isinstance(body, dict) else str(body)[:200],
+                "ok": r.status_code == 200,
+            }
+            if r.status_code == 200:
+                break   # found working endpoint — stop here
+        except Exception as e:
+            results[f"av_auth{ep}"] = {"url": av_base + ep, "status": None, "error": str(e), "ok": False}
+
+    results["summary"] = {
+        "s1_ok": results.get("s1", {}).get("ok", False),
+        "av_ok": any(v.get("ok") for v in results.values() if isinstance(v, dict) and "token_received" in v),
+    }
+    return JSONResponse(results)
+
+
 # ════════════════════════════════════════════════════════════════
 #  WebSocket
 # ════════════════════════════════════════════════════════════════
