@@ -847,6 +847,7 @@ async def _send_client_detail(ws: WebSocket, client_name: str):
 def _settings_context(request: Request, flash: str = "", error: str = "") -> dict:
     """Build full context for the settings template."""
     import time
+    import json
     from datetime import datetime, timezone
 
     all_users = user_db.get_all_users()
@@ -912,14 +913,14 @@ def _settings_context(request: Request, flash: str = "", error: str = "") -> dic
         for e in access_log_raw
     ]
 
-    # Export config
-    import json
-    active_clients = {u["username"]: u["password"] for u in all_users
-                      if u["role"] == "client" and u["is_active"]}
+    # Export config — passwords are hashed in DB and cannot be recovered;
+    # placeholders remind the admin to set them directly in Railway env vars.
+    active_clients = {u["username"]: u.get("password", "") for u in all_users
+                      if u["role"] == "client" and u.get("is_active")}
     active_name_map = {u["username"]: u["client_name"] for u in all_users
-                       if u["role"] == "client" and u["is_active"] and u.get("client_name")}
-    active_analysts = {u["username"]: u["password"] for u in all_users
-                       if u["role"] in ("analyst", "thirdparty") and u["is_active"]}
+                       if u["role"] == "client" and u.get("is_active") and u.get("client_name")}
+    active_analysts = {u["username"]: u.get("password", "") for u in all_users
+                       if u["role"] in ("analyst", "thirdparty") and u.get("is_active")}
     export_vars = {
         "CLIENT_CREDENTIALS": json.dumps(active_clients),
         "CLIENT_NAME_MAP": json.dumps(active_name_map),
