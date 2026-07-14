@@ -79,7 +79,7 @@ else:
     # ── SQLite fallback (local dev) ─────────────────────────────
     import sqlite3
     from pathlib import Path
-    _DEFAULT_DB_PATH = Path(__file__).with_name("sentrium_users.db")
+    _DEFAULT_DB_PATH = Path(__file__).with_name("soc_portal_users.db")
     _DB_PATH = Path(os.getenv("SQLITE_PATH", str(_DEFAULT_DB_PATH))).expanduser()
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -104,7 +104,7 @@ else:
 # ── Schema ──────────────────────────────────────────────────────
 
 _PG_DDL = """
-    CREATE TABLE IF NOT EXISTS sentrium_users (
+    CREATE TABLE IF NOT EXISTS soc_portal_users (
         id          SERIAL PRIMARY KEY,
         username    TEXT    UNIQUE NOT NULL,
         password    TEXT    NOT NULL,
@@ -116,7 +116,7 @@ _PG_DDL = """
         is_active   INTEGER DEFAULT 1
     );
 
-    CREATE TABLE IF NOT EXISTS sentrium_access_log (
+    CREATE TABLE IF NOT EXISTS soc_portal_access_log (
         id          SERIAL PRIMARY KEY,
         username    TEXT    NOT NULL,
         role        TEXT,
@@ -128,7 +128,7 @@ _PG_DDL = """
 """
 
 _SQLITE_DDL = """
-    CREATE TABLE IF NOT EXISTS sentrium_users (
+    CREATE TABLE IF NOT EXISTS soc_portal_users (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         username    TEXT    UNIQUE NOT NULL,
         password    TEXT    NOT NULL,
@@ -140,7 +140,7 @@ _SQLITE_DDL = """
         is_active   INTEGER DEFAULT 1
     );
 
-    CREATE TABLE IF NOT EXISTS sentrium_access_log (
+    CREATE TABLE IF NOT EXISTS soc_portal_access_log (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         username    TEXT    NOT NULL,
         role        TEXT,
@@ -254,7 +254,7 @@ def upsert_user(
 
     if _USE_PG:
         sql = f"""
-            INSERT INTO sentrium_users
+            INSERT INTO soc_portal_users
                 (username, password, role, client_name, created_at, created_by)
             VALUES ({ph},{ph},{ph},{ph},{ph},{ph})
             ON CONFLICT (username) DO UPDATE SET
@@ -264,7 +264,7 @@ def upsert_user(
         """
     else:
         sql = f"""
-            INSERT INTO sentrium_users
+            INSERT INTO soc_portal_users
                 (username, password, role, client_name, created_at, created_by)
             VALUES ({ph},{ph},{ph},{ph},{ph},{ph})
             ON CONFLICT(username) DO UPDATE SET
@@ -280,7 +280,7 @@ def delete_user(username: str) -> None:
     ph = _ph()
     with _PgConn() as conn:
         _cursor(conn).execute(
-            f"DELETE FROM sentrium_users WHERE username = {ph}", (username,)
+            f"DELETE FROM soc_portal_users WHERE username = {ph}", (username,)
         )
 
 
@@ -288,7 +288,7 @@ def toggle_user(username: str, active: bool) -> None:
     ph = _ph()
     with _PgConn() as conn:
         _cursor(conn).execute(
-            f"UPDATE sentrium_users SET is_active = {ph} WHERE username = {ph}",
+            f"UPDATE soc_portal_users SET is_active = {ph} WHERE username = {ph}",
             (1 if active else 0, username),
         )
 
@@ -299,7 +299,7 @@ def get_user(username: str) -> Optional[dict]:
         cur = _cursor(conn)
         cur.execute(
             f"SELECT id, username, role, client_name, created_at, created_by, is_active "
-            f"FROM sentrium_users WHERE username = {ph} AND is_active = 1",
+            f"FROM soc_portal_users WHERE username = {ph} AND is_active = 1",
             (username,),
         )
         row = cur.fetchone()
@@ -312,7 +312,7 @@ def _get_user_with_password(username: str) -> Optional[dict]:
     with _PgConn() as conn:
         cur = _cursor(conn)
         cur.execute(
-            f"SELECT * FROM sentrium_users WHERE username = {ph} AND is_active = 1",
+            f"SELECT * FROM soc_portal_users WHERE username = {ph} AND is_active = 1",
             (username,),
         )
         row = cur.fetchone()
@@ -325,7 +325,7 @@ def get_all_users() -> list[dict]:
         # Explicitly exclude password column — callers never need raw hashes
         cur.execute(
             "SELECT id, username, role, client_name, created_at, created_by, is_active "
-            "FROM sentrium_users ORDER BY role, username"
+            "FROM soc_portal_users ORDER BY role, username"
         )
         return [dict(r) for r in cur.fetchall()]
 
@@ -335,7 +335,7 @@ def get_users_by_role(role: str) -> list[dict]:
     with _PgConn() as conn:
         cur = _cursor(conn)
         cur.execute(
-            f"SELECT * FROM sentrium_users WHERE role = {ph} AND is_active = 1 ORDER BY username",
+            f"SELECT * FROM soc_portal_users WHERE role = {ph} AND is_active = 1 ORDER BY username",
             (role,),
         )
         return [dict(r) for r in cur.fetchall()]
@@ -378,7 +378,7 @@ def log_access(
     try:
         with _PgConn() as conn:
             _cursor(conn).execute(
-                f"""INSERT INTO sentrium_access_log
+                f"""INSERT INTO soc_portal_access_log
                     (username, role, client_name, action, ip_address, timestamp)
                     VALUES ({ph},{ph},{ph},{ph},{ph},{ph})""",
                 (username, role, client_name, action, ip_address, now),
@@ -392,7 +392,7 @@ def get_access_log(limit: int = 200) -> list[dict]:
     with _PgConn() as conn:
         cur = _cursor(conn)
         cur.execute(
-            f"SELECT * FROM sentrium_access_log ORDER BY timestamp DESC LIMIT {ph}",
+            f"SELECT * FROM soc_portal_access_log ORDER BY timestamp DESC LIMIT {ph}",
             (limit,),
         )
         return [dict(r) for r in cur.fetchall()]
@@ -403,7 +403,7 @@ def get_last_access(username: str) -> Optional[float]:
     with _PgConn() as conn:
         cur = _cursor(conn)
         cur.execute(
-            f"""SELECT MAX(timestamp) AS last_ts FROM sentrium_access_log
+            f"""SELECT MAX(timestamp) AS last_ts FROM soc_portal_access_log
                 WHERE username = {ph} AND action = 'login'""",
             (username,),
         )
@@ -419,7 +419,7 @@ def get_client_login_counts() -> dict[str, int]:
         cur = _cursor(conn)
         cur.execute(
             """SELECT client_name, COUNT(*) AS cnt
-               FROM sentrium_access_log
+               FROM soc_portal_access_log
                WHERE action = 'login' AND client_name IS NOT NULL
                GROUP BY client_name"""
         )
