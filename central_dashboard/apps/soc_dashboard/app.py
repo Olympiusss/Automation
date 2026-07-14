@@ -201,7 +201,7 @@ async def login_page(request: Request):
     if validate_session(token):
         role = get_session_role(token)
         if role == "admin":
-            return RedirectResponse(url="/soc/admin-landing", status_code=302)
+            return RedirectResponse(url="/soc/", status_code=302)
         elif role == "analyst":
             return RedirectResponse(url="/soc/analyst", status_code=302)
         elif role == "client":
@@ -258,7 +258,7 @@ async def login_submit(
 
         resp = None
         if role == "admin":
-            resp = RedirectResponse(url="/soc/admin-landing", status_code=302)
+            resp = RedirectResponse(url="/soc/", status_code=302)
         elif role == "analyst":
             resp = RedirectResponse(url="/soc/analyst", status_code=302)
         elif role in ("client", "thirdparty"):
@@ -597,7 +597,7 @@ async def sso_login(request: Request, token: str = ""):
     logger.info(f"SSO login: user={username!r} role={role!r}")
 
     if role == 'admin':
-        dest = "/soc/admin-landing"
+        dest = "/soc/"
     elif role == 'analyst':
         dest = "/soc/analyst"
     else:
@@ -900,16 +900,6 @@ def _settings_context(request: Request, flash: str = "", error: str = "") -> dic
         "error": error,
     }
 
-
-@app.get("/admin-landing", response_class=HTMLResponse)
-async def admin_landing(request: Request):
-    """Admin role selection — choose between analyst view and client overview."""
-    if not _require_role(request, "admin"):
-        return RedirectResponse(url="/soc/login", status_code=302)
-    return templates.TemplateResponse(
-        request=request, name="admin_landing.html",
-        context={},
-    )
 
 
 @app.get("/settings", response_class=HTMLResponse)
