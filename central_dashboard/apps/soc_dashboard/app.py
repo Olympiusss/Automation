@@ -935,6 +935,20 @@ def _settings_context(request: Request, flash: str = "", error: str = "") -> dic
         "export_vars": export_vars,
         "flash": flash,
         "error": error,
+        # ── Live diagnostics ──────────────────────────────────
+        "diag": {
+            "s1_configured":    settings.s1_configured(),
+            "s1_base_url":      settings.S1_BASE_URL[:60] + "…" if len(settings.S1_BASE_URL) > 60 else settings.S1_BASE_URL,
+            "s1_token_set":     bool(settings.S1_API_TOKEN),
+            "av_configured":    settings.av_configured(),
+            "av_subdomain":     settings.AV_SUBDOMAIN or "(not set)",
+            "av_client_id_set": bool(settings.AV_CLIENT_ID),
+            "cached_clients":   (state.total_clients if state else 0),
+            "last_updated":     (state.last_updated if state else "Never"),
+            "ws_active":        ws_manager.active_count,
+            "client_accounts":  len(settings.CLIENT_CREDENTIALS),
+            "analyst_accounts": len(settings.ANALYST_CREDENTIALS),
+        },
     }
 
 
