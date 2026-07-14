@@ -845,15 +845,39 @@ async def _send_client_detail(ws: WebSocket, client_name: str):
 # ════════════════════════════════════════════════════════════════
 
 def _settings_context(request: Request, flash: str = "", error: str = "") -> dict:
-    """Build full context for the settings template."""
+    """Build full context for the settings template. Every section is wrapped
+    in try/except so a DB or config failure does NOT cause a 500 — it just
+    returns empty data with an error message shown in the template."""
     import time
     import json
+    import traceback as _tb
     from datetime import datetime, timezone
 
-    all_users = user_db.get_all_users()
-    last_access_map = {u["username"]: user_db.get_last_access(u["username"]) for u in all_users}
-    login_counts = user_db.get_client_login_counts()
-    access_log_raw = user_db.get_access_log(limit=200)
+    _ctx_error = ""
+
+    try:
+        all_users = user_db.get_all_users()
+    except Exception as _e:
+        logger.error(f"settings get_all_users failed: {_e}\n{_tb.format_exc()}")
+        _ctx_error = f"DB error (get_all_users): {_e}"
+        all_users = []
+    try:
+        last_access_map = {u["username"]: user_db.get_last_access(u["username"]) for u in all_users}
+    except Exception as _e:
+        logger.error(f"settings get_last_access failed: {_e}")
+        last_access_map = {}
+
+    try:
+        login_counts = user_db.get_client_login_counts()
+    except Exception as _e:
+        logger.error(f"settings get_client_login_counts failed: {_e}")
+        login_counts = {}
+
+    try:
+        access_log_raw = user_db.get_access_log(limit=200)
+    except Exception as _e:
+        logger.error(f"settings get_access_log failed: {_e}")
+        access_log_raw = []
 
     def fmt_ts(ts):
         if not ts:
@@ -934,7 +958,8 @@ def _settings_context(request: Request, flash: str = "", error: str = "") -> dic
         "stats": stats,
         "export_vars": export_vars,
         "flash": flash,
-        "error": error,
+        # Surface any internal error to the admin so they can diagnose without logs
+        "error": _ctx_error or error,
         # ── Live diagnostics ──────────────────────────────────
         "diag": {
             "s1_configured":    settings.s1_configured(),
@@ -958,7 +983,14 @@ async def settings_page(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     if not validate_session(token) or get_session_role(token) != "admin":
         return RedirectResponse(url="/soc/login", status_code=302)
-    ctx = _settings_context(request)
+    try:
+        ctx = _settings_context(request)
+    except Exception as _e:
+        import traceback as _tb
+        tb = _tb.format_exc()
+        logger.error(f"Settings page fatal error:\n{tb}")
+        # Return the actual error to the admin (not general users) so it can be diagnosed
+        return JSONResponse({"error": str(_e), "detail": tb}, status_code=500)
     return templates.TemplateResponse(request=request, name="settings.html", context=ctx)
 
 
