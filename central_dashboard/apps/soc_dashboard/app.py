@@ -731,6 +731,31 @@ async def debug_av(request: Request):
     })
 
 
+
+# ── Fetch Status (admin-only diagnostics) ─────────────────────
+
+@app.get("/api/debug/status")
+async def fetch_status(request: Request):
+    """Admin-only: live diagnostics for S1/AV config and cached state."""
+    if not _require_role(request, "admin"):
+        return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+    cached = aggregator.cached_state
+    return JSONResponse({
+        "s1_configured":      settings.s1_configured(),
+        "s1_base_url":        settings.S1_BASE_URL[:40] + "..." if len(settings.S1_BASE_URL) > 40 else settings.S1_BASE_URL,
+        "s1_token_set":       bool(settings.S1_API_TOKEN),
+        "av_configured":      settings.av_configured(),
+        "av_subdomain":       settings.AV_SUBDOMAIN,
+        "av_client_id_set":   bool(settings.AV_CLIENT_ID),
+        "cached_clients":     cached.total_clients if cached else 0,
+        "last_updated":       cached.last_updated if cached else None,
+        "ws_connections":     ws_manager.active_count,
+        "client_accounts":    len(settings.CLIENT_CREDENTIALS),
+        "analyst_accounts":   len(settings.ANALYST_CREDENTIALS),
+    })
+
+
 # ════════════════════════════════════════════════════════════════
 #  WebSocket
 # ════════════════════════════════════════════════════════════════
@@ -748,20 +773,31 @@ async def websocket_endpoint(ws: WebSocket):
     client_name = get_session_client(token)
     await ws_manager.connect(ws, role=role, client_name=client_name)
 
-    # Send initial state, filtered by role (manager handles ongoing broadcasts)
+    # Send initial state on connect so the frontend always exits its loading skeleton.
+    # If cache is populated, send full data; otherwise send an empty state so the
+    # frontend shows "0 clients — first fetch in progress" rather than a perpetual spinner.
     if aggregator.cached_state:
         state_data = aggregator.cached_state.model_dump()
         if role == "client" and client_name:
-            # Clients only receive their own data
             client_obj = next(
                 (c for c in aggregator.cached_state.clients
                  if c.name.lower() == client_name.lower()), None
             )
-            if client_obj:
-                state_data = {**state_data, "clients": [client_obj.model_dump()]}
-            else:
-                state_data = {**state_data, "clients": []}
-        await ws_manager.send_to(ws, state_data)
+            state_data = {**state_data, "clients": [client_obj.model_dump()] if client_obj else []}
+    else:
+        # No cache yet — send empty state so the frontend can render (avoids infinite skeleton)
+        from datetime import datetime, timezone as _tz
+        state_data = {
+            "last_updated": datetime.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "refresh_interval": settings.REFRESH_INTERVAL,
+            "total_clients": 0,
+            "global_endpoints": 0,
+            "global_threats": 0,
+            "global_alerts": 0,
+            "clients": [],
+            "_status": "fetching",
+        }
+    await ws_manager.send_to(ws, state_data)
 
     try:
         while True:

@@ -284,7 +284,9 @@ class AVFetcher:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 verify=False,
-                timeout=httpx.Timeout(60.0, connect=15.0),
+                # 15 s read timeout: prevents 5-min hang when AV auth
+                # tries 5 OAuth endpoints each at the old 60 s limit.
+                timeout=httpx.Timeout(15.0, connect=10.0),
                 limits=httpx.Limits(max_connections=20, max_keepalive_connections=5),
             )
         return self._client
