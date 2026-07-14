@@ -750,11 +750,48 @@ class AVFetcher:
 # Disk-cache path — sits next to fetcher.py in the project directory
 _CACHE_FILE = pathlib.Path(__file__).parent / "dashboard_cache.json"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PostgreSQL-backed cache  (survives Railway deploys; filesystem is ephemeral)
+# Falls back to the local JSON file if DATABASE_URL is not set.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
+if _DATABASE_URL.startswith("postgres://"):
+    _DATABASE_URL = "postgresql://" + _DATABASE_URL[len("postgres://"):]
+
+_USE_PG_CACHE: bool = bool(_DATABASE_URL)
+
+
+def _pg_cache_conn():
+    """Open a short-lived psycopg2 connection for cache reads/writes."""
+    import psycopg2
+    for opts in [{}, {"sslmode": "require"}, {"sslmode": "disable"}]:
+        try:
+            conn = psycopg2.connect(_DATABASE_URL, connect_timeout=8, **opts)
+            return conn
+        except Exception:
+            pass
+    return None
+
+
+def _ensure_pg_cache_table(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS soc_dashboard_cache (
+                id      INT PRIMARY KEY DEFAULT 1,
+                payload TEXT NOT NULL,
+                saved_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+    conn.commit()
+
+
 class DashboardAggregator:
     """
     Combines data from both platforms into a unified dashboard state.
     Runs as a background task, caching results in memory.
-    Persists the last full state to disk so every restart shows instant data.
+    Persists the last full state to PostgreSQL (survives Railway redeploys).
+    Falls back to the local JSON file when DATABASE_URL is not configured.
     """
 
     def __init__(self):
@@ -767,9 +804,35 @@ class DashboardAggregator:
         self._load_from_disk()
 
     def _load_from_disk(self):
-        """Load previously persisted DashboardState from disk.
-        This makes clients appear instantly on every server restart/login,
-        rather than waiting 30-90 s for the first live fetch to complete."""
+        """Load previously persisted DashboardState.
+        Tries PostgreSQL first (Railway-safe), then falls back to local JSON.
+        Makes clients appear instantly on server restart without waiting for
+        the first live fetch cycle to complete."""
+        # 1. Try PostgreSQL
+        if _USE_PG_CACHE:
+            try:
+                conn = _pg_cache_conn()
+                if conn:
+                    _ensure_pg_cache_table(conn)
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT payload FROM soc_dashboard_cache WHERE id = 1")
+                        row = cur.fetchone()
+                    conn.close()
+                    if row:
+                        data = json.loads(row[0])
+                        self._cache = DashboardState(**data)
+                        logger.info(
+                            f"PG cache loaded: {self._cache.total_clients} clients "
+                            f"(last updated {self._cache.last_updated})"
+                        )
+                        return
+                    else:
+                        logger.info("PG cache empty — will populate on first fetch")
+                        return
+            except Exception as exc:
+                logger.warning(f"PG cache load failed ({exc}) — trying disk fallback")
+
+        # 2. Fallback: local JSON file
         try:
             if _CACHE_FILE.exists():
                 raw = _CACHE_FILE.read_text(encoding="utf-8")
@@ -783,12 +846,38 @@ class DashboardAggregator:
             logger.warning(f"Disk cache load skipped ({exc}) — will populate on first fetch")
 
     def _save_to_disk(self, state: DashboardState):
-        """Persist current DashboardState to disk after each fetch cycle."""
+        """Persist current DashboardState.
+        Tries PostgreSQL first (survives redeploys), then local JSON file."""
+        payload = state.model_dump_json()
+
+        # 1. PostgreSQL (primary on Railway)
+        if _USE_PG_CACHE:
+            try:
+                conn = _pg_cache_conn()
+                if conn:
+                    _ensure_pg_cache_table(conn)
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            INSERT INTO soc_dashboard_cache (id, payload, saved_at)
+                            VALUES (1, %s, NOW())
+                            ON CONFLICT (id) DO UPDATE
+                                SET payload  = EXCLUDED.payload,
+                                    saved_at = EXCLUDED.saved_at
+                        """, (payload,))
+                    conn.commit()
+                    conn.close()
+                    logger.debug(f"PG cache saved ({state.total_clients} clients)")
+                    return
+            except Exception as exc:
+                logger.warning(f"PG cache save failed ({exc}) — falling back to disk")
+
+        # 2. Fallback: local file
         try:
-            _CACHE_FILE.write_text(state.model_dump_json(), encoding="utf-8")
+            _CACHE_FILE.write_text(payload, encoding="utf-8")
             logger.debug(f"Disk cache saved ({state.total_clients} clients)")
         except Exception as exc:
-            logger.warning(f"Disk cache save failed (ignored): {exc}")
+            logger.warning(f"Cache save failed (ignored): {exc}")
+
 
     @property
     def cached_state(self) -> Optional[DashboardState]:
