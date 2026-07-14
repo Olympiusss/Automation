@@ -15,6 +15,7 @@ from flask import (Flask, send_from_directory, abort, request,
                    jsonify, send_file, Response, make_response, redirect, g)
 from functools import wraps
 import os, sys, logging, time, re as _re
+import hmac, hashlib, base64, json
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -115,6 +116,27 @@ except Exception as _dbe:
     logger.warning(f"DB init skipped: {_dbe}")
 
 SESSION_COOKIE = "sentrium_token"
+
+
+def _make_sso_token(username: str, role: str, dept: str) -> str:
+    """
+    Create a short-lived HMAC-SHA256 signed token for SOC SSO.
+    Payload: {sub, role, dept, iat, exp}
+    Signed with SOC_SECRET_KEY env var.
+    Token format: base64url(payload).hexsig
+    """
+    secret = os.environ.get('SOC_SECRET_KEY', '')
+    now = int(time.time())
+    payload_bytes = json.dumps({
+        'sub':  username,
+        'role': role,
+        'dept': dept,
+        'iat':  now,
+        'exp':  now + 60,  # 60-second TTL — single-use window
+    }, separators=(',', ':')).encode()
+    b64_payload = base64.urlsafe_b64encode(payload_bytes).rstrip(b'=').decode()
+    sig = hmac.new(secret.encode(), b64_payload.encode(), hashlib.sha256).hexdigest()
+    return f"{b64_payload}.{sig}"
 
 def _get_session_token() -> str | None:
     return request.cookies.get(SESSION_COOKIE)
@@ -227,13 +249,21 @@ def serve_app(app_id):
         # SOC dashboard: Security Operations dept only
         dept = g.session.get("department", "")
         role = g.session.get("role", "")
+        username = g.session.get("username", "")
         if role != "admin" and dept not in ("All", "Security Operations"):
             logger.warning(
                 f"ESCALATION ATTEMPT: {g.session.get('username')!r} "
                 f"(dept={dept!r}) tried to access SOC dashboard from {request.remote_addr}"
             )
             return jsonify({"error": "Access denied: insufficient department permissions"}), 403
-        return redirect('/soc/', code=302)
+        # Map central-dashboard role → SOC role
+        if role == "admin":
+            soc_role = "admin"
+        else:  # dept_user with Security Operations or All
+            soc_role = "analyst"
+        sso_token = _make_sso_token(username=username, role=soc_role, dept=dept)
+        logger.info(f"SSO redirect: user={username!r} soc_role={soc_role!r}")
+        return redirect(f'/soc/sso?token={sso_token}', code=302)
     # Strict allowlist — prevents path traversal and unauth access
     if app_id not in ALLOWED_APPS:
         abort(404)

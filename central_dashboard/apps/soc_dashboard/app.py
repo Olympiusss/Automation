@@ -10,6 +10,10 @@ import os
 import traceback
 from pathlib import Path
 from contextlib import asynccontextmanager
+import hmac as _hmac
+import hashlib as _hashlib
+import base64 as _base64
+import json as _json
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -196,13 +200,15 @@ async def login_page(request: Request):
     token = _get_token(request)
     if validate_session(token):
         role = get_session_role(token)
-        if role == "analyst":
-            return RedirectResponse(url="/analyst", status_code=302)
+        if role == "admin":
+            return RedirectResponse(url="/soc/admin-landing", status_code=302)
+        elif role == "analyst":
+            return RedirectResponse(url="/soc/analyst", status_code=302)
         elif role == "client":
             client = get_session_client(token)
-            return RedirectResponse(url=f"/client/{client}", status_code=302)
+            return RedirectResponse(url=f"/soc/client/{client}", status_code=302)
         else:
-            return RedirectResponse(url="/", status_code=302)
+            return RedirectResponse(url="/soc/", status_code=302)
     return templates.TemplateResponse(
         request=request, name="login.html",
         context={"step": "credentials", "error": None,
@@ -252,12 +258,12 @@ async def login_submit(
 
         resp = None
         if role == "admin":
-            resp = RedirectResponse(url="/", status_code=302)
+            resp = RedirectResponse(url="/soc/admin-landing", status_code=302)
         elif role == "analyst":
-            resp = RedirectResponse(url="/analyst", status_code=302)
+            resp = RedirectResponse(url="/soc/analyst", status_code=302)
         elif role in ("client", "thirdparty"):
             dest = client_name or username
-            resp = RedirectResponse(url=f"/client/{dest}", status_code=302)
+            resp = RedirectResponse(url=f"/soc/client/{dest}", status_code=302)
         else:
             # Unknown role — deny
             logger.warning(f"Login denied: unknown role '{role}' for user '{username}'")
@@ -292,7 +298,7 @@ async def login_submit(
 async def logout(request: Request):
     """Destroy the SOC session and return to the login page."""
     destroy_session(_get_token(request))
-    response = RedirectResponse(url="/login", status_code=302)
+    response = RedirectResponse(url="/soc/login", status_code=302)
     response.delete_cookie(SESSION_COOKIE)
     return response
 
@@ -303,7 +309,7 @@ async def logout(request: Request):
 async def client_grid(request: Request):
     """Admin-only: Client Grid overview."""
     if not _require_role(request, "admin"):
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/soc/login", status_code=302)
 
     host = request.headers.get("host", "localhost:8080")
     proto = request.headers.get("x-forwarded-proto", "http")
@@ -323,7 +329,7 @@ async def client_dashboard(request: Request, client_name: str):
     decoded_name = unquote(client_name)
 
     if not _authenticated(request):
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/soc/login", status_code=302)
 
     role = _role(request)
 
@@ -334,12 +340,12 @@ async def client_dashboard(request: Request, client_name: str):
     elif role == "client":
         session_client = _client_name(request)
         if session_client and session_client.lower() != decoded_name.lower():
-            return RedirectResponse(url=f"/client/{session_client}", status_code=302)
+            return RedirectResponse(url=f"/soc/client/{session_client}", status_code=302)
     # Analysts can view any client
     elif role == "analyst":
         pass  # allowed
     else:
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/soc/login", status_code=302)
 
     host = request.headers.get("host", "localhost:8080")
     proto = request.headers.get("x-forwarded-proto", "http")
@@ -361,7 +367,7 @@ async def client_dashboard(request: Request, client_name: str):
 async def analyst_portal(request: Request):
     """Analyst landing page with client dropdown."""
     if not _require_role(request, "analyst"):
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/soc/login", status_code=302)
 
     # Fetch available clients from cached state
     state = aggregator.cached_state
@@ -455,7 +461,7 @@ async def sso_relay(request: Request):
     """Relay page: generates a JWT for the logged-in user and redirects them
     to the external platform via a GET with the token as a query parameter."""
     if not _require_role(request, "analyst", "admin"):
-        return RedirectResponse("/login", status_code=302)
+        return RedirectResponse("/soc/login", status_code=302)
 
     if not settings.sso_configured():
         return HTMLResponse("<h2>SSO is not configured on this server.</h2>", status_code=503)
@@ -544,6 +550,66 @@ async def sso_relay(request: Request):
 
 
 
+# ── SSO token verification helper ─────────────────────────────────────────────
+
+def _verify_sso_token(token: str) -> dict | None:
+    """Verify the HMAC-signed SSO token from Sentrium Central Dashboard.
+    Returns payload dict on success, or None on failure."""
+    try:
+        secret = settings.SECRET_KEY  # SOC_SECRET_KEY env var
+        parts = token.split('.')
+        if len(parts) != 2:
+            return None
+        b64_payload, sig = parts
+        expected_sig = _hmac.new(
+            secret.encode(), b64_payload.encode(), _hashlib.sha256
+        ).hexdigest()
+        if not _hmac.compare_digest(sig, expected_sig):
+            logger.warning('SSO token signature mismatch')
+            return None
+        padding = 4 - len(b64_payload) % 4
+        payload = _json.loads(_base64.urlsafe_b64decode(b64_payload + '=' * (padding % 4)))
+        if payload.get('exp', 0) < int(time.time()):
+            logger.warning('SSO token expired')
+            return None
+        return payload
+    except Exception as e:
+        logger.warning(f'SSO token verification failed: {e}')
+        return None
+
+
+@app.get("/sso")
+async def sso_login(request: Request, token: str = ""):
+    """SSO entry point from Sentrium Central Dashboard."""
+    if not token:
+        return RedirectResponse(url="/soc/login", status_code=302)
+    payload = _verify_sso_token(token)
+    if not payload:
+        logger.warning(
+            f"SSO failed from {request.client.host if request.client else 'unknown'}"
+        )
+        return RedirectResponse(url="/soc/login", status_code=302)
+
+    role = payload.get('role', 'analyst')
+    username = payload.get('sub', '')
+    soc_token = create_session(role=role, username=username, client_name=None)
+
+    logger.info(f"SSO login: user={username!r} role={role!r}")
+
+    if role == 'admin':
+        dest = "/soc/admin-landing"
+    elif role == 'analyst':
+        dest = "/soc/analyst"
+    else:
+        dest = "/soc/login"
+
+    resp = RedirectResponse(url=dest, status_code=302)
+    resp.set_cookie(
+        SESSION_COOKIE, soc_token, httponly=True,
+        samesite="lax", secure=True,
+        max_age=settings.SESSION_TIMEOUT_MINUTES * 60,
+    )
+    return resp
 
 
 @app.get("/api/state")
@@ -835,11 +901,22 @@ def _settings_context(request: Request, flash: str = "", error: str = "") -> dic
     }
 
 
+@app.get("/admin-landing", response_class=HTMLResponse)
+async def admin_landing(request: Request):
+    """Admin role selection — choose between analyst view and client overview."""
+    if not _require_role(request, "admin"):
+        return RedirectResponse(url="/soc/login", status_code=302)
+    return templates.TemplateResponse(
+        request=request, name="admin_landing.html",
+        context={},
+    )
+
+
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     if not validate_session(token) or get_session_role(token) != "admin":
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/soc/login", status_code=302)
     ctx = _settings_context(request)
     return templates.TemplateResponse(request=request, name="settings.html", context=ctx)
 
@@ -854,7 +931,7 @@ async def settings_create_user(
 ):
     token = request.cookies.get(SESSION_COOKIE)
     if not validate_session(token) or get_session_role(token) != "admin":
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/soc/login", status_code=302)
     if not username or not password:
         ctx = _settings_context(request, error="Username and password are required.")
         return templates.TemplateResponse(request=request, name="settings.html", context=ctx)
@@ -878,7 +955,7 @@ async def settings_update_user(
 ):
     token = request.cookies.get(SESSION_COOKIE)
     if not validate_session(token) or get_session_role(token) != "admin":
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/soc/login", status_code=302)
     try:
         existing = user_db.get_user(original_username)
         new_pw = password if password else (existing["password"] if existing else "")
@@ -899,7 +976,7 @@ async def settings_delete_user(
 ):
     token = request.cookies.get(SESSION_COOKIE)
     if not validate_session(token) or get_session_role(token) != "admin":
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/soc/login", status_code=302)
     user_db.delete_user(username)
     logger.info(f"Admin deleted user: {username}")
     ctx = _settings_context(request, flash=f"User '{username}' deleted.")
@@ -914,7 +991,7 @@ async def settings_toggle_user(
 ):
     token = request.cookies.get(SESSION_COOKIE)
     if not validate_session(token) or get_session_role(token) != "admin":
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/soc/login", status_code=302)
     user_db.toggle_user(username, active == "1")
     status = "activated" if active == "1" else "deactivated"
     ctx = _settings_context(request, flash=f"User '{username}' {status}.")
