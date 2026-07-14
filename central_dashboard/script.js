@@ -435,16 +435,27 @@ function showSubAppPicker(app) {
     const overlay = document.getElementById('sp-overlay');
     document.getElementById('sp-hdr-icon').innerHTML = app.icon;
     document.getElementById('sp-hdr-title').textContent = app.name;
+
+    // Build buttons via DOM API — inline onclick is blocked by nonce-based CSP
     const optionsEl = document.getElementById('sp-options');
-    optionsEl.innerHTML = app.subApps.map(sub => `
-        <button class="sp-option" onclick="closePicker(); openApp('${sub.id}')">
+    optionsEl.innerHTML = '';
+    app.subApps.forEach(sub => {
+        const btn = document.createElement('button');
+        btn.className = 'sp-option';
+        btn.innerHTML = `
             <div class="sp-option-badge"><img src="sentinelone-logo.png" alt="SentinelOne"></div>
             <div>
                 <div class="sp-option-label">${app.name.replace('Reporting Solution','').trim()} ${sub.label}</div>
                 <div class="sp-option-desc">${sub.description}</div>
             </div>
-            <svg class="sp-option-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        </button>`).join('');
+            <svg class="sp-option-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`;
+        btn.addEventListener('click', () => {
+            closePicker();
+            openApp(sub.id);
+        });
+        optionsEl.appendChild(btn);
+    });
+
     overlay.classList.add('open');
 }
 
