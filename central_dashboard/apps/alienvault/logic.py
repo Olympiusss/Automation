@@ -96,7 +96,9 @@ def get_deployments() -> list[dict]:
             except Exception:
                 _logger.warning(f"AV: {path} returned 200 but non-JSON body")
                 continue
-            _logger.info(f"AV deployments raw keys: {list(data.keys())[:10]}")
+            _logger.info(f"AV deployments {path} raw: type={type(data).__name__}, "
+                         f"keys={list(data.keys())[:10] if isinstance(data, dict) else f'list({len(data)} items)'}")
+
             if "_embedded" in data:
                 embedded = data["_embedded"]
                 deps = (
