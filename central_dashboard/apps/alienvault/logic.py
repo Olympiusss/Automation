@@ -24,21 +24,29 @@ def _get_subdomain() -> str:
 SUBDOMAIN = _get_subdomain()
 
 
-def get_token(subdomain: str | None = None, client_id: str | None = None, client_secret: str | None = None) -> str:
+def get_token(subdomain: str | None = None, client_id: str | None = None, client_secret: str | None = None, prefer_v2: bool = False) -> str:
     """
-    Obtain an OAuth2 bearer token from the AV central portal.
-    Tries /api/1.1/, /api/2.0/, /api/1.0/ and bare /oauth/token in order
-    and returns the first successful access_token.
+    Obtain an OAuth2 bearer token.
+    - For the CENTRAL portal: /api/1.1/oauth/token works (v2.0 returns 405)
+    - For CHILD deployments:  /api/2.0/oauth/token is the official LevelBlue endpoint
+    Set prefer_v2=True when calling for a child deployment.
     Raises RuntimeError if every endpoint fails.
     """
     import logging as _log
     _logger = _log.getLogger("alienvault.logic")
-    _sub = subdomain or SUBDOMAIN
+    _sub = subdomain or _get_subdomain()
     _id  = client_id  or CLIENT_ID
     _sec = client_secret or CLIENT_SECRET
     base = f"https://{_sub}"
-    for ep in ("/api/1.1/oauth/token", "/api/2.0/oauth/token",
-               "/api/1.0/oauth/token", "/oauth/token"):
+    # Per LevelBlue docs, official endpoint is /api/2.0/oauth/token.
+    # Central portal only supports /api/1.1/, so we try both orders.
+    if prefer_v2:
+        endpoints = ("/api/2.0/oauth/token", "/api/1.1/oauth/token",
+                     "/api/1.0/oauth/token", "/oauth/token")
+    else:
+        endpoints = ("/api/1.1/oauth/token", "/api/2.0/oauth/token",
+                     "/api/1.0/oauth/token", "/oauth/token")
+    for ep in endpoints:
         try:
             resp = requests.post(
                 base + ep,
@@ -47,15 +55,13 @@ def get_token(subdomain: str | None = None, client_id: str | None = None, client
                 timeout=20,
             )
             if resp.status_code == 200:
-                # Always call resp.json() directly — requests parses JSON
-                # regardless of the Content-Type header sent by the server
                 try:
                     body = resp.json()
                 except Exception:
                     body = {}
                 token = body.get("access_token", "")
                 if token:
-                    _logger.info(f"AV token acquired via {ep}")
+                    _logger.info(f"AV token acquired via {ep} on {_sub}")
                     return token
                 _logger.warning(f"AV auth {ep} -> 200 but no access_token in response: {list(body.keys())}")
             else:
@@ -169,10 +175,9 @@ def get_deployments() -> list[dict]:
 
 def _get_deployment_token(dep_url: str, fallback_token: str) -> str:
     """
-    Get an OAuth token scoped to a specific deployment.
-    In AV MSP setups the central portal token is NOT valid against child
-    deployment APIs — each deployment needs its own token obtained from
-    its own OAuth endpoint using the same client credentials.
+    Per LevelBlue docs: each child deployment has its own OAuth endpoint at
+    https://{deployment-subdomain}.alienvault.cloud/api/2.0/oauth/token.
+    Uses the SAME central credentials — MSP federated access.
     Falls back to the central token if the deployment auth fails.
     """
     import logging as _log
@@ -181,10 +186,11 @@ def _get_deployment_token(dep_url: str, fallback_token: str) -> str:
         return fallback_token
     try:
         from urllib.parse import urlparse as _up
-        netloc = _up(dep_url).netloc  # e.g. esentry-nfr.alienvault.cloud
+        netloc = _up(dep_url).netloc  # e.g. kudamfb.alienvault.cloud
         if not netloc:
             return fallback_token
-        dep_token = get_token(subdomain=netloc)
+        # Use prefer_v2=True: per docs, child deployments use /api/2.0/oauth/token
+        dep_token = get_token(subdomain=netloc, prefer_v2=True)
         _logger.info(f"AV: deployment token obtained for {netloc}")
         return dep_token
     except Exception as _e:
@@ -209,8 +215,8 @@ def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
         "size": 500,
         "status": ["open", "closed", "in_review"],
     }
-    # Try api/1.1 first (confirmed working for this AV instance), then api/2.0
-    for api_path in ("/api/1.1/alarms", "/api/2.0/alarms"):
+    # Per LevelBlue docs: official API is /api/2.0/. Try that first, then /api/1.1/ fallback.
+    for api_path in ("/api/2.0/alarms", "/api/1.1/alarms"):
         url = dep_url.rstrip("/") + api_path
         all_alarms = []
         for page in range(20):
@@ -255,8 +261,8 @@ def fetch_events_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
         "sort": "timestamp_received,desc",
         "size": 500,
     }
-    # Try api/1.1 first, then api/2.0
-    for api_path in ("/api/1.1/events", "/api/2.0/events"):
+    # Per LevelBlue docs: official API is /api/2.0/. Try that first, then /api/1.1/ fallback.
+    for api_path in ("/api/2.0/events", "/api/1.1/events"):
         url = dep_url.rstrip("/") + api_path
         all_events = []
         for page in range(20):
