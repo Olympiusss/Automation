@@ -159,12 +159,41 @@ def get_deployments() -> list[dict]:
     return []
 
 
+def _get_deployment_token(dep_url: str, fallback_token: str) -> str:
+    """
+    Get an OAuth token scoped to a specific deployment.
+    In AV MSP setups the central portal token is NOT valid against child
+    deployment APIs — each deployment needs its own token obtained from
+    its own OAuth endpoint using the same client credentials.
+    Falls back to the central token if the deployment auth fails.
+    """
+    import logging as _log
+    _logger = _log.getLogger("alienvault.logic")
+    if not dep_url:
+        return fallback_token
+    try:
+        from urllib.parse import urlparse as _up
+        netloc = _up(dep_url).netloc  # e.g. esentry-nfr.alienvault.cloud
+        if not netloc:
+            return fallback_token
+        dep_token = get_token(subdomain=netloc)
+        _logger.info(f"AV: deployment token obtained for {netloc}")
+        return dep_token
+    except Exception as _e:
+        _logger.warning(f"AV: deployment token failed for {dep_url} ({_e}) — using central token")
+        return fallback_token
+
+
 def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms: int, max_records: int = 5000) -> list:
     """Fetch alarms from a specific deployment URL (per-client fetch)."""
+    import logging as _log
+    _logger = _log.getLogger("alienvault.logic")
     if not dep_url:
         return []
+    # Get a token valid for this specific deployment
+    dep_token = _get_deployment_token(dep_url, token)
     url = dep_url.rstrip("/") + "/api/2.0/alarms"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {dep_token}", "Content-Type": "application/json"}
     base_params = {
         "timestamp_received_gte": start_ms,
         "timestamp_received_lte": end_ms,
@@ -178,7 +207,9 @@ def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
         try:
             p = {**base_params, "page": page}
             resp = requests.get(url, headers=headers, params=p, timeout=45)
+            _logger.info(f"AV alarms page {page}: HTTP {resp.status_code} ({len(all_alarms)} so far)")
             if resp.status_code != 200:
+                _logger.error(f"AV alarms {url} HTTP {resp.status_code}: {resp.text[:200]}")
                 break
             batch = resp.json().get("_embedded", {}).get("alarms", [])
             if not batch:
@@ -186,17 +217,23 @@ def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
             all_alarms.extend(batch)
             if len(batch) < 500 or len(all_alarms) >= max_records:
                 break
-        except Exception:
+        except Exception as _e:
+            _logger.error(f"AV alarms fetch error: {_e}")
             break
+    _logger.info(f"AV: {len(all_alarms)} alarms fetched from {dep_url}")
     return all_alarms[:max_records]
 
 
 def fetch_events_for_deployment(dep_url: str, token: str, start_ms: int, end_ms: int, max_records: int = 5000) -> list:
     """Fetch events from a specific deployment URL."""
+    import logging as _log
+    _logger = _log.getLogger("alienvault.logic")
     if not dep_url:
         return []
+    # Reuse the same deployment-scoped token as alarms
+    dep_token = _get_deployment_token(dep_url, token)
     url = dep_url.rstrip("/") + "/api/2.0/events"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {dep_token}", "Content-Type": "application/json"}
     all_events = []
     for page in range(20):
         try:
@@ -207,7 +244,9 @@ def fetch_events_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
                 "size": 500,
                 "page": page,
             }, timeout=45)
+            _logger.info(f"AV events page {page}: HTTP {resp.status_code}")
             if resp.status_code != 200:
+                _logger.error(f"AV events {url} HTTP {resp.status_code}: {resp.text[:200]}")
                 break
             batch = resp.json().get("_embedded", {}).get("eventResources", [])
             if not batch:
@@ -215,8 +254,10 @@ def fetch_events_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
             all_events.extend(batch)
             if len(batch) < 500 or len(all_events) >= max_records:
                 break
-        except Exception:
+        except Exception as _e:
+            _logger.error(f"AV events fetch error: {_e}")
             break
+    _logger.info(f"AV: {len(all_events)} events fetched from {dep_url}")
     return all_events[:max_records]
 
 

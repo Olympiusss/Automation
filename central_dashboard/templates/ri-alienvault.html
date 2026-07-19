@@ -192,8 +192,7 @@
     <!-- Client / Deployment selector -->
     <div class="client-row">
       <label style="display:flex;align-items:center;gap:8px;">
-        🏢 Client / Deployment
-        <span class="dep-badge" id="depCount" style="display:none"></span>
+        🏢 CLIENT / DEPLOYMENT
         <span id="depLoader" style="font-size:0.78rem;color:var(--muted);display:none">Loading clients…</span>
       </label>
       <select class="client-select" id="depSelect">
@@ -223,7 +222,6 @@
     </div>
   </div>
 
-  <p class="tip">💡 Tip: Fetching large datasets (&gt;20,000 events) takes time. Narrow your date/time range for faster results.</p>
 
   <!-- Results -->
   <div id="results" class="results-section hidden">
@@ -263,8 +261,6 @@
           opt.textContent = d.displayName || d.name;
           sel.appendChild(opt);
         });
-        badge.textContent = deps.length + ' clients';
-        badge.style.display = 'inline-flex';
       }
     } catch(e){ console.warn('Could not load AV deployments:', e); }
     finally { loader.style.display = 'none'; }
