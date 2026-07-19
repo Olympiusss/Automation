@@ -128,22 +128,18 @@ tbody td{padding:9px 14px;font-size:0.85rem;color:var(--text)}
       </button>
     </div>
 
-    <!-- Site PIN gate (shown after sites load) -->
     <div id="sitePinSection" class="site-pin-card hidden">
       <label style="margin-bottom:10px;display:block">Select Site</label>
       <div class="pin-row">
         <select id="siteSelect" onchange="onSiteChange()" style="flex:1">
           <option value="">— Choose a site —</option>
         </select>
-        <input type="text" id="pinInput" placeholder="(optional)" maxlength="20"
-               style="width:160px" onkeydown="if(event.key==='Enter')fetchData()">
         <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="fetchData()" id="btnFetch" disabled>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           Fetch Data
         </button>
         <div class="loader-wrap" id="fetchLoader"><div class="spinner"></div><span style="color:var(--muted);font-size:0.85rem;">Fetching from SentinelOne...</span></div>
       </div>
-      <div id="pinErr" style="color:#f87171;font-size:0.8rem;margin-top:8px;min-height:18px"></div>
     </div>
 
     <!-- Results -->
@@ -189,64 +185,15 @@ tbody td{padding:9px 14px;font-size:0.85rem;color:var(--text)}
 
 <script>
 (function(){
-  const TOTP_SECRET = 'ESENTRYDASHBOARD7777SENTINEL';
-  const SITE_PINS = {'Default site':'Decipher211$','esentry':'Decipher777$'};
-
   let sitesData=[], selectedSite=null, resultCache=null, chartInstances=[];
 
-  // ── TOTP ──────────────────────────────────────────────────────────────────
-  function base32Decode(input){
-    const alpha='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    const s=input.replace(/=+$/,'').toUpperCase();
-    let bits=0,val=0;const out=[];
-    for(const ch of s){
-      const idx=alpha.indexOf(ch);if(idx===-1)continue;
-      val=(val<<5)|idx;bits+=5;
-      if(bits>=8){out.push((val>>>(bits-8))&0xff);bits-=8;}
-    }
-    return new Uint8Array(out);
-  }
-  async function hmacSha1(keyBytes,msgBytes){
-    const key=await crypto.subtle.importKey('raw',keyBytes,{name:'HMAC',hash:{name:'SHA-1'}},false,['sign']);
-    return new Uint8Array(await crypto.subtle.sign('HMAC',key,msgBytes));
-  }
-  async function genTotp(secret,stepOverride){
-    const keyBytes=base32Decode(secret);
-    const step=stepOverride??Math.floor(Date.now()/1000/30);
-    const counter=new ArrayBuffer(8);new DataView(counter).setUint32(4,step,false);
-    const hmac=await hmacSha1(keyBytes,new Uint8Array(counter));
-    const offset=hmac[19]&0xf;
-    const otp=((hmac[offset]&0x7f)<<24|(hmac[offset+1]&0xff)<<16|(hmac[offset+2]&0xff)<<8|(hmac[offset+3]&0xff))%1000000;
-    return otp.toString().padStart(6,'0');
-  }
-  async function verifyTotpCode(secret,code){
-    const step=Math.floor(Date.now()/1000/30);
-    for(const off of[-4,-3,-2,-1,0,1,2,3,4]){
-      if(await genTotp(secret,step+off)===code.trim())return true;
-    }
-    return false;
-  }
-
-  window.verifyTotp=async function(){
-    const code=document.getElementById('totpInput').value.trim();
-    if(code.length!==6){document.getElementById('totpErr').textContent='Enter a 6-digit code.';return}
-    const ok=await verifyTotpCode(TOTP_SECRET,code);
-    if(ok){
-      document.getElementById('totpGate').classList.add('hidden');
-      document.getElementById('mainApp').classList.remove('hidden');
-      initDates();
-    } else {
-      document.getElementById('totpErr').textContent='Invalid code. Please try again.';
-      document.getElementById('totpInput').value='';
-    }
-  };
-
-  function initDates(){
+  // ── Init dates on page load ────────────────────────────────────────────────
+  (function initDates(){
     const now=new Date();
     const prior=new Date(now);prior.setDate(now.getDate()-7);
     document.getElementById('startDate').value=prior.toISOString().split('T')[0];
     document.getElementById('endDate').value=now.toISOString().split('T')[0];
-  }
+  })();
 
   // ── Sites ─────────────────────────────────────────────────────────────────
   window.loadSites=async function(){
@@ -269,18 +216,11 @@ tbody td{padding:9px 14px;font-size:0.85rem;color:var(--text)}
     const sel=document.getElementById('siteSelect');
     selectedSite=sitesData.find(s=>String(s.id)===String(sel.value))||null;
     document.getElementById('btnFetch').disabled=!selectedSite;
-    document.getElementById('pinErr').textContent='';
-    document.getElementById('pinInput').value='';
   };
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   window.fetchData=async function(){
     if(!selectedSite){showToast('Please select a site.','red');return}
-    const pin=document.getElementById('pinInput').value;
-    const sitePins=SITE_PINS;
-    const expectedPin=sitePins[selectedSite.name]||sitePins['Default site'];
-    if(expectedPin&&pin!==expectedPin){document.getElementById('pinErr').textContent='';}
-    document.getElementById('pinErr').textContent='';
 
     const start_iso=document.getElementById('startDate').value+'T00:00:00.000Z';
     const end_iso=document.getElementById('endDate').value+'T23:59:59.999Z';
