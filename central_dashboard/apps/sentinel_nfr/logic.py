@@ -14,10 +14,15 @@ logger = logging.getLogger("sentinel_nfr.logic")
 
 # ── Credentials: read fresh per-call (never cached at import time) ────────────
 def _get_base_url() -> str:
-    return os.environ.get(
+    url = os.environ.get(
         "S1_NFR_BASE_URL",
         "https://euce1-110-nfr.sentinelone.net/web/api/v2.1"
     ).rstrip("/")
+    # Auto-append the API path if only the hostname was set in Railway
+    if "/web/api/" not in url and "/api/v" not in url:
+        url = url + "/web/api/v2.1"
+        logger.info(f"S1 NFR: base URL normalised to {url}")
+    return url
 
 def _get_headers() -> dict:
     token = os.environ.get("S1_NFR_TOKEN", "")

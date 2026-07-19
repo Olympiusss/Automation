@@ -20,10 +20,15 @@ logger = logging.getLogger("sentinel_excl.logic")
 
 # ── Credentials: read fresh per-call (never cached at import time) ────────────
 def _get_base_url() -> str:
-    return os.environ.get(
+    url = os.environ.get(
         "S1_EXCL_BASE_URL",
         "https://euce1-exclusive.sentinelone.net/web/api/v2.1"
     ).rstrip("/")
+    # Auto-append the API path if only the hostname was set in Railway
+    if "/web/api/" not in url and "/api/v" not in url:
+        url = url + "/web/api/v2.1"
+        logger.info(f"S1 Excl: base URL normalised to {url}")
+    return url
 
 def _get_headers() -> dict:
     token = os.environ.get("S1_EXCL_TOKEN", "")
