@@ -659,7 +659,11 @@ def alienvault_debug():
         try:
             r = _req.post(url, data={"grant_type": "client_credentials"},
                           auth=(cid, csec), timeout=15)
-            body = r.json() if "json" in r.headers.get("content-type","") else r.text[:400]
+            # Always try r.json() regardless of content-type header
+            try:
+                body = r.json()
+            except Exception:
+                body = r.text[:400]
             result["auth_attempts"][ep] = {
                 "status": r.status_code,
                 "body_keys": list(body.keys()) if isinstance(body, dict) else str(body)[:300],
@@ -668,6 +672,7 @@ def alienvault_debug():
             if r.status_code == 200 and isinstance(body, dict) and body.get("access_token"):
                 token = body["access_token"]
                 result["token_obtained"] = True
+                result["token_preview"] = token[:12] + "..."
                 break
         except Exception as _e:
             result["auth_attempts"][ep] = {"error": str(_e)}
@@ -675,15 +680,21 @@ def alienvault_debug():
     if not token:
         return jsonify(result)
 
-    # ── Try every deployment path ────────────────────────────────────────────
+    # ── Try every deployment/tenant path ─────────────────────────────────────
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     base    = f"https://{sub}"
     for path in ("/api/2.0/deployments", "/api/1.1/deployments",
-                 "/api/2.0/tenants", "/api/1.1/tenants", "/deployments"):
+                 "/api/2.0/tenants",     "/api/1.1/tenants",
+                 "/api/2.0/subscriptions","/api/1.1/subscriptions",
+                 "/api/2.0/organizations","/api/1.1/organizations",
+                 "/deployments", "/tenants"):
         url = base + path
         try:
             r    = _req.get(url, headers=headers, timeout=20)
-            body = r.json() if "json" in r.headers.get("content-type","") else r.text[:400]
+            try:
+                body = r.json()
+            except Exception:
+                body = r.text[:400]
             top_keys = list(body.keys()) if isinstance(body, dict) else "list"
             # Peek at first item if it's a list or embedded list
             first_item_keys = []
@@ -707,6 +718,8 @@ def alienvault_debug():
                           sum(len(v) for v in body.values() if isinstance(v, list)
                               ) if isinstance(body, dict) else "?"),
             }
+            if r.status_code == 200:
+                result["deployment_attempts"][path]["WORKING"] = True
         except Exception as _e:
             result["deployment_attempts"][path] = {"error": str(_e)}
 
@@ -902,6 +915,40 @@ def conversion_convert():
 #  SentinelOne NFR routes
 # ════════════════════════════════════════════════════════════════════════════
 
+@app.route('/api/sentinel-nfr/debug')
+@require_dept('Research and Intelligence')
+def s1_nfr_debug():
+    """Raw diagnostic: makes a real call to the S1 NFR API and returns the HTTP status.
+    Visit this URL to see exactly why sites are not loading."""
+    import requests as _req, os as _os
+    base  = _os.environ.get("S1_NFR_BASE_URL", "https://euce1-110-nfr.sentinelone.net/web/api/v2.1").rstrip("/")
+    token = _os.environ.get("S1_NFR_TOKEN", "")
+    result = {
+        "env": {"S1_NFR_BASE_URL": base, "S1_NFR_TOKEN_set": bool(token),
+                "S1_NFR_TOKEN_length": len(token)},
+        "test_url": f"{base}/sites?limit=1",
+    }
+    try:
+        r = _req.get(f"{base}/sites", params={"limit": 1},
+                     headers={"Authorization": f"ApiToken {token}",
+                              "Content-Type": "application/json"}, timeout=20)
+        body = r.json() if "json" in r.headers.get("content-type","") else r.text[:400]
+        result["status"] = r.status_code
+        result["ok"] = r.status_code == 200
+        if isinstance(body, dict):
+            result["body_keys"] = list(body.keys())
+            data = body.get("data", {})
+            if isinstance(data, dict):
+                result["sites_count"] = len(data.get("sites", []))
+            result["errors"] = body.get("errors")
+        else:
+            result["body_snippet"] = str(body)[:300]
+    except Exception as _e:
+        result["error"] = str(_e)
+        result["ok"] = False
+    return jsonify(result)
+
+
 @app.route('/api/sentinel-nfr/sites')
 @require_dept('Research and Intelligence')
 def s1_nfr_sites():
@@ -959,6 +1006,40 @@ def s1_nfr_export():
 # ════════════════════════════════════════════════════════════════════════════
 #  SentinelOne Exclusive routes
 # ════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/sentinel-excl/debug')
+@require_dept('Research and Intelligence')
+def s1_excl_debug():
+    """Raw diagnostic: makes a real call to the S1 Exclusive API and returns the HTTP status.
+    Visit this URL to see exactly why sites are not loading."""
+    import requests as _req, os as _os
+    base  = _os.environ.get("S1_EXCL_BASE_URL", "https://euce1-exclusive.sentinelone.net/web/api/v2.1").rstrip("/")
+    token = _os.environ.get("S1_EXCL_TOKEN", "")
+    result = {
+        "env": {"S1_EXCL_BASE_URL": base, "S1_EXCL_TOKEN_set": bool(token),
+                "S1_EXCL_TOKEN_length": len(token)},
+        "test_url": f"{base}/sites?limit=1",
+    }
+    try:
+        r = _req.get(f"{base}/sites", params={"limit": 1},
+                     headers={"Authorization": f"ApiToken {token}",
+                              "Content-Type": "application/json"}, timeout=20)
+        body = r.json() if "json" in r.headers.get("content-type","") else r.text[:400]
+        result["status"] = r.status_code
+        result["ok"] = r.status_code == 200
+        if isinstance(body, dict):
+            result["body_keys"] = list(body.keys())
+            data = body.get("data", {})
+            if isinstance(data, dict):
+                result["sites_count"] = len(data.get("sites", []))
+            result["errors"] = body.get("errors")
+        else:
+            result["body_snippet"] = str(body)[:300]
+    except Exception as _e:
+        result["error"] = str(_e)
+        result["ok"] = False
+    return jsonify(result)
+
 
 @app.route('/api/sentinel-excl/sites')
 @require_dept('Research and Intelligence')

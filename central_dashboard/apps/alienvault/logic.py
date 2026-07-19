@@ -39,11 +39,19 @@ def get_token(subdomain: str | None = None, client_id: str | None = None, client
                 timeout=20,
             )
             if resp.status_code == 200:
-                token = resp.json().get("access_token", "")
+                # Always call resp.json() directly — requests parses JSON
+                # regardless of the Content-Type header sent by the server
+                try:
+                    body = resp.json()
+                except Exception:
+                    body = {}
+                token = body.get("access_token", "")
                 if token:
                     _logger.info(f"AV token acquired via {ep}")
                     return token
-            _logger.warning(f"AV auth {ep} -> HTTP {resp.status_code}: {resp.text[:200]}")
+                _logger.warning(f"AV auth {ep} -> 200 but no access_token in response: {list(body.keys())}")
+            else:
+                _logger.warning(f"AV auth {ep} -> HTTP {resp.status_code}: {resp.text[:200]}")
         except Exception as _e:
             _logger.warning(f"AV auth {ep} -> {_e}")
     raise RuntimeError(
@@ -68,13 +76,26 @@ def get_deployments() -> list[dict]:
 
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     base = f"https://{SUBDOMAIN}"
-    for path in ["/api/2.0/deployments", "/api/1.1/deployments", "/deployments"]:
+
+    # Try all known multi-tenant endpoint paths used by AV USM Anywhere
+    paths = [
+        "/api/2.0/deployments", "/api/1.1/deployments",
+        "/api/2.0/tenants",     "/api/1.1/tenants",
+        "/api/2.0/subscriptions","/api/1.1/subscriptions",
+        "/api/2.0/organizations","/api/1.1/organizations",
+        "/deployments",          "/tenants",
+    ]
+    for path in paths:
         try:
             resp = requests.get(base + path, headers=headers, timeout=30)
             _logger.info(f"AV deployments {path} -> HTTP {resp.status_code}")
             if resp.status_code != 200:
                 continue
-            data = resp.json()
+            try:
+                data = resp.json()
+            except Exception:
+                _logger.warning(f"AV: {path} returned 200 but non-JSON body")
+                continue
             _logger.info(f"AV deployments raw keys: {list(data.keys())[:10]}")
             if "_embedded" in data:
                 embedded = data["_embedded"]
@@ -82,13 +103,20 @@ def get_deployments() -> list[dict]:
                     embedded.get("deployments")
                     or embedded.get("tenantList")
                     or embedded.get("tenants")
+                    or embedded.get("subscriptions")
+                    or embedded.get("organizations")
                     or next(iter(embedded.values()), [])
                 )
             elif isinstance(data, list):
                 deps = data
             else:
-                deps = data.get("deployments", [])
-            _logger.info(f"AV: {len(deps)} raw deployment objects")
+                deps = (data.get("deployments")
+                        or data.get("tenants")
+                        or data.get("subscriptions")
+                        or data.get("organizations")
+                        or data.get("data")
+                        or [])
+            _logger.info(f"AV: {len(deps)} raw deployment objects from {path}")
             if deps:
                 _logger.info(f"AV: first dep keys = {list(deps[0].keys())}")
                 # Resolve each deployment's own base URL from whatever field AV provides
@@ -96,7 +124,7 @@ def get_deployments() -> list[dict]:
                     _url = ""
                     # 1. Explicit URL-like fields
                     for field in ("url", "domain", "apiUrl", "baseUrl", "hostname",
-                                  "fqdn", "api_url", "base_url"):
+                                  "fqdn", "api_url", "base_url", "instanceUrl"):
                         raw = d.get(field, "")
                         if raw:
                             _url = ("https://" + raw if not raw.startswith("http") else raw).rstrip("/")
