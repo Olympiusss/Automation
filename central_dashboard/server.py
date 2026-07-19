@@ -631,6 +631,88 @@ def ops_config():
 #  AlienVault routes
 # ════════════════════════════════════════════════════════════════════════════
 
+@app.route('/api/alienvault/debug')
+@require_dept('Research and Intelligence')
+def alienvault_debug():
+    """
+    Raw diagnostic: tries every AV OAuth endpoint + every deployment path
+    and returns the exact HTTP status codes and response bodies.
+    Visit this URL directly to see what the AV API is returning.
+    """
+    import requests as _req, os as _os
+    sub    = _os.environ.get("AV_SUBDOMAIN", "cybervergent-nfr.alienvault.cloud")
+    cid    = _os.environ.get("AV_CLIENT_ID", "")
+    csec   = _os.environ.get("AV_CLIENT_SECRET", "")
+    result = {
+        "subdomain":       sub,
+        "client_id_set":   bool(cid),
+        "client_secret_set": bool(csec),
+        "auth_attempts":   {},
+        "deployment_attempts": {},
+        "token_obtained":  False,
+    }
+    token = None
+    # ── Try every OAuth endpoint ─────────────────────────────────────────────
+    for ep in ("/api/1.1/oauth/token", "/api/2.0/oauth/token",
+               "/api/1.0/oauth/token", "/oauth/token"):
+        url = f"https://{sub}{ep}"
+        try:
+            r = _req.post(url, data={"grant_type": "client_credentials"},
+                          auth=(cid, csec), timeout=15)
+            body = r.json() if "json" in r.headers.get("content-type","") else r.text[:400]
+            result["auth_attempts"][ep] = {
+                "status": r.status_code,
+                "body_keys": list(body.keys()) if isinstance(body, dict) else str(body)[:300],
+                "has_token": isinstance(body, dict) and bool(body.get("access_token")),
+            }
+            if r.status_code == 200 and isinstance(body, dict) and body.get("access_token"):
+                token = body["access_token"]
+                result["token_obtained"] = True
+                break
+        except Exception as _e:
+            result["auth_attempts"][ep] = {"error": str(_e)}
+
+    if not token:
+        return jsonify(result)
+
+    # ── Try every deployment path ────────────────────────────────────────────
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    base    = f"https://{sub}"
+    for path in ("/api/2.0/deployments", "/api/1.1/deployments",
+                 "/api/2.0/tenants", "/api/1.1/tenants", "/deployments"):
+        url = base + path
+        try:
+            r    = _req.get(url, headers=headers, timeout=20)
+            body = r.json() if "json" in r.headers.get("content-type","") else r.text[:400]
+            top_keys = list(body.keys()) if isinstance(body, dict) else "list"
+            # Peek at first item if it's a list or embedded list
+            first_item_keys = []
+            if isinstance(body, list) and body:
+                first_item_keys = list(body[0].keys()) if isinstance(body[0], dict) else []
+            elif isinstance(body, dict):
+                for k, v in body.items():
+                    if isinstance(v, list) and v and isinstance(v[0], dict):
+                        first_item_keys = list(v[0].keys())
+                        break
+                    if isinstance(v, dict):
+                        for k2, v2 in v.items():
+                            if isinstance(v2, list) and v2 and isinstance(v2[0], dict):
+                                first_item_keys = list(v2[0].keys())
+                                break
+            result["deployment_attempts"][path] = {
+                "status": r.status_code,
+                "top_keys": top_keys,
+                "first_item_keys": first_item_keys,
+                "count": (len(body) if isinstance(body, list) else
+                          sum(len(v) for v in body.values() if isinstance(v, list)
+                              ) if isinstance(body, dict) else "?"),
+            }
+        except Exception as _e:
+            result["deployment_attempts"][path] = {"error": str(_e)}
+
+    return jsonify(result)
+
+
 @app.route('/api/alienvault/deployments', methods=['GET'])
 @require_dept('Research and Intelligence')
 @limiter.limit("10 per minute")

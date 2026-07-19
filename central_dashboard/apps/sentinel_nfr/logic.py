@@ -7,31 +7,51 @@ import pandas as pd
 from io import BytesIO
 from datetime import datetime, timezone
 from collections import Counter
-
+import logging
 import os
 
-BASE_URL  = os.environ.get("S1_NFR_BASE_URL", "https://euce1-110-nfr.sentinelone.net/web/api/v2.1")
-API_TOKEN = os.environ.get("S1_NFR_TOKEN", "")
-HEADERS   = {"Authorization": f"ApiToken {API_TOKEN}", "Content-Type": "application/json"}
+logger = logging.getLogger("sentinel_nfr.logic")
 
-# Site PINs removed — no longer used per security policy
+# ── Credentials: read fresh per-call (never cached at import time) ────────────
+def _get_base_url() -> str:
+    return os.environ.get(
+        "S1_NFR_BASE_URL",
+        "https://euce1-110-nfr.sentinelone.net/web/api/v2.1"
+    ).rstrip("/")
 
+def _get_headers() -> dict:
+    token = os.environ.get("S1_NFR_TOKEN", "")
+    if not token:
+        logger.error("S1_NFR_TOKEN env var is NOT set — all API calls will return 401")
+    return {"Authorization": f"ApiToken {token}", "Content-Type": "application/json"}
+
+
+# ── Core paginated fetcher ────────────────────────────────────────────────────
 
 def fetch_all_with_cursor(endpoint, params=None, timeout=30):
     if params is None: params = {}
     all_items = []
-    url    = f"{BASE_URL}/{endpoint.lstrip('/')}"
-    cursor = None
-    p      = params.copy()
+    base_url  = _get_base_url()
+    headers   = _get_headers()
+    url       = f"{base_url}/{endpoint.lstrip('/')}"
+    cursor    = None
+    p         = params.copy()
+    logger.info(f"S1 NFR: GET {url} params={list(p.keys())}")
     while True:
         if cursor: p["cursor"] = cursor
         try:
-            resp = requests.get(url, headers=HEADERS, params=p, timeout=timeout)
+            resp = requests.get(url, headers=headers, params=p, timeout=timeout)
         except Exception as e:
+            logger.error(f"S1 NFR network error {endpoint}: {e}")
             raise RuntimeError(f"Network error fetching {endpoint}: {e}")
         if resp.status_code == 401:
-            raise RuntimeError(f"Auth failed: {endpoint}")
+            logger.error(
+                f"S1 NFR 401 Unauthorized on {endpoint} — "
+                "check S1_NFR_TOKEN in Railway environment variables"
+            )
+            raise RuntimeError(f"Auth failed (401): {endpoint}")
         if resp.status_code != 200:
+            logger.error(f"S1 NFR {endpoint} HTTP {resp.status_code}: {resp.text[:300]}")
             raise RuntimeError(f"Failed {endpoint}: {resp.status_code}")
         body  = resp.json()
         items = body.get("data", body)
@@ -46,14 +66,18 @@ def fetch_all_with_cursor(endpoint, params=None, timeout=30):
 def fetch_sites():
     try:
         sites = fetch_all_with_cursor("sites", {"limit": 200})
+        logger.info(f"S1 NFR: {len(sites)} sites returned")
         return sites if isinstance(sites, list) else []
-    except Exception:
+    except Exception as e:
+        logger.error(f"S1 NFR fetch_sites failed: {e}")
         return []
 
 
 def fetch_endpoints_for_site(site_id):
     try: return fetch_all_with_cursor("agents", {"siteIds": site_id, "limit": 1000})
-    except: return []
+    except Exception as e:
+        logger.error(f"S1 NFR fetch_endpoints_for_site({site_id}) failed: {e}")
+        return []
 
 
 def fetch_threats_for_site(site_id, start_iso, end_iso):
@@ -62,7 +86,9 @@ def fetch_threats_for_site(site_id, start_iso, end_iso):
             "siteIds": site_id, "createdAt__gte": start_iso,
             "createdAt__lte": end_iso, "limit": 1000,
             "sortBy": "createdAt", "sortOrder": "desc"})
-    except: return []
+    except Exception as e:
+        logger.error(f"S1 NFR fetch_threats_for_site({site_id}) failed: {e}")
+        return []
 
 
 def fetch_risks_for_site(site_id, start_iso, end_iso):
@@ -71,7 +97,9 @@ def fetch_risks_for_site(site_id, start_iso, end_iso):
             "siteIds": site_id, "detectionDate__gte": start_iso,
             "detectionDate__lte": end_iso, "limit": 1000,
             "sortBy": "detectionDate", "sortOrder": "desc"})
-    except: return []
+    except Exception as e:
+        logger.error(f"S1 NFR fetch_risks_for_site({site_id}) failed: {e}")
+        return []
 
 
 def fetch_blocklisted_hashes_for_site(site_id):
@@ -96,8 +124,11 @@ def fetch_blocklisted_hashes_for_site(site_id):
         df_s.loc[len(df_s)] = ["Total", len(df_h)]
         return df_h, df_s
     except Exception as e:
+        logger.error(f"S1 NFR fetch_blocklisted_hashes_for_site({site_id}) failed: {e}")
         return pd.DataFrame(columns=["Hash Value","OS Type"]), pd.DataFrame(columns=["OS Type","Count"])
 
+
+# ── Data processing helpers ───────────────────────────────────────────────────
 
 def _normalize_severity(raw_sev, base_score=None, nvd_score=None):
     if raw_sev and isinstance(raw_sev, str):
@@ -122,7 +153,7 @@ def _normalize_severity(raw_sev, base_score=None, nvd_score=None):
             if score >= 9.0: return "Critical"
             if score >= 7.0: return "High"
             if score >= 4.0: return "Medium"
-            if score > 0.0:  return "Low"
+            if score >  0.0: return "Low"
             return "None"
         except: pass
     return "Unknown"
