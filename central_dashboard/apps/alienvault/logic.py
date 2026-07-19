@@ -192,7 +192,6 @@ def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
         return []
     # Get a token valid for this specific deployment
     dep_token = _get_deployment_token(dep_url, token)
-    url = dep_url.rstrip("/") + "/api/2.0/alarms"
     headers = {"Authorization": f"Bearer {dep_token}", "Content-Type": "application/json"}
     base_params = {
         "timestamp_received_gte": start_ms,
@@ -202,26 +201,36 @@ def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
         "size": 500,
         "status": ["open", "closed", "in_review"],
     }
-    all_alarms = []
-    for page in range(20):  # up to 10,000 alarms per deployment
-        try:
-            p = {**base_params, "page": page}
-            resp = requests.get(url, headers=headers, params=p, timeout=45)
-            _logger.info(f"AV alarms page {page}: HTTP {resp.status_code} ({len(all_alarms)} so far)")
-            if resp.status_code != 200:
-                _logger.error(f"AV alarms {url} HTTP {resp.status_code}: {resp.text[:200]}")
+    # Try api/1.1 first (confirmed working for this AV instance), then api/2.0
+    for api_path in ("/api/1.1/alarms", "/api/2.0/alarms"):
+        url = dep_url.rstrip("/") + api_path
+        all_alarms = []
+        for page in range(20):
+            try:
+                p = {**base_params, "page": page}
+                resp = requests.get(url, headers=headers, params=p, timeout=45)
+                _logger.info(f"AV alarms {api_path} page {page}: HTTP {resp.status_code}")
+                if resp.status_code == 404:
+                    break  # try next api_path
+                if resp.status_code != 200:
+                    _logger.error(f"AV alarms {url} HTTP {resp.status_code}: {resp.text[:200]}")
+                    break
+                batch = (resp.json().get("_embedded") or {}).get("alarms", [])
+                if not batch:
+                    break
+                all_alarms.extend(batch)
+                if len(batch) < 500 or len(all_alarms) >= max_records:
+                    break
+            except Exception as _e:
+                _logger.error(f"AV alarms fetch error: {_e}")
                 break
-            batch = resp.json().get("_embedded", {}).get("alarms", [])
-            if not batch:
-                break
-            all_alarms.extend(batch)
-            if len(batch) < 500 or len(all_alarms) >= max_records:
-                break
-        except Exception as _e:
-            _logger.error(f"AV alarms fetch error: {_e}")
-            break
-    _logger.info(f"AV: {len(all_alarms)} alarms fetched from {dep_url}")
-    return all_alarms[:max_records]
+        if all_alarms:
+            _logger.info(f"AV: {len(all_alarms)} alarms from {url}")
+            return all_alarms[:max_records]
+        if resp.status_code != 404:
+            break  # non-404 failure — no point trying other path
+    _logger.warning(f"AV: 0 alarms fetched from {dep_url}")
+    return []
 
 
 def fetch_events_for_deployment(dep_url: str, token: str, start_ms: int, end_ms: int, max_records: int = 5000) -> list:
@@ -230,35 +239,44 @@ def fetch_events_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
     _logger = _log.getLogger("alienvault.logic")
     if not dep_url:
         return []
-    # Reuse the same deployment-scoped token as alarms
     dep_token = _get_deployment_token(dep_url, token)
-    url = dep_url.rstrip("/") + "/api/2.0/events"
     headers = {"Authorization": f"Bearer {dep_token}", "Content-Type": "application/json"}
-    all_events = []
-    for page in range(20):
-        try:
-            resp = requests.get(url, headers=headers, params={
-                "timestamp_received_gte": start_ms,
-                "timestamp_received_lte": end_ms,
-                "sort": "timestamp_received,desc",
-                "size": 500,
-                "page": page,
-            }, timeout=45)
-            _logger.info(f"AV events page {page}: HTTP {resp.status_code}")
-            if resp.status_code != 200:
-                _logger.error(f"AV events {url} HTTP {resp.status_code}: {resp.text[:200]}")
+    base_params = {
+        "timestamp_received_gte": start_ms,
+        "timestamp_received_lte": end_ms,
+        "sort": "timestamp_received,desc",
+        "size": 500,
+    }
+    # Try api/1.1 first, then api/2.0
+    for api_path in ("/api/1.1/events", "/api/2.0/events"):
+        url = dep_url.rstrip("/") + api_path
+        all_events = []
+        for page in range(20):
+            try:
+                resp = requests.get(url, headers=headers,
+                                    params={**base_params, "page": page}, timeout=45)
+                _logger.info(f"AV events {api_path} page {page}: HTTP {resp.status_code}")
+                if resp.status_code == 404:
+                    break
+                if resp.status_code != 200:
+                    _logger.error(f"AV events {url} HTTP {resp.status_code}: {resp.text[:200]}")
+                    break
+                batch = (resp.json().get("_embedded") or {}).get("eventResources", [])
+                if not batch:
+                    break
+                all_events.extend(batch)
+                if len(batch) < 500 or len(all_events) >= max_records:
+                    break
+            except Exception as _e:
+                _logger.error(f"AV events fetch error: {_e}")
                 break
-            batch = resp.json().get("_embedded", {}).get("eventResources", [])
-            if not batch:
-                break
-            all_events.extend(batch)
-            if len(batch) < 500 or len(all_events) >= max_records:
-                break
-        except Exception as _e:
-            _logger.error(f"AV events fetch error: {_e}")
+        if all_events:
+            _logger.info(f"AV: {len(all_events)} events from {url}")
+            return all_events[:max_records]
+        if resp.status_code != 404:
             break
-    _logger.info(f"AV: {len(all_events)} events fetched from {dep_url}")
-    return all_events[:max_records]
+    _logger.warning(f"AV: 0 events fetched from {dep_url}")
+    return []
 
 
 def _fetch_page(url, headers, params, page_num, response_key, timeout=60):

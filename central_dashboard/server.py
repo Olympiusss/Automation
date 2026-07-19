@@ -284,7 +284,10 @@ def serve_app(app_id):
     nonce = getattr(g, 'csp_nonce', '')
     with open(tmpl, encoding='utf-8') as f:
         content = _inject_nonce(f.read(), nonce)
-    return Response(content, mimetype='text/html')
+    resp = make_response(Response(content, mimetype='text/html'))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Authentication endpoints
