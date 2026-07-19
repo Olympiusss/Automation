@@ -175,38 +175,27 @@ def get_deployments() -> list[dict]:
 
 def _get_deployment_token(dep_url: str, fallback_token: str) -> str:
     """
-    Per LevelBlue docs: each child deployment has its own OAuth endpoint at
-    https://{deployment-subdomain}.alienvault.cloud/api/2.0/oauth/token.
-    Uses the SAME central credentials — MSP federated access.
-    Falls back to the central token if the deployment auth fails.
+    Per debug results: the central OAuth credentials return 401 on child
+    deployment OAuth endpoints. However, the CENTRAL token obtained from
+    cybervergent-central.alienvault.cloud IS accepted by child deployment
+    /api/2.0/* endpoints directly.
+    """
+    # Central token works directly — skip per-deployment OAuth
+    return fallback_token
+
+
+def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms: int, max_records: int = 5000) -> list:
+    """
+    Fetch alarms from a child deployment using the CENTRAL portal token.
+    Debug confirmed: central credentials return 401 on child OAuth endpoints,
+    but the central token IS accepted by child deployment /api/2.0/alarms.
+    Some FQDNs may not resolve publicly — those are skipped silently.
     """
     import logging as _log
     _logger = _log.getLogger("alienvault.logic")
     if not dep_url:
-        return fallback_token
-    try:
-        from urllib.parse import urlparse as _up
-        netloc = _up(dep_url).netloc  # e.g. kudamfb.alienvault.cloud
-        if not netloc:
-            return fallback_token
-        # Use prefer_v2=True: per docs, child deployments use /api/2.0/oauth/token
-        dep_token = get_token(subdomain=netloc, prefer_v2=True)
-        _logger.info(f"AV: deployment token obtained for {netloc}")
-        return dep_token
-    except Exception as _e:
-        _logger.warning(f"AV: deployment token failed for {dep_url} ({_e}) — using central token")
-        return fallback_token
-
-
-def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms: int, max_records: int = 5000) -> list:
-    """Fetch alarms from a specific deployment URL (per-client fetch)."""
-    import logging as _log
-    _logger = _log.getLogger("alienvault.logic")
-    if not dep_url:
         return []
-    # Get a token valid for this specific deployment
-    dep_token = _get_deployment_token(dep_url, token)
-    headers = {"Authorization": f"Bearer {dep_token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     base_params = {
         "timestamp_received_gte": start_ms,
         "timestamp_received_lte": end_ms,
@@ -215,82 +204,71 @@ def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms:
         "size": 500,
         "status": ["open", "closed", "in_review"],
     }
-    # Per LevelBlue docs: official API is /api/2.0/. Try that first, then /api/1.1/ fallback.
-    for api_path in ("/api/2.0/alarms", "/api/1.1/alarms"):
-        url = dep_url.rstrip("/") + api_path
-        all_alarms = []
-        for page in range(20):
-            try:
-                p = {**base_params, "page": page}
-                resp = requests.get(url, headers=headers, params=p, timeout=45)
-                _logger.info(f"AV alarms {api_path} page {page}: HTTP {resp.status_code}")
-                if resp.status_code == 404:
-                    break  # try next api_path
-                if resp.status_code != 200:
-                    _logger.error(f"AV alarms {url} HTTP {resp.status_code}: {resp.text[:200]}")
-                    break
-                batch = (resp.json().get("_embedded") or {}).get("alarms", [])
-                if not batch:
-                    break
-                all_alarms.extend(batch)
-                if len(batch) < 500 or len(all_alarms) >= max_records:
-                    break
-            except Exception as _e:
-                _logger.error(f"AV alarms fetch error: {_e}")
+    # Use /api/2.0/alarms — confirmed working with central token
+    url = dep_url.rstrip("/") + "/api/2.0/alarms"
+    all_alarms = []
+    for page in range(20):
+        try:
+            resp = requests.get(url, headers=headers,
+                                params={**base_params, "page": page}, timeout=30)
+            _logger.info(f"AV alarms {url} page {page}: HTTP {resp.status_code}")
+            if resp.status_code != 200:
+                _logger.error(f"AV alarms HTTP {resp.status_code}: {resp.text[:200]}")
                 break
-        if all_alarms:
-            _logger.info(f"AV: {len(all_alarms)} alarms from {url}")
-            return all_alarms[:max_records]
-        if resp.status_code != 404:
-            break  # non-404 failure — no point trying other path
-    _logger.warning(f"AV: 0 alarms fetched from {dep_url}")
-    return []
+            batch = (resp.json().get("_embedded") or {}).get("alarms", [])
+            if not batch:
+                break
+            all_alarms.extend(batch)
+            if len(batch) < 500 or len(all_alarms) >= max_records:
+                break
+        except requests.exceptions.ConnectionError as _ce:
+            _logger.warning(f"AV alarms DNS/connection error for {dep_url}: {_ce}")
+            break
+        except Exception as _e:
+            _logger.error(f"AV alarms fetch error: {_e}")
+            break
+    _logger.info(f"AV: {len(all_alarms)} alarms from {dep_url}")
+    return all_alarms[:max_records]
 
 
 def fetch_events_for_deployment(dep_url: str, token: str, start_ms: int, end_ms: int, max_records: int = 5000) -> list:
-    """Fetch events from a specific deployment URL."""
+    """
+    Fetch events from a child deployment using the CENTRAL portal token.
+    """
     import logging as _log
     _logger = _log.getLogger("alienvault.logic")
     if not dep_url:
         return []
-    dep_token = _get_deployment_token(dep_url, token)
-    headers = {"Authorization": f"Bearer {dep_token}", "Content-Type": "application/json"}
-    base_params = {
-        "timestamp_received_gte": start_ms,
-        "timestamp_received_lte": end_ms,
-        "sort": "timestamp_received,desc",
-        "size": 500,
-    }
-    # Per LevelBlue docs: official API is /api/2.0/. Try that first, then /api/1.1/ fallback.
-    for api_path in ("/api/2.0/events", "/api/1.1/events"):
-        url = dep_url.rstrip("/") + api_path
-        all_events = []
-        for page in range(20):
-            try:
-                resp = requests.get(url, headers=headers,
-                                    params={**base_params, "page": page}, timeout=45)
-                _logger.info(f"AV events {api_path} page {page}: HTTP {resp.status_code}")
-                if resp.status_code == 404:
-                    break
-                if resp.status_code != 200:
-                    _logger.error(f"AV events {url} HTTP {resp.status_code}: {resp.text[:200]}")
-                    break
-                batch = (resp.json().get("_embedded") or {}).get("eventResources", [])
-                if not batch:
-                    break
-                all_events.extend(batch)
-                if len(batch) < 500 or len(all_events) >= max_records:
-                    break
-            except Exception as _e:
-                _logger.error(f"AV events fetch error: {_e}")
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    url = dep_url.rstrip("/") + "/api/2.0/events"
+    all_events = []
+    for page in range(20):
+        try:
+            resp = requests.get(url, headers=headers, params={
+                "timestamp_received_gte": start_ms,
+                "timestamp_received_lte": end_ms,
+                "sort": "timestamp_received,desc",
+                "size": 500,
+                "page": page,
+            }, timeout=30)
+            _logger.info(f"AV events {url} page {page}: HTTP {resp.status_code}")
+            if resp.status_code != 200:
+                _logger.error(f"AV events HTTP {resp.status_code}: {resp.text[:200]}")
                 break
-        if all_events:
-            _logger.info(f"AV: {len(all_events)} events from {url}")
-            return all_events[:max_records]
-        if resp.status_code != 404:
+            batch = (resp.json().get("_embedded") or {}).get("eventResources", [])
+            if not batch:
+                break
+            all_events.extend(batch)
+            if len(batch) < 500 or len(all_events) >= max_records:
+                break
+        except requests.exceptions.ConnectionError as _ce:
+            _logger.warning(f"AV events DNS/connection error for {dep_url}: {_ce}")
             break
-    _logger.warning(f"AV: 0 events fetched from {dep_url}")
-    return []
+        except Exception as _e:
+            _logger.error(f"AV events fetch error: {_e}")
+            break
+    _logger.info(f"AV: {len(all_events)} events from {dep_url}")
+    return all_events[:max_records]
 
 
 def _fetch_page(url, headers, params, page_num, response_key, timeout=60):
