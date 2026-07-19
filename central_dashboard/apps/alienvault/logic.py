@@ -11,9 +11,17 @@ import time
 import os
 
 # ─── Config ───────────────────────────────────────────────────
-SUBDOMAIN     = os.environ.get("AV_SUBDOMAIN", "cybervergent-nfr.alienvault.cloud")
+# Read all credentials fresh per-call via helpers — never cache at import time
+# because Railway injects env vars after the module is first imported.
 CLIENT_ID     = os.environ.get("AV_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("AV_CLIENT_SECRET", "")
+
+def _get_subdomain() -> str:
+    """Read AV_SUBDOMAIN fresh every call so Railway env updates take effect."""
+    return os.environ.get("AV_SUBDOMAIN", "cybervergent-central.alienvault.cloud").strip()
+
+# Keep a module-level alias for backwards compat (not used for live calls)
+SUBDOMAIN = _get_subdomain()
 
 
 def get_token(subdomain: str | None = None, client_id: str | None = None, client_secret: str | None = None) -> str:
@@ -291,45 +299,84 @@ def _fetch_page(url, headers, params, page_num, response_key, timeout=60):
     return []
 
 
-def fetch_all_parallel(endpoint, params, headers, max_records=20000) -> list:
+def fetch_all_parallel(endpoint, params, headers, max_records=20000, dep_id: str = "") -> list:
+    """
+    Fetch all pages of an endpoint from the CENTRAL AV portal.
+    Tries /api/1.1/ first (confirmed working), then /api/2.0/.
+    Optionally filters by dep_id (deployment UUID from /api/1.1/deployments).
+    """
+    import logging as _log
+    _logger = _log.getLogger("alienvault.logic")
     response_key_map = {"events": "eventResources", "alarms": "alarms"}
     response_key = response_key_map.get(endpoint, endpoint)
+    subdomain = _get_subdomain()  # fresh read every time
 
-    p = params.copy()
-    p["size"] = 5000
-    p["page"] = 0
+    for api_ver in ("1.1", "2.0"):
+        url = f"https://{subdomain}/api/{api_ver}/{endpoint}"
+        p = params.copy()
+        p["size"] = 500
+        p["page"] = 0
+        if dep_id:
+            # Try common AlienVault MSP deployment filter param names
+            p["deploymentId"] = dep_id
+        _logger.info(f"AV global fetch: GET {url} page=0 dep_id={dep_id!r}")
+        try:
+            r = requests.get(url, headers=headers, params=p, timeout=60)
+            _logger.info(f"AV global {api_ver}/{endpoint}: HTTP {r.status_code}")
+            if r.status_code == 404:
+                continue  # try next api version
+            if r.status_code != 200:
+                _logger.error(f"AV global {url}: HTTP {r.status_code}: {r.text[:200]}")
+                return []
+            try:
+                data = r.json()
+            except Exception:
+                _logger.error(f"AV global {url}: non-JSON response")
+                return []
 
-    url = f"https://{SUBDOMAIN}/api/2.0/{endpoint}"
-    r = requests.get(url, headers=headers, params=p, timeout=60)
-    if r.status_code != 200:
-        return []
+            # Handle both embedded and flat list responses
+            if "_embedded" in data:
+                all_data = (data["_embedded"].get(response_key)
+                            or data["_embedded"].get("alarms")
+                            or data["_embedded"].get("eventResources")
+                            or next(iter(data["_embedded"].values()), []))
+            elif isinstance(data, list):
+                all_data = data
+            else:
+                all_data = data.get(response_key, data.get("data", []))
 
-    data       = r.json()
-    page_info  = data.get("page", {})
-    total_el   = page_info.get("totalElements", 0)
-    total_pg   = page_info.get("totalPages", 0)
-    all_data   = data.get("_embedded", {}).get(response_key, [])
+            page_info = data.get("page", {})
+            total_pg  = page_info.get("totalPages", 1)
+            _logger.info(f"AV global: {len(all_data)} on page 0, totalPages={total_pg}")
 
-    if total_el == 0:
-        return []
+            if not all_data and total_pg == 0:
+                _logger.info(f"AV global: 0 results for {endpoint} (empty date range or no data)")
+                return []
 
-    max_pages = min(total_pg, (max_records // 5000) + 1, 200)
-    if max_pages <= 1:
-        return all_data[:max_records]
+            max_pages = min(total_pg, (max_records // 500) + 1, 200)
+            if max_pages <= 1:
+                return all_data[:max_records]
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {
-            executor.submit(_fetch_page, url, headers, p, pg, response_key): pg
-            for pg in range(1, max_pages)
-        }
-        for future in as_completed(futures):
-            items = future.result()
-            if items:
-                all_data.extend(items)
-            if len(all_data) >= max_records:
-                break
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = {
+                    executor.submit(_fetch_page, url, headers, p, pg, response_key): pg
+                    for pg in range(1, max_pages)
+                }
+                for future in as_completed(futures):
+                    items = future.result()
+                    if items:
+                        all_data.extend(items)
+                    if len(all_data) >= max_records:
+                        break
 
-    return all_data[:max_records]
+            _logger.info(f"AV global: {len(all_data)} total {endpoint}")
+            return all_data[:max_records]
+
+        except Exception as _e:
+            _logger.error(f"AV global fetch_all_parallel error ({api_ver}): {_e}")
+            continue
+
+    return []
 
 
 def _safe_vc(series, name_col, count_col, top=30):

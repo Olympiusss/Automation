@@ -249,7 +249,6 @@
   (async function loadDeployments(){
     const loader  = document.getElementById('depLoader');
     const sel     = document.getElementById('depSelect');
-    const badge   = document.getElementById('depCount');
     loader.style.display = 'inline';
     try {
       const r = await fetch('/api/alienvault/deployments');
@@ -258,6 +257,7 @@
         deps.forEach(d => {
           const opt = document.createElement('option');
           opt.value = d.url || '';
+          opt.dataset.depId = d.id || '';
           opt.textContent = d.displayName || d.name;
           sel.appendChild(opt);
         });
@@ -277,8 +277,10 @@
     const end_ms   = dt('endDate','endTime');
     if(isNaN(start_ms)||isNaN(end_ms)){showToast('Please select valid dates.'); return;}
     if(start_ms > end_ms){showToast('Start date must be before end date.'); return;}
-    const dep_url = document.getElementById('depSelect').value;
-    const depName = document.getElementById('depSelect').selectedOptions[0]?.text || 'All Clients';
+    const selEl  = document.getElementById('depSelect');
+    const dep_url = selEl.value;
+    const dep_id  = selEl.selectedOptions[0]?.dataset?.depId || '';
+    const depName = selEl.selectedOptions[0]?.text || 'All Clients';
 
     setLoading(true, dep_url
       ? `Fetching alarms & events for ${depName}…`
@@ -289,7 +291,7 @@
     try {
       const resp = await fetch('/api/alienvault/fetch',{
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({start_ms, end_ms, dep_url})
+        body: JSON.stringify({start_ms, end_ms, dep_url, dep_id})
       });
       const data = await resp.json();
       if(data.error){ showToast('Error: '+data.error,'red'); return; }

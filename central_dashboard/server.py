@@ -737,9 +737,9 @@ def alienvault_deployments():
     from apps.alienvault.logic import get_deployments
     try:
         deps = get_deployments()
-        # Return only the fields the UI needs
         return jsonify([
             {
+                "id":          d.get("id", ""),
                 "name":        d.get("name", d.get("displayName", "Unknown")),
                 "displayName": d.get("displayName", d.get("name", "Unknown")),
                 "url":         d.get("_url", ""),
@@ -763,27 +763,36 @@ def alienvault_fetch():
     try:
         d        = request.get_json(force=True, silent=True) or {}
         dep_url  = str(d.get('dep_url', '')).strip()
+        dep_id   = str(d.get('dep_id', '')).strip()
         start_ms = d.get('start_ms')
         end_ms   = d.get('end_ms')
         if start_ms is None or end_ms is None:
             return jsonify({"error": "start_ms and end_ms are required"}), 400
-        # SSRF protection: validate dep_url is a legitimate AlienVault endpoint
         if dep_url and not _validate_av_url(dep_url):
             logger.warning(f"SSRF attempt blocked: dep_url={dep_url!r} from {request.remote_addr}")
             return jsonify({"error": "Invalid deployment URL"}), 400
-        token = get_token()
+        token   = get_token()
+        headers = {'Authorization': f'Bearer {token}'}
+        params  = {'timestamp_received_gte': start_ms,
+                   'timestamp_received_lte': end_ms,
+                   'sort': 'timestamp_received,desc', 'suppressed': False}
         if dep_url:
+            # Strategy 1: call deployment's own API directly
             alarms = fetch_alarms_for_deployment(dep_url, token, int(start_ms), int(end_ms))
             events = fetch_events_for_deployment(dep_url, token, int(start_ms), int(end_ms))
+            # Strategy 2: if direct call returns nothing, try central portal with dep_id filter
+            if not alarms and dep_id:
+                logger.info(f"AV: direct dep fetch returned 0 — trying central portal dep_id={dep_id}")
+                alarms = fetch_all_parallel('alarms', params, headers, dep_id=dep_id)
+                events = fetch_all_parallel('events',
+                                            {k: v for k, v in params.items() if k != 'suppressed'},
+                                            headers, dep_id=dep_id)
         else:
-            headers = {'Authorization': f'Bearer {token}'}
-            params  = {'timestamp_received_gte': start_ms,
-                       'timestamp_received_lte': end_ms,
-                       'sort': 'timestamp_received,desc', 'suppressed': False}
-            alarms  = fetch_all_parallel('alarms', params, headers)
-            events  = fetch_all_parallel('events',
-                                         {k: v for k, v in params.items() if k != 'suppressed'},
-                                         headers)
+            # Global fetch — all deployments
+            alarms = fetch_all_parallel('alarms', params, headers)
+            events = fetch_all_parallel('events',
+                                        {k: v for k, v in params.items() if k != 'suppressed'},
+                                        headers)
         return jsonify({
             'alarm_data':  process_alarms(alarms) if alarms else {},
             'event_data':  process_events(events) if events else {},
