@@ -17,14 +17,39 @@ CLIENT_SECRET = os.environ.get("AV_CLIENT_SECRET", "")
 
 
 def get_token(subdomain: str | None = None, client_id: str | None = None, client_secret: str | None = None) -> str:
+    """
+    Obtain an OAuth2 bearer token from the AV central portal.
+    Tries /api/1.1/, /api/2.0/, /api/1.0/ and bare /oauth/token in order
+    and returns the first successful access_token.
+    Raises RuntimeError if every endpoint fails.
+    """
+    import logging as _log
+    _logger = _log.getLogger("alienvault.logic")
     _sub = subdomain or SUBDOMAIN
     _id  = client_id  or CLIENT_ID
     _sec = client_secret or CLIENT_SECRET
-    url  = f"https://{_sub}/api/2.0/oauth/token"
-    resp = requests.post(url, data={"grant_type": "client_credentials"},
-                         auth=(_id, _sec), timeout=30)
-    resp.raise_for_status()
-    return resp.json()["access_token"]
+    base = f"https://{_sub}"
+    for ep in ("/api/1.1/oauth/token", "/api/2.0/oauth/token",
+               "/api/1.0/oauth/token", "/oauth/token"):
+        try:
+            resp = requests.post(
+                base + ep,
+                data={"grant_type": "client_credentials"},
+                auth=(_id, _sec),
+                timeout=20,
+            )
+            if resp.status_code == 200:
+                token = resp.json().get("access_token", "")
+                if token:
+                    _logger.info(f"AV token acquired via {ep}")
+                    return token
+            _logger.warning(f"AV auth {ep} -> HTTP {resp.status_code}: {resp.text[:200]}")
+        except Exception as _e:
+            _logger.warning(f"AV auth {ep} -> {_e}")
+    raise RuntimeError(
+        f"AV: all OAuth endpoints failed for subdomain '{_sub}'. "
+        "Check AV_CLIENT_ID, AV_CLIENT_SECRET, and AV_SUBDOMAIN env vars."
+    )
 
 
 def get_deployments() -> list[dict]:
@@ -32,15 +57,25 @@ def get_deployments() -> list[dict]:
     Return all AV deployments visible to the central account.
     Each dict has: name, displayName, _url (the deployment's own API base URL).
     """
-    token = get_token()
+    import logging as _log
+    _logger = _log.getLogger("alienvault.logic")
+
+    try:
+        token = get_token()
+    except RuntimeError as _auth_err:
+        _logger.error(f"AV get_deployments: token failed — {_auth_err}")
+        return []
+
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     base = f"https://{SUBDOMAIN}"
     for path in ["/api/2.0/deployments", "/api/1.1/deployments", "/deployments"]:
         try:
             resp = requests.get(base + path, headers=headers, timeout=30)
+            _logger.info(f"AV deployments {path} -> HTTP {resp.status_code}")
             if resp.status_code != 200:
                 continue
             data = resp.json()
+            _logger.info(f"AV deployments raw keys: {list(data.keys())[:10]}")
             if "_embedded" in data:
                 embedded = data["_embedded"]
                 deps = (
@@ -53,21 +88,44 @@ def get_deployments() -> list[dict]:
                 deps = data
             else:
                 deps = data.get("deployments", [])
+            _logger.info(f"AV: {len(deps)} raw deployment objects")
             if deps:
-                # Resolve each deployment's own URL
+                _logger.info(f"AV: first dep keys = {list(deps[0].keys())}")
+                # Resolve each deployment's own base URL from whatever field AV provides
                 for d in deps:
-                    for field in ["url", "domain", "apiUrl", "baseUrl", "hostname"]:
+                    _url = ""
+                    # 1. Explicit URL-like fields
+                    for field in ("url", "domain", "apiUrl", "baseUrl", "hostname",
+                                  "fqdn", "api_url", "base_url"):
                         raw = d.get(field, "")
                         if raw:
-                            if not raw.startswith("http"):
-                                raw = "https://" + raw
-                            d["_url"] = raw.rstrip("/")
+                            _url = ("https://" + raw if not raw.startswith("http") else raw).rstrip("/")
                             break
-                    else:
-                        d["_url"] = ""
+                    # 2. HAL _links.self.href (common AV REST pattern)
+                    if not _url:
+                        href = (d.get("_links") or {}).get("self", {}).get("href", "")
+                        if href and "alienvault" in href:
+                            from urllib.parse import urlparse as _up
+                            p = _up(href)
+                            if p.scheme and p.netloc:
+                                _url = f"{p.scheme}://{p.netloc}"
+                    # 3. Construct from name if it looks like a subdomain
+                    if not _url:
+                        name = d.get("name", "")
+                        if name and "." not in name and " " not in name and name:
+                            _url = f"https://{name}.alienvault.cloud"
+                        elif name and "alienvault" in name:
+                            _url = f"https://{name}" if not name.startswith("http") else name
+                    d["_url"] = _url
+                    _logger.info(
+                        f"AV dep '{d.get('name','?')}' -> _url={_url!r}"
+                    )
                 return deps
-        except Exception:
-            pass
+            else:
+                _logger.warning(f"AV: {path} returned 200 but 0 deployments")
+        except Exception as _e:
+            _logger.warning(f"AV deployments {path} -> {_e}")
+    _logger.error("AV: no deployments found across all path variants")
     return []
 
 
