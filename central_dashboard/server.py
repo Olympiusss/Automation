@@ -726,6 +726,108 @@ def alienvault_debug():
         except Exception as _e:
             result["deployment_attempts"][path] = {"error": str(_e)}
 
+    # ── Test actual alarm fetch from first 2 deployments ─────────────────────
+    import time as _time
+    result["alarm_fetch_test"] = {}
+    dep_list = []
+    try:
+        r2 = _req.get(f"https://{sub}/api/1.1/deployments", headers=headers, timeout=20)
+        if r2.status_code == 200:
+            try:
+                dep_list = r2.json()
+                if not isinstance(dep_list, list):
+                    dep_list = []
+            except Exception:
+                dep_list = []
+    except Exception:
+        pass
+
+    result["deployment_sample"] = [
+        {"name": d.get("name"), "fqdn": d.get("fqdn"), "id": d.get("id")}
+        for d in dep_list[:5]
+    ]
+
+    now_ms   = int(_time.time() * 1000)
+    start_ms = now_ms - 2 * 24 * 3600 * 1000   # 2 days ago
+
+    for dep in dep_list[:2]:
+        fqdn     = dep.get("fqdn", "")
+        dep_name = dep.get("name", "?")
+        dep_id   = dep.get("id", "")
+        entry    = {"fqdn": fqdn, "dep_id": dep_id}
+        if not fqdn:
+            entry["error"] = "no fqdn"
+            result["alarm_fetch_test"][dep_name] = entry
+            continue
+
+        dep_base  = ("https://" + fqdn) if not fqdn.startswith("http") else fqdn
+        dep_token = None
+
+        # Step 1: per-deployment OAuth (try v2.0 first per LevelBlue docs)
+        for aep in ("/api/2.0/oauth/token", "/api/1.1/oauth/token"):
+            try:
+                ar = _req.post(dep_base + aep,
+                               data={"grant_type": "client_credentials"},
+                               auth=(cid, csec), timeout=15)
+                entry["dep_auth_" + aep] = ar.status_code
+                if ar.status_code == 200:
+                    try:
+                        dep_token = ar.json().get("access_token", "")
+                    except Exception:
+                        dep_token = ""
+                    if dep_token:
+                        entry["dep_token_via"] = aep
+                        break
+            except Exception as _e:
+                entry["dep_auth_" + aep] = str(_e)
+
+        use_token = dep_token or token
+        entry["using_central_token_fallback"] = not bool(dep_token)
+        dep_hdrs = {"Authorization": f"Bearer {use_token}", "Content-Type": "application/json"}
+        params   = {"timestamp_received_gte": start_ms, "timestamp_received_lte": now_ms,
+                    "size": 1, "page": 0}
+
+        # Step 2: per-deployment alarm fetch
+        for alp in ("/api/2.0/alarms", "/api/1.1/alarms"):
+            try:
+                xr = _req.get(dep_base + alp, headers=dep_hdrs, params=params, timeout=20)
+                k  = "dep_alarms_" + alp
+                entry[k + "_status"] = xr.status_code
+                if xr.status_code == 200:
+                    try:
+                        xb  = xr.json()
+                        emb = xb.get("_embedded", {})
+                        entry[k + "_count"]   = len(list(emb.values())[0]) if emb else 0
+                        entry[k + "_WORKING"] = True
+                    except Exception:
+                        pass
+                else:
+                    entry[k + "_err"] = xr.text[:200]
+            except Exception as _e:
+                entry["dep_alarms_" + alp + "_status"] = str(_e)
+
+        # Step 3: central portal with deploymentId filter
+        for alp in ("/api/1.1/alarms", "/api/2.0/alarms"):
+            try:
+                cp = dict(params); cp["deploymentId"] = dep_id
+                cr = _req.get(f"https://{sub}{alp}", headers=headers, params=cp, timeout=20)
+                k  = "central_filter_" + alp
+                entry[k + "_status"] = cr.status_code
+                if cr.status_code == 200:
+                    try:
+                        cb  = cr.json()
+                        emb = cb.get("_embedded", {})
+                        entry[k + "_count"]   = len(list(emb.values())[0]) if emb else 0
+                        entry[k + "_WORKING"] = True
+                    except Exception:
+                        pass
+                else:
+                    entry[k + "_err"] = cr.text[:200]
+            except Exception as _e:
+                entry["central_filter_" + alp + "_status"] = str(_e)
+
+        result["alarm_fetch_test"][dep_name] = entry
+
     return jsonify(result)
 
 
