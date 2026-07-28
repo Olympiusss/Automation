@@ -744,13 +744,13 @@ def alienvault_debug():
 
     result["deployment_sample"] = [
         {"name": d.get("name"), "fqdn": d.get("fqdn"), "id": d.get("id")}
-        for d in dep_list[:5]
+        for d in dep_list
     ]
 
     now_ms   = int(_time.time() * 1000)
     start_ms = now_ms - 2 * 24 * 3600 * 1000   # 2 days ago
 
-    for dep in dep_list[:2]:
+    for dep in dep_list:
         fqdn     = dep.get("fqdn", "")
         dep_name = dep.get("name", "?")
         dep_id   = dep.get("id", "")

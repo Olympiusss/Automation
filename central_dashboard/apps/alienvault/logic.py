@@ -1,118 +1,169 @@
 """
-AlienVault Alarm Extractor — Backend Logic
-Ported from contentapp.py (Streamlit) to plain Python for Flask integration.
+AlienVault USM Anywhere — Synchronous logic (ported from async client).
+
+Key design decisions ported from the async reference implementation:
+  • Module-level token cache with TTL — avoid per-request auth overhead
+  • status sent as list-of-tuples so requests sends ?status=open&status=closed&...
+    (NOT ?status=open%2Cclosed%2C... which AV API silently ignores)
+  • Fallback retry without status filter when API returns non-200
+  • _resolve_deployment_url tries fqdn → id (strips cn:// prefix) → name
+  • fetch_all_deployments uses ThreadPoolExecutor(max_workers=4) for concurrency
 """
+import logging
+import os
+import time
 import requests
 import pandas as pd
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import time
 
-import os
+logger = logging.getLogger("alienvault.logic")
 
-# ─── Config ───────────────────────────────────────────────────
-# Read all credentials fresh per-call via helpers — never cache at import time
-# because Railway injects env vars after the module is first imported.
-CLIENT_ID     = os.environ.get("AV_CLIENT_ID", "")
-CLIENT_SECRET = os.environ.get("AV_CLIENT_SECRET", "")
+# ─── Env helpers ──────────────────────────────────────────────────────────────
 
 def _get_subdomain() -> str:
-    """Read AV_SUBDOMAIN fresh every call so Railway env updates take effect."""
     return os.environ.get("AV_SUBDOMAIN", "cybervergent-central.alienvault.cloud").strip()
 
-# Keep a module-level alias for backwards compat (not used for live calls)
-SUBDOMAIN = _get_subdomain()
+def _get_creds() -> tuple[str, str]:
+    return (
+        os.environ.get("AV_CLIENT_ID", ""),
+        os.environ.get("AV_CLIENT_SECRET", ""),
+    )
+
+# ─── Token cache (module-level) ───────────────────────────────────────────────
+
+_token_cache: dict = {"token": None, "expiry": 0.0, "base_path": "/api/1.1"}
 
 
-def get_token(subdomain: str | None = None, client_id: str | None = None, client_secret: str | None = None, prefer_v2: bool = False) -> str:
+def get_token() -> str:
     """
-    Obtain an OAuth2 bearer token.
-    - For the CENTRAL portal: /api/1.1/oauth/token works (v2.0 returns 405)
-    - For CHILD deployments:  /api/2.0/oauth/token is the official LevelBlue endpoint
-    Set prefer_v2=True when calling for a child deployment.
-    Raises RuntimeError if every endpoint fails.
+    Get OAuth2 bearer token from the central portal.
+    Caches with TTL so we don't re-auth on every request.
+    Raises RuntimeError if all endpoints fail.
     """
-    import logging as _log
-    _logger = _log.getLogger("alienvault.logic")
-    _sub = subdomain or _get_subdomain()
-    _id  = client_id  or CLIENT_ID
-    _sec = client_secret or CLIENT_SECRET
-    base = f"https://{_sub}"
-    # Per LevelBlue docs, official endpoint is /api/2.0/oauth/token.
-    # Central portal only supports /api/1.1/, so we try both orders.
-    if prefer_v2:
-        endpoints = ("/api/2.0/oauth/token", "/api/1.1/oauth/token",
-                     "/api/1.0/oauth/token", "/oauth/token")
-    else:
-        endpoints = ("/api/1.1/oauth/token", "/api/2.0/oauth/token",
-                     "/api/1.0/oauth/token", "/oauth/token")
-    for ep in endpoints:
+    global _token_cache
+    if _token_cache["token"] and time.time() < _token_cache["expiry"]:
+        return _token_cache["token"]
+
+    sub = _get_subdomain()
+    cid, csec = _get_creds()
+    base = f"https://{sub}"
+
+    for ep in (
+        "/api/1.1/oauth/token",
+        "/api/1.0/oauth/token",
+        "/api/2.0/oauth/token",
+        "/oauth/token",
+        "/oauth2/token",
+    ):
         try:
             resp = requests.post(
                 base + ep,
                 data={"grant_type": "client_credentials"},
-                auth=(_id, _sec),
+                auth=(cid, csec),
                 timeout=20,
             )
             if resp.status_code == 200:
-                try:
-                    body = resp.json()
-                except Exception:
-                    body = {}
+                body = resp.json()
                 token = body.get("access_token", "")
                 if token:
-                    _logger.info(f"AV token acquired via {ep} on {_sub}")
+                    expires_in = int(body.get("expires_in", 3600))
+                    base_path = (
+                        "/api/1.1" if "1.1" in ep
+                        else "/api/2.0" if "2.0" in ep
+                        else "/api/1.1"
+                    )
+                    _token_cache = {
+                        "token": token,
+                        "expiry": time.time() + expires_in - 60,
+                        "base_path": base_path,
+                    }
+                    logger.info(f"AV: token acquired via {ep} (base_path={base_path})")
                     return token
-                _logger.warning(f"AV auth {ep} -> 200 but no access_token in response: {list(body.keys())}")
+                logger.warning(f"AV auth {ep} → 200 but no access_token")
             else:
-                _logger.warning(f"AV auth {ep} -> HTTP {resp.status_code}: {resp.text[:200]}")
-        except Exception as _e:
-            _logger.warning(f"AV auth {ep} -> {_e}")
+                logger.warning(f"AV auth {ep} → HTTP {resp.status_code}")
+        except Exception as e:
+            logger.warning(f"AV auth {ep} → {e}")
+
     raise RuntimeError(
-        f"AV: all OAuth endpoints failed for subdomain '{_sub}'. "
-        "Check AV_CLIENT_ID, AV_CLIENT_SECRET, and AV_SUBDOMAIN env vars."
+        f"AV: all OAuth endpoints failed for {sub}. "
+        "Check AV_CLIENT_ID, AV_CLIENT_SECRET, AV_SUBDOMAIN env vars."
     )
 
+
+# ─── Deployment URL resolution ─────────────────────────────────────────────────
+
+def _resolve_deployment_url(dep: dict) -> str:
+    """
+    Extract a usable HTTPS base URL from a deployment dict.
+    Priority: url → fqdn → hostname → base_url → HAL self-link → id field → name
+    """
+    for key in ("url", "fqdn", "hostname", "base_url"):
+        val = dep.get(key, "")
+        if val:
+            return (f"https://{val}" if not val.startswith("http") else val).rstrip("/")
+
+    # HAL self-link
+    self_link = (dep.get("_links") or {}).get("self", {}).get("href", "")
+    if self_link and "alienvault.cloud" in self_link:
+        from urllib.parse import urlparse as _up
+        p = _up(self_link)
+        if p.scheme and p.netloc:
+            return f"{p.scheme}://{p.netloc}"
+
+    # id field — may look like "cn://etranzact2.alienvault.cloud"
+    dep_id = dep.get("id", "")
+    if dep_id and "://" in dep_id:
+        host = dep_id.split("://")[1].split("/")[0]
+        if host:
+            return f"https://{host}"
+
+    # name field — bare name or alienvault.cloud domain
+    name = dep.get("name", "").strip()
+    if name:
+        if "alienvault.cloud" in name:
+            return (f"https://{name}" if not name.startswith("http") else name).rstrip("/")
+        if " " not in name and not name.startswith("http"):
+            return f"https://{name}.alienvault.cloud"
+
+    return ""
+
+
+# ─── Deployments ──────────────────────────────────────────────────────────────
 
 def get_deployments() -> list[dict]:
     """
     Return all AV deployments visible to the central account.
-    Each dict has: name, displayName, _url (the deployment's own API base URL).
+    Each dict has _url (resolved base URL) added.
     """
-    import logging as _log
-    _logger = _log.getLogger("alienvault.logic")
-
     try:
         token = get_token()
-    except RuntimeError as _auth_err:
-        _logger.error(f"AV get_deployments: token failed — {_auth_err}")
+    except RuntimeError as e:
+        logger.error(f"AV get_deployments: {e}")
         return []
 
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    subdomain = _get_subdomain()  # always read fresh
+    subdomain = _get_subdomain()
     base = f"https://{subdomain}"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    base_path = _token_cache.get("base_path", "/api/1.1")
 
-    # Try all known multi-tenant endpoint paths used by AV USM Anywhere
-    paths = [
-        "/api/2.0/deployments", "/api/1.1/deployments",
-        "/api/2.0/tenants",     "/api/1.1/tenants",
-        "/api/2.0/subscriptions","/api/1.1/subscriptions",
-        "/api/2.0/organizations","/api/1.1/organizations",
-        "/deployments",          "/tenants",
+    paths_raw = [
+        f"{base_path.rstrip('/')}/deployments",
+        "/api/2.0/deployments",
+        "/api/1.1/deployments",
+        "/deployments",
     ]
+    seen: set = set()
+    paths = [p for p in paths_raw if not (p in seen or seen.add(p))]  # type: ignore[func-returns-value]
+
     for path in paths:
         try:
             resp = requests.get(base + path, headers=headers, timeout=30)
-            _logger.info(f"AV deployments {path} -> HTTP {resp.status_code}")
+            logger.info(f"AV deployments {path} → HTTP {resp.status_code}")
             if resp.status_code != 200:
                 continue
-            try:
-                data = resp.json()
-            except Exception:
-                _logger.warning(f"AV: {path} returned 200 but non-JSON body")
-                continue
-            _logger.info(f"AV deployments {path} raw: type={type(data).__name__}, "
-                         f"keys={list(data.keys())[:10] if isinstance(data, dict) else f'list({len(data)} items)'}")
+            data = resp.json()
 
             if "_embedded" in data:
                 embedded = data["_embedded"]
@@ -121,291 +172,228 @@ def get_deployments() -> list[dict]:
                     or embedded.get("tenantList")
                     or embedded.get("tenants")
                     or embedded.get("subscriptions")
-                    or embedded.get("organizations")
                     or next(iter(embedded.values()), [])
                 )
             elif isinstance(data, list):
                 deps = data
             else:
-                deps = (data.get("deployments")
-                        or data.get("tenants")
-                        or data.get("subscriptions")
-                        or data.get("organizations")
-                        or data.get("data")
-                        or [])
-            _logger.info(f"AV: {len(deps)} raw deployment objects from {path}")
-            if deps:
-                _logger.info(f"AV: first dep keys = {list(deps[0].keys())}")
-                # Resolve each deployment's own base URL from whatever field AV provides
-                for d in deps:
-                    _url = ""
-                    # 1. Explicit URL-like fields
-                    for field in ("url", "domain", "apiUrl", "baseUrl", "hostname",
-                                  "fqdn", "api_url", "base_url", "instanceUrl"):
-                        raw = d.get(field, "")
-                        if raw:
-                            _url = ("https://" + raw if not raw.startswith("http") else raw).rstrip("/")
-                            break
-                    # 2. HAL _links.self.href (common AV REST pattern)
-                    if not _url:
-                        href = (d.get("_links") or {}).get("self", {}).get("href", "")
-                        if href and "alienvault" in href:
-                            from urllib.parse import urlparse as _up
-                            p = _up(href)
-                            if p.scheme and p.netloc:
-                                _url = f"{p.scheme}://{p.netloc}"
-                    # 3. Construct from name if it looks like a subdomain
-                    if not _url:
-                        name = d.get("name", "")
-                        if name and "." not in name and " " not in name and name:
-                            _url = f"https://{name}.alienvault.cloud"
-                        elif name and "alienvault" in name:
-                            _url = f"https://{name}" if not name.startswith("http") else name
-                    d["_url"] = _url
-                    _logger.info(
-                        f"AV dep '{d.get('name','?')}' -> _url={_url!r}"
-                    )
-                return deps
-            else:
-                _logger.warning(f"AV: {path} returned 200 but 0 deployments")
-        except Exception as _e:
-            _logger.warning(f"AV deployments {path} -> {_e}")
-    _logger.error("AV: no deployments found across all path variants")
+                deps = (
+                    data.get("deployments")
+                    or data.get("tenants")
+                    or data.get("data")
+                    or []
+                )
+
+            logger.info(f"AV: {len(deps)} deployment objects from {path}")
+            if not deps:
+                continue
+
+            logger.info(f"AV: first dep keys={list(deps[0].keys())}")
+            for d in deps:
+                d["_url"] = _resolve_deployment_url(d)
+                logger.info(f"AV dep '{d.get('name','?')}' → _url={d['_url']!r}")
+            return deps
+
+        except Exception as e:
+            logger.warning(f"AV deployments {path} → {e}")
+
+    logger.error("AV: no deployments found")
     return []
 
 
-def fetch_all_deployments(token: str, start_ms: int, end_ms: int) -> tuple[list, list]:
+# ─── Per-deployment alarm fetch ────────────────────────────────────────────────
+
+def fetch_alarms_for_deployment(
+    dep_url: str,
+    token: str,
+    start_ms: int,
+    end_ms: int,
+    dep_name: str = "",
+    max_records: int = 5000,
+) -> list[dict]:
+    """
+    Fetch alarms from one deployment's /api/2.0/alarms using the central portal token.
+
+    IMPORTANT — status params are sent as a LIST OF TUPLES so requests sends:
+        ?status=open&status=closed&status=in_review
+    NOT the URL-encoded form that AV API would silently ignore.
+
+    Fallback: if the API returns non-200 with status filter, retry WITHOUT status
+    filter (some deployments don't support it — but still have alarm data).
+    """
+    if not dep_url:
+        return []
+
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    url = dep_url.rstrip("/") + "/api/2.0/alarms"
+
+    # Build as list-of-tuples so requests sends repeated params correctly
+    base_params: list[tuple] = [
+        ("timestamp_received_gte", start_ms),
+        ("timestamp_received_lte", end_ms),
+        ("sort", "timestamp_received,desc"),
+        ("suppressed", "false"),
+        ("size", 500),
+        ("status", "open"),
+        ("status", "closed"),
+        ("status", "in_review"),
+    ]
+
+    all_alarms: list[dict] = []
+
+    for page in range(20):
+        page_params = base_params + [("page", page)]
+        try:
+            resp = requests.get(url, headers=headers, params=page_params, timeout=30)
+            logger.info(f"AV alarms {dep_name or dep_url} page {page}: HTTP {resp.status_code}")
+
+            if resp.status_code != 200:
+                if page == 0:
+                    # Retry without status filter — some deployments don't support it
+                    logger.warning(
+                        f"AV: {dep_name or dep_url} HTTP {resp.status_code} — retrying without status filter"
+                    )
+                    fallback = [(k, v) for k, v in page_params if k != "status"]
+                    resp2 = requests.get(url, headers=headers, params=fallback, timeout=30)
+                    logger.info(f"AV fallback {dep_name or dep_url}: HTTP {resp2.status_code}")
+                    if resp2.status_code != 200:
+                        logger.warning(f"AV: {dep_name} fallback also failed ({resp2.status_code})")
+                        break
+                    resp = resp2
+                else:
+                    break
+
+            body = resp.json()
+            if page == 0:
+                pm = body.get("page", {})
+                total = pm.get("totalElements") or body.get("total_elements") or body.get("total")
+                logger.info(f"AV: {dep_name} page_meta={pm} total_elements={total}")
+
+            batch = body.get("_embedded", {}).get("alarms", [])
+            if not batch:
+                break
+
+            if dep_name:
+                for a in batch:
+                    a["_deployment_name"] = dep_name
+
+            all_alarms.extend(batch)
+            if len(batch) < 500 or len(all_alarms) >= max_records:
+                break
+
+        except requests.exceptions.ConnectionError as ce:
+            logger.warning(f"AV alarms DNS/connection error for {dep_url}: {ce}")
+            break
+        except Exception as e:
+            logger.error(f"AV alarms fetch error: {e}")
+            break
+
+    logger.info(f"AV: {dep_name or dep_url} → {len(all_alarms)} alarms")
+    return all_alarms[:max_records]
+
+
+def fetch_events_for_deployment(
+    dep_url: str,
+    token: str,
+    start_ms: int,
+    end_ms: int,
+    dep_name: str = "",
+    max_records: int = 5000,
+) -> list[dict]:
+    """
+    Fetch events from one deployment's /api/2.0/events using the central portal token.
+    """
+    if not dep_url:
+        return []
+
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    url = dep_url.rstrip("/") + "/api/2.0/events"
+    base_params: list[tuple] = [
+        ("timestamp_received_gte", start_ms),
+        ("timestamp_received_lte", end_ms),
+        ("sort", "timestamp_received,desc"),
+        ("size", 500),
+    ]
+    all_events: list[dict] = []
+
+    for page in range(20):
+        try:
+            resp = requests.get(
+                url, headers=headers,
+                params=base_params + [("page", page)],
+                timeout=30,
+            )
+            if resp.status_code != 200:
+                break
+            batch = resp.json().get("_embedded", {}).get("eventResources", [])
+            if not batch:
+                break
+            if dep_name:
+                for e in batch:
+                    e["_deployment_name"] = dep_name
+            all_events.extend(batch)
+            if len(batch) < 500 or len(all_events) >= max_records:
+                break
+        except requests.exceptions.ConnectionError:
+            break
+        except Exception as e:
+            logger.error(f"AV events fetch error: {e}")
+            break
+
+    logger.info(f"AV: {dep_name or dep_url} → {len(all_events)} events")
+    return all_events[:max_records]
+
+
+# ─── Multi-deployment parallel fetch ──────────────────────────────────────────
+
+def fetch_all_deployments(
+    token: str,
+    start_ms: int,
+    end_ms: int,
+    max_workers: int = 4,
+) -> tuple[list[dict], list[dict]]:
     """
     Fetch alarms and events from ALL resolvable deployments in parallel.
-    Used for the global (no client selected) view.
+    Uses semaphore-style concurrency (max_workers=4) matching the async client.
     Returns (all_alarms, all_events).
     """
-    import logging as _log
-    _logger = _log.getLogger("alienvault.logic")
     deps = get_deployments()
     if not deps:
-        _logger.warning("AV fetch_all_deployments: no deployments found")
+        logger.warning("AV fetch_all_deployments: no deployments found")
         return [], []
 
-    all_alarms: list = []
-    all_events: list = []
+    all_alarms: list[dict] = []
+    all_events: list[dict] = []
 
-    def _fetch_dep(d):
-        url = d.get("_url", "")
-        if not url:
+    def _fetch_one(d: dict) -> tuple[list, list]:
+        dep_url = d.get("_url", "")
+        dep_name = d.get("name", "Unknown")
+        if not dep_url:
+            logger.warning(f"AV: {dep_name} has no resolved URL — skipping")
             return [], []
-        try:
-            a = fetch_alarms_for_deployment(url, token, start_ms, end_ms)
-            e = fetch_events_for_deployment(url, token, start_ms, end_ms)
-            _logger.info(f"AV dep '{d.get('name')}': {len(a)} alarms, {len(e)} events")
-            return a, e
-        except Exception as _ex:
-            _logger.warning(f"AV dep '{d.get('name')}' fetch error: {_ex}")
-            return [], []
+        a = fetch_alarms_for_deployment(dep_url, token, start_ms, end_ms, dep_name)
+        e = fetch_events_for_deployment(dep_url, token, start_ms, end_ms, dep_name)
+        logger.info(f"AV dep '{dep_name}': {len(a)} alarms, {len(e)} events")
+        return a, e
 
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        futures = {ex.submit(_fetch_dep, d): d for d in deps}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(_fetch_one, d): d for d in deps}
         for fut in as_completed(futures):
             try:
                 a, e = fut.result()
                 all_alarms.extend(a)
                 all_events.extend(e)
-            except Exception:
-                pass
+            except Exception as ex_err:
+                dep = futures[fut]
+                logger.error(f"AV: {dep.get('name')} gather error: {ex_err}")
 
-    _logger.info(f"AV fetch_all_deployments total: {len(all_alarms)} alarms, {len(all_events)} events")
+    logger.info(
+        f"AV fetch_all_deployments total: {len(all_alarms)} alarms, {len(all_events)} events"
+    )
     return all_alarms, all_events
 
 
-def _get_deployment_token(dep_url: str, fallback_token: str) -> str:
-    """
-    Per debug results: the central OAuth credentials return 401 on child
-    deployment OAuth endpoints. However, the CENTRAL token obtained from
-    cybervergent-central.alienvault.cloud IS accepted by child deployment
-    /api/2.0/* endpoints directly.
-    """
-    # Central token works directly — skip per-deployment OAuth
-    return fallback_token
-
-
-def fetch_alarms_for_deployment(dep_url: str, token: str, start_ms: int, end_ms: int, max_records: int = 5000) -> list:
-    """
-    Fetch alarms from a child deployment using the CENTRAL portal token.
-    Debug confirmed: central credentials return 401 on child OAuth endpoints,
-    but the central token IS accepted by child deployment /api/2.0/alarms.
-    Some FQDNs may not resolve publicly — those are skipped silently.
-    """
-    import logging as _log
-    _logger = _log.getLogger("alienvault.logic")
-    if not dep_url:
-        return []
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    base_params = {
-        "timestamp_received_gte": start_ms,
-        "timestamp_received_lte": end_ms,
-        "sort": "timestamp_received,desc",
-        "suppressed": "false",
-        "size": 500,
-        "status": ["open", "closed", "in_review"],
-    }
-    # Use /api/2.0/alarms — confirmed working with central token
-    url = dep_url.rstrip("/") + "/api/2.0/alarms"
-    all_alarms = []
-    for page in range(20):
-        try:
-            resp = requests.get(url, headers=headers,
-                                params={**base_params, "page": page}, timeout=30)
-            _logger.info(f"AV alarms {url} page {page}: HTTP {resp.status_code}")
-            if resp.status_code != 200:
-                _logger.error(f"AV alarms HTTP {resp.status_code}: {resp.text[:200]}")
-                break
-            batch = (resp.json().get("_embedded") or {}).get("alarms", [])
-            if not batch:
-                break
-            all_alarms.extend(batch)
-            if len(batch) < 500 or len(all_alarms) >= max_records:
-                break
-        except requests.exceptions.ConnectionError as _ce:
-            _logger.warning(f"AV alarms DNS/connection error for {dep_url}: {_ce}")
-            break
-        except Exception as _e:
-            _logger.error(f"AV alarms fetch error: {_e}")
-            break
-    _logger.info(f"AV: {len(all_alarms)} alarms from {dep_url}")
-    return all_alarms[:max_records]
-
-
-def fetch_events_for_deployment(dep_url: str, token: str, start_ms: int, end_ms: int, max_records: int = 5000) -> list:
-    """
-    Fetch events from a child deployment using the CENTRAL portal token.
-    """
-    import logging as _log
-    _logger = _log.getLogger("alienvault.logic")
-    if not dep_url:
-        return []
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    url = dep_url.rstrip("/") + "/api/2.0/events"
-    all_events = []
-    for page in range(20):
-        try:
-            resp = requests.get(url, headers=headers, params={
-                "timestamp_received_gte": start_ms,
-                "timestamp_received_lte": end_ms,
-                "sort": "timestamp_received,desc",
-                "size": 500,
-                "page": page,
-            }, timeout=30)
-            _logger.info(f"AV events {url} page {page}: HTTP {resp.status_code}")
-            if resp.status_code != 200:
-                _logger.error(f"AV events HTTP {resp.status_code}: {resp.text[:200]}")
-                break
-            batch = (resp.json().get("_embedded") or {}).get("eventResources", [])
-            if not batch:
-                break
-            all_events.extend(batch)
-            if len(batch) < 500 or len(all_events) >= max_records:
-                break
-        except requests.exceptions.ConnectionError as _ce:
-            _logger.warning(f"AV events DNS/connection error for {dep_url}: {_ce}")
-            break
-        except Exception as _e:
-            _logger.error(f"AV events fetch error: {_e}")
-            break
-    _logger.info(f"AV: {len(all_events)} events from {dep_url}")
-    return all_events[:max_records]
-
-
-def _fetch_page(url, headers, params, page_num, response_key, timeout=60):
-    try:
-        p = params.copy()
-        p["page"] = page_num
-        r = requests.get(url, headers=headers, params=p, timeout=timeout)
-        if r.status_code == 200:
-            return r.json().get("_embedded", {}).get(response_key, [])
-    except Exception:
-        pass
-    return []
-
-
-def fetch_all_parallel(endpoint, params, headers, max_records=20000, dep_id: str = "") -> list:
-    """
-    Fetch all pages of an endpoint from the CENTRAL AV portal.
-    Tries /api/1.1/ first (confirmed working), then /api/2.0/.
-    Optionally filters by dep_id (deployment UUID from /api/1.1/deployments).
-    """
-    import logging as _log
-    _logger = _log.getLogger("alienvault.logic")
-    response_key_map = {"events": "eventResources", "alarms": "alarms"}
-    response_key = response_key_map.get(endpoint, endpoint)
-    subdomain = _get_subdomain()  # fresh read every time
-
-    for api_ver in ("1.1", "2.0"):
-        url = f"https://{subdomain}/api/{api_ver}/{endpoint}"
-        p = params.copy()
-        p["size"] = 500
-        p["page"] = 0
-        if dep_id:
-            # Try common AlienVault MSP deployment filter param names
-            p["deploymentId"] = dep_id
-        _logger.info(f"AV global fetch: GET {url} page=0 dep_id={dep_id!r}")
-        try:
-            r = requests.get(url, headers=headers, params=p, timeout=60)
-            _logger.info(f"AV global {api_ver}/{endpoint}: HTTP {r.status_code}")
-            if r.status_code == 404:
-                continue  # try next api version
-            if r.status_code != 200:
-                _logger.error(f"AV global {url}: HTTP {r.status_code}: {r.text[:200]}")
-                return []
-            try:
-                data = r.json()
-            except Exception:
-                _logger.error(f"AV global {url}: non-JSON response")
-                return []
-
-            # Handle both embedded and flat list responses
-            if "_embedded" in data:
-                all_data = (data["_embedded"].get(response_key)
-                            or data["_embedded"].get("alarms")
-                            or data["_embedded"].get("eventResources")
-                            or next(iter(data["_embedded"].values()), []))
-            elif isinstance(data, list):
-                all_data = data
-            else:
-                all_data = data.get(response_key, data.get("data", []))
-
-            page_info = data.get("page", {})
-            total_pg  = page_info.get("totalPages", 1)
-            _logger.info(f"AV global: {len(all_data)} on page 0, totalPages={total_pg}")
-
-            if not all_data and total_pg == 0:
-                _logger.info(f"AV global: 0 results for {endpoint} (empty date range or no data)")
-                return []
-
-            max_pages = min(total_pg, (max_records // 500) + 1, 200)
-            if max_pages <= 1:
-                return all_data[:max_records]
-
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = {
-                    executor.submit(_fetch_page, url, headers, p, pg, response_key): pg
-                    for pg in range(1, max_pages)
-                }
-                for future in as_completed(futures):
-                    items = future.result()
-                    if items:
-                        all_data.extend(items)
-                    if len(all_data) >= max_records:
-                        break
-
-            _logger.info(f"AV global: {len(all_data)} total {endpoint}")
-            return all_data[:max_records]
-
-        except Exception as _e:
-            _logger.error(f"AV global fetch_all_parallel error ({api_ver}): {_e}")
-            continue
-
-    return []
-
+# ─── Data processing ──────────────────────────────────────────────────────────
 
 def _safe_vc(series, name_col, count_col, top=30):
     """Return value_counts as list of dicts."""
@@ -425,7 +413,7 @@ def process_alarms(alarms: list) -> dict:
     top_methods  = _safe_vc(safe_col("rule_method"),   "Method",   "Count")
     top_strategy = _safe_vc(safe_col("rule_strategy"), "Strategy", "Count")
     top_intent   = _safe_vc(safe_col("rule_intent"),   "Intent",   "Count")
-    severity     = _safe_vc(safe_col("priority_label"),"Severity", "Count")
+    severity     = _safe_vc(safe_col("priority_label"), "Severity", "Count")
 
     m = safe_col("rule_method")
     failed_logons = [
@@ -446,13 +434,11 @@ def process_alarms(alarms: list) -> dict:
     ]
     user_activities = [{"Activity": k, "Count": int((m == k).sum())} for k in user_act_keys]
 
-    unlocked_users = []
-    disabled_users = []
+    unlocked_users: list = []
+    disabled_users: list = []
     if "source_username" in df.columns:
-        unlocked_mask = m == "User Account was Unlocked"
-        disabled_mask = m == "A User Account was Disabled"
-        unlocked_users = _safe_vc(df.loc[unlocked_mask, "source_username"], "Username", "Count")
-        disabled_users = _safe_vc(df.loc[disabled_mask, "source_username"], "Username", "Count")
+        unlocked_users = _safe_vc(df.loc[m == "User Account was Unlocked", "source_username"], "Username", "Count")
+        disabled_users = _safe_vc(df.loc[m == "A User Account was Disabled", "source_username"], "Username", "Count")
 
     return {
         "top_methods":     top_methods,
@@ -479,7 +465,7 @@ def process_events(events: list) -> dict:
 
     sensor_list = []
     top_event_names = []
-    events_by_sensor = {}
+    events_by_sensor: dict = {}
 
     if sensor_field:
         sensors = df[sensor_field].dropna().unique().tolist()
@@ -488,7 +474,7 @@ def process_events(events: list) -> dict:
             top_event_names = _safe_vc(df["event_name"], "Event Name", "Count", top=20)
             for sensor in sensors:
                 mask = df[sensor_field] == sensor
-                ev   = _safe_vc(df.loc[mask, "event_name"], "Event Name", "Count", top=20)
+                ev = _safe_vc(df.loc[mask, "event_name"], "Event Name", "Count", top=20)
                 events_by_sensor[str(sensor)] = ev
     elif "event_name" in df.columns:
         top_event_names = _safe_vc(df["event_name"], "Event Name", "Count", top=20)
@@ -515,7 +501,6 @@ def export_to_excel(alarm_data: dict, event_data: dict) -> BytesIO:
         _write(alarm_data.get("unlocked_users"),  "Unlocked Accounts")
         _write(alarm_data.get("disabled_users"),  "Disabled Accounts")
         _write(alarm_data.get("severity"),        "Alarms by Severity")
-
         _write(event_data.get("sensor_list"),     "Sensors List")
         _write(event_data.get("top_event_names"), "Top 20 Events Overall")
         for sensor, rows in (event_data.get("events_by_sensor") or {}).items():
