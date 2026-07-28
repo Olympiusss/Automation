@@ -89,7 +89,8 @@ def get_deployments() -> list[dict]:
         return []
 
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    base = f"https://{SUBDOMAIN}"
+    subdomain = _get_subdomain()  # always read fresh
+    base = f"https://{subdomain}"
 
     # Try all known multi-tenant endpoint paths used by AV USM Anywhere
     paths = [
@@ -171,6 +172,49 @@ def get_deployments() -> list[dict]:
             _logger.warning(f"AV deployments {path} -> {_e}")
     _logger.error("AV: no deployments found across all path variants")
     return []
+
+
+def fetch_all_deployments(token: str, start_ms: int, end_ms: int) -> tuple[list, list]:
+    """
+    Fetch alarms and events from ALL resolvable deployments in parallel.
+    Used for the global (no client selected) view.
+    Returns (all_alarms, all_events).
+    """
+    import logging as _log
+    _logger = _log.getLogger("alienvault.logic")
+    deps = get_deployments()
+    if not deps:
+        _logger.warning("AV fetch_all_deployments: no deployments found")
+        return [], []
+
+    all_alarms: list = []
+    all_events: list = []
+
+    def _fetch_dep(d):
+        url = d.get("_url", "")
+        if not url:
+            return [], []
+        try:
+            a = fetch_alarms_for_deployment(url, token, start_ms, end_ms)
+            e = fetch_events_for_deployment(url, token, start_ms, end_ms)
+            _logger.info(f"AV dep '{d.get('name')}': {len(a)} alarms, {len(e)} events")
+            return a, e
+        except Exception as _ex:
+            _logger.warning(f"AV dep '{d.get('name')}' fetch error: {_ex}")
+            return [], []
+
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        futures = {ex.submit(_fetch_dep, d): d for d in deps}
+        for fut in as_completed(futures):
+            try:
+                a, e = fut.result()
+                all_alarms.extend(a)
+                all_events.extend(e)
+            except Exception:
+                pass
+
+    _logger.info(f"AV fetch_all_deployments total: {len(all_alarms)} alarms, {len(all_events)} events")
+    return all_alarms, all_events
 
 
 def _get_deployment_token(dep_url: str, fallback_token: str) -> str:

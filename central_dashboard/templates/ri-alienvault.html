@@ -291,7 +291,7 @@
     try {
       const resp = await fetch('/api/alienvault/fetch',{
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({start_ms, end_ms, dep_url, dep_id})
+        body: JSON.stringify({start_ms, end_ms, dep_url})
       });
       const data = await resp.json();
       if(data.error){ showToast('Error: '+data.error,'red'); return; }
@@ -299,6 +299,11 @@
       renderResults(data);
       document.getElementById('results').classList.remove('hidden');
       document.getElementById('btnExport').classList.remove('hidden');
+      if((data.alarm_count||0) === 0 && (data.event_count||0) === 0){
+        showToast('No alarms or events found in this date range. Try a wider range or a different client.','orange');
+      } else {
+        showToast(`Loaded ${(data.alarm_count||0).toLocaleString()} alarms · ${(data.event_count||0).toLocaleString()} events`,'green');
+      }
     } catch(e){ showToast('Network error: '+e.message,'red'); }
     finally { setLoading(false); }
   };
