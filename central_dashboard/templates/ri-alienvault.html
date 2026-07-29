@@ -279,12 +279,13 @@
     if(start_ms > end_ms){showToast('Start date must be before end date.'); return;}
     const selEl  = document.getElementById('depSelect');
     const dep_url = selEl.value;
-    const dep_id  = selEl.selectedOptions[0]?.dataset?.depId || '';
-    const depName = selEl.selectedOptions[0]?.text || 'All Clients';
+    if(!dep_url){
+      showToast('⚠️ Please select a client / deployment before fetching.','red');
+      return;
+    }
+    const depName = selEl.selectedOptions[0]?.text || '';
 
-    setLoading(true, dep_url
-      ? `Fetching alarms & events for ${depName}…`
-      : 'Fetching alarms & events from all clients…');
+    setLoading(true, `Fetching alarms & events for ${depName}…`);
     document.getElementById('results').classList.add('hidden');
     document.getElementById('btnExport').classList.add('hidden');
 
