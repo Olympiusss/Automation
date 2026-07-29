@@ -6,6 +6,7 @@ under a SINGLE uvicorn process on a SINGLE port.
 
   /        → Flask (login, index, all other apps)
   /soc/*   → SOC Dashboard (FastAPI)
+  /api/av  → AlienVault FastAPI router (async, httpx, exact SOC stack)
 
 Start locally:
     uvicorn asgi:application --host 0.0.0.0 --port 8080 --reload
@@ -41,6 +42,9 @@ os.chdir(str(SOC_DIR))
 from app import app as soc_app       # noqa: E402
 import app as _soc                   # noqa: E402  — gives access to _bg_task, aggregator, etc.
 os.chdir(str(ROOT))
+
+# ── Import the new AV FastAPI router ─────────────────────────────────────────
+from apps.alienvault.av_router import av_app  # noqa: E402
 
 # ── Prefix-rewrite middleware for SOC redirects ───────────────────────────────
 # FastAPI redirect responses use absolute paths ("/login", "/", etc.)
@@ -129,7 +133,7 @@ async def lifespan(app):
     print("[asgi] SOC background fetcher stopped")
 
 
-# ── Combine: Starlette routes Flask + SOC ────────────────────────────────────
+# ── Combine: Starlette routes Flask + SOC + AV FastAPI ───────────────────────
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.middleware.wsgi import WSGIMiddleware
@@ -137,7 +141,9 @@ from starlette.middleware.wsgi import WSGIMiddleware
 application = Starlette(
     lifespan=lifespan,
     routes=[
-        Mount("/soc",  app=soc_app),
-        Mount("/",     app=WSGIMiddleware(flask_app)),
+        Mount("/soc",    app=soc_app),
+        Mount("/api/av", app=av_app),          # ← AV FastAPI router (async, SOC stack)
+        Mount("/",       app=WSGIMiddleware(flask_app)),
     ]
 )
+

@@ -265,7 +265,7 @@
     const sel     = document.getElementById('depSelect');
     loader.style.display = 'inline';
     try {
-      const r = await fetch('/api/alienvault/deployments');
+      const r = await fetch('/api/av/deployments');
       const deps = await r.json();
       if(Array.isArray(deps) && deps.length){
         // Clear the placeholder option
@@ -308,7 +308,7 @@
     document.getElementById('btnExport').classList.add('hidden');
 
     try {
-      const resp = await fetch('/api/alienvault/fetch',{
+      const resp = await fetch('/api/av/fetch',{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({start_ms, end_ms, dep_url})
       });
@@ -331,7 +331,7 @@
     if(!cachedData){ showToast('Fetch data first.'); return; }
     showToast('Generating Excel report...');
     try {
-      const resp = await fetch('/api/alienvault/export',{
+      const resp = await fetch('/api/av/export',{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({start_ms: cachedData.start_ms, end_ms: cachedData.end_ms, dep_url: cachedData.dep_url || ''})
       });
