@@ -195,9 +195,12 @@
         🏢 CLIENT / DEPLOYMENT
         <span id="depLoader" style="font-size:0.78rem;color:var(--muted);display:none">Loading clients…</span>
       </label>
-      <select class="client-select" id="depSelect">
-        <option value="">— All Clients (Global View) —</option>
+      <select class="client-select" id="depSelect" onchange="onDepChange(this)">
+        <option value="">— Select a Client First —</option>
       </select>
+      <div id="depWarning" style="margin-top:8px;padding:10px 14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.35);border-radius:8px;color:#fca5a5;font-size:0.85rem;display:flex;align-items:center;gap:8px;">
+        ⚠️ Please select a specific client before fetching data.
+      </div>
     </div>
     <!-- Date / Time row -->
     <div class="controls-grid">
@@ -207,7 +210,7 @@
       <div><label>End Time</label><input type="time" id="endTime" value="23:59"></div>
     </div>
     <div style="margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-      <button class="btn-primary" id="btnFetch" onclick="fetchData()">
+      <button class="btn-primary" id="btnFetch" onclick="fetchData()" disabled style="opacity:0.45;cursor:not-allowed;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Fetch Alarms &amp; Events
       </button>
@@ -245,6 +248,17 @@
 
   let cachedData = null;
 
+  // ── Client dropdown change handler ─────────────────────────────
+  window.onDepChange = function(sel){
+    const hasClient = sel.value !== '';
+    const btn = document.getElementById('btnFetch');
+    const warn = document.getElementById('depWarning');
+    btn.disabled = !hasClient;
+    btn.style.opacity = hasClient ? '1' : '0.45';
+    btn.style.cursor  = hasClient ? 'pointer' : 'not-allowed';
+    warn.style.display = hasClient ? 'none' : 'flex';
+  };
+
   // ── Load deployments into dropdown ──────────────────────────
   (async function loadDeployments(){
     const loader  = document.getElementById('depLoader');
@@ -254,11 +268,15 @@
       const r = await fetch('/api/alienvault/deployments');
       const deps = await r.json();
       if(Array.isArray(deps) && deps.length){
+        // Clear the placeholder option
+        sel.innerHTML = '<option value="">— Select a Client First —</option>';
         deps.forEach(d => {
+          // Use url field (maps to _url from server), fall back through fqdn, id, name
+          const depUrl = d.url || d.fqdn || d.id || '';
           const opt = document.createElement('option');
-          opt.value = d.url || '';
+          opt.value = depUrl;
           opt.dataset.depId = d.id || '';
-          opt.textContent = d.displayName || d.name;
+          opt.textContent = d.displayName || d.name || 'Unknown';
           sel.appendChild(opt);
         });
       }
@@ -277,14 +295,14 @@
     const end_ms   = dt('endDate','endTime');
     if(isNaN(start_ms)||isNaN(end_ms)){showToast('Please select valid dates.'); return;}
     if(start_ms > end_ms){showToast('Start date must be before end date.'); return;}
-    const selEl  = document.getElementById('depSelect');
+    const selEl   = document.getElementById('depSelect');
     const dep_url = selEl.value;
     if(!dep_url){
-      showToast('⚠️ Please select a client / deployment before fetching.','red');
+      document.getElementById('depWarning').style.display = 'flex';
+      showToast('⚠️ Please select a specific client before fetching.','red');
       return;
     }
     const depName = selEl.selectedOptions[0]?.text || '';
-
     setLoading(true, `Fetching alarms & events for ${depName}…`);
     document.getElementById('results').classList.add('hidden');
     document.getElementById('btnExport').classList.add('hidden');

@@ -902,7 +902,7 @@ def alienvault_fetch():
 @limiter.limit("10 per minute")
 def alienvault_export():
     from apps.alienvault.logic import (
-        get_token, fetch_all_parallel,
+        get_token, fetch_all_deployments,
         fetch_alarms_for_deployment, fetch_events_for_deployment,
         process_alarms, process_events, export_to_excel,
     )
@@ -912,7 +912,6 @@ def alienvault_export():
     end_ms   = d.get('end_ms')
     if start_ms is None or end_ms is None:
         return jsonify({"error": "start_ms and end_ms are required"}), 400
-    # Type-cast and SSRF protection
     try:
         start_ms = int(start_ms)
         end_ms   = int(end_ms)
@@ -927,14 +926,8 @@ def alienvault_export():
             alarms = fetch_alarms_for_deployment(dep_url, token, start_ms, end_ms)
             events = fetch_events_for_deployment(dep_url, token, start_ms, end_ms)
         else:
-            headers = {'Authorization': f'Bearer {token}'}
-            params  = {'timestamp_received_gte': start_ms,
-                       'timestamp_received_lte': end_ms,
-                       'sort': 'timestamp_received,desc', 'suppressed': False}
-            alarms  = fetch_all_parallel('alarms', params, headers)
-            events  = fetch_all_parallel('events',
-                                         {k: v for k, v in params.items() if k != 'suppressed'},
-                                         headers)
+            alarms, events = fetch_all_deployments(token, start_ms, end_ms)
+
         buf = export_to_excel(process_alarms(alarms) if alarms else {},
                               process_events(events)  if events else {})
         return send_file(buf, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
