@@ -212,14 +212,14 @@ def fetch_alarms_for_deployment(
     max_records: int = 5000,
 ) -> list[dict]:
     """
-    Fetch alarms from one deployment's /api/2.0/alarms using the central portal token.
+    Fetch alarms from one deployment's /api/2.0/alarms.
 
-    IMPORTANT — status params are sent as a LIST OF TUPLES so requests sends:
-        ?status=open&status=closed&status=in_review
-    NOT the URL-encoded form that AV API would silently ignore.
-
-    Fallback: if the API returns non-200 with status filter, retry WITHOUT status
-    filter (some deployments don't support it — but still have alarm data).
+    Critical fixes (ported from working async implementation):
+    - Uses timestamp_occured_gte (NOT timestamp_received_gte — that field is ignored by AV API)
+    - Applies a 30-day pre-buffer so late-arriving alarms are captured,
+      then filters client-side by timestamp_received to narrow to the actual range
+    - NO status filter in the API call (done client-side after fetch)
+    - Follows HAL _links.next.href for pagination
     """
     if not dep_url:
         return []
@@ -227,69 +227,95 @@ def fetch_alarms_for_deployment(
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     url = dep_url.rstrip("/") + "/api/2.0/alarms"
 
-    # Build as list-of-tuples so requests sends repeated params correctly
-    base_params: list[tuple] = [
-        ("timestamp_received_gte", start_ms),
-        ("timestamp_received_lte", end_ms),
-        ("sort", "timestamp_received,desc"),
-        ("suppressed", "false"),
-        ("size", 500),
-        ("status", "open"),
-        ("status", "closed"),
-        ("status", "in_review"),
-    ]
+    # 30-day pre-buffer + 1-hour WAT offset — alarms can arrive weeks after they occurred.
+    # AV API only indexes by timestamp_occured; timestamp_received can be much later.
+    PRE_BUFFER_MS  = 30 * 86_400_000   # 30 days
+    POST_BUFFER_MS =  1 * 86_400_000   # 1 day
+    TZ_OFFSET_MS   =      3_600_000    # WAT = UTC+1
+    adj_start = start_ms - PRE_BUFFER_MS - TZ_OFFSET_MS
+    adj_end   = end_ms   + POST_BUFFER_MS - TZ_OFFSET_MS + 59_000
+
+    # API params — NO status filter (done client-side), correct field name is occured not received
+    base_params = {
+        "timestamp_occured_gte": adj_start,
+        "timestamp_occured_lte": adj_end,
+        "sort": "timestamp_occured,desc",
+        "size": 100,
+    }
 
     all_alarms: list[dict] = []
+    page_url: str | None = url
+    first_page = True
 
-    for page in range(20):
-        page_params = base_params + [("page", page)]
+    while page_url and len(all_alarms) < max_records:
         try:
-            resp = requests.get(url, headers=headers, params=page_params, timeout=30)
-            logger.info(f"AV alarms {dep_name or dep_url} page {page}: HTTP {resp.status_code}")
+            resp = requests.get(
+                page_url,
+                headers=headers,
+                params=base_params if first_page else None,
+                timeout=30,
+            )
+            first_page = False
+            logger.info(f"AV alarms {dep_name or dep_url}: HTTP {resp.status_code}")
 
+            if resp.status_code == 404:
+                break
+            if resp.status_code == 503:
+                time.sleep(1)
+                resp = requests.get(page_url, headers=headers, timeout=30)
             if resp.status_code != 200:
-                if page == 0:
-                    # Retry without status filter — some deployments don't support it
-                    logger.warning(
-                        f"AV: {dep_name or dep_url} HTTP {resp.status_code} — retrying without status filter"
-                    )
-                    fallback = [(k, v) for k, v in page_params if k != "status"]
-                    resp2 = requests.get(url, headers=headers, params=fallback, timeout=30)
-                    logger.info(f"AV fallback {dep_name or dep_url}: HTTP {resp2.status_code}")
-                    if resp2.status_code != 200:
-                        logger.warning(f"AV: {dep_name} fallback also failed ({resp2.status_code})")
-                        break
-                    resp = resp2
-                else:
-                    break
-
-            body = resp.json()
-            if page == 0:
-                pm = body.get("page", {})
-                total = pm.get("totalElements") or body.get("total_elements") or body.get("total")
-                logger.info(f"AV: {dep_name} page_meta={pm} total_elements={total}")
-
-            batch = body.get("_embedded", {}).get("alarms", [])
-            if not batch:
+                logger.warning(f"AV: {dep_name} HTTP {resp.status_code} — stopping")
                 break
 
+            body = resp.json()
+            if first_page is False and page_url == url:
+                pm = body.get("page", {})
+                logger.info(f"AV: {dep_name} page_meta={pm}")
+
+            batch = body.get("_embedded", {}).get("alarms", [])
             if dep_name:
                 for a in batch:
                     a["_deployment_name"] = dep_name
-
             all_alarms.extend(batch)
-            if len(batch) < 500 or len(all_alarms) >= max_records:
-                break
+
+            # HAL pagination — follow _links.next.href
+            next_href = body.get("_links", {}).get("next", {}).get("href")
+            if next_href:
+                page_url = (
+                    next_href if next_href.startswith("http")
+                    else dep_url.rstrip("/") + next_href
+                )
+            else:
+                page_url = None
 
         except requests.exceptions.ConnectionError as ce:
             logger.warning(f"AV alarms DNS/connection error for {dep_url}: {ce}")
             break
         except Exception as e:
-            logger.error(f"AV alarms fetch error: {e}")
+            logger.error(f"AV alarms fetch error ({dep_name}): {e}")
             break
 
-    logger.info(f"AV: {dep_name or dep_url} → {len(all_alarms)} alarms")
-    return all_alarms[:max_records]
+    # Client-side filter: keep only alarms whose timestamp_received is in the original range
+    filtered: list[dict] = []
+    for a in all_alarms:
+        ts = a.get("timestamp_received")
+        if isinstance(ts, str):
+            try:
+                import datetime as _dt
+                parsed = _dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                ts = int(parsed.timestamp() * 1000)
+            except Exception:
+                ts = 0
+        if isinstance(ts, (int, float)) and ts > 0:
+            if ts < start_ms or ts > end_ms:
+                continue
+        filtered.append(a)
+
+    logger.info(
+        f"AV: {dep_name or dep_url} → fetched {len(all_alarms)}, "
+        f"after time filter {len(filtered)}"
+    )
+    return filtered[:max_records]
 
 
 def fetch_events_for_deployment(
@@ -300,44 +326,69 @@ def fetch_events_for_deployment(
     dep_name: str = "",
     max_records: int = 5000,
 ) -> list[dict]:
-    """
-    Fetch events from one deployment's /api/2.0/events using the central portal token.
-    """
+    """Fetch events from one deployment using correct timestamp field name."""
     if not dep_url:
         return []
 
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     url = dep_url.rstrip("/") + "/api/2.0/events"
-    base_params: list[tuple] = [
-        ("timestamp_received_gte", start_ms),
-        ("timestamp_received_lte", end_ms),
-        ("sort", "timestamp_received,desc"),
-        ("size", 500),
-    ]
-    all_events: list[dict] = []
 
-    for page in range(20):
+    TZ_OFFSET_MS = 3_600_000
+    adj_start = start_ms - TZ_OFFSET_MS
+    adj_end   = end_ms   - TZ_OFFSET_MS + 59_000
+
+    base_params = {
+        "timestamp_occured_gte": adj_start,
+        "timestamp_occured_lte": adj_end,
+        "sort": "timestamp_occured,desc",
+        "size": 500,
+    }
+    all_events: list[dict] = []
+    page_url: str | None = url
+    first_page = True
+
+    while page_url and len(all_events) < max_records:
         try:
             resp = requests.get(
-                url, headers=headers,
-                params=base_params + [("page", page)],
+                page_url,
+                headers=headers,
+                params=base_params if first_page else None,
                 timeout=30,
             )
+            first_page = False
             if resp.status_code != 200:
                 break
-            batch = resp.json().get("_embedded", {}).get("eventResources", [])
+            body = resp.json()
+
+            # Parse embedded events (try multiple key names)
+            emb = body.get("_embedded", {})
+            batch = (
+                emb.get("events")
+                or emb.get("eventResourceList")
+                or emb.get("eventResources")
+                or []
+            )
             if not batch:
                 break
+
             if dep_name:
                 for e in batch:
                     e["_deployment_name"] = dep_name
             all_events.extend(batch)
-            if len(batch) < 500 or len(all_events) >= max_records:
-                break
+
+            next_href = body.get("_links", {}).get("next", {}).get("href")
+            if next_href:
+                page_url = (
+                    next_href if next_href.startswith("http")
+                    else dep_url.rstrip("/") + next_href
+                )
+            else:
+                page_url = None
+
         except requests.exceptions.ConnectionError:
             break
         except Exception as e:
-            logger.error(f"AV events fetch error: {e}")
+            logger.error(f"AV events fetch error ({dep_name}): {e}")
             break
 
     logger.info(f"AV: {dep_name or dep_url} → {len(all_events)} events")
