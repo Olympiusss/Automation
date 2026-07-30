@@ -248,37 +248,39 @@
 
   let cachedData = null;
 
-  // ── Client dropdown change handler ─────────────────────────────
+  // ── Client dropdown change handler ───────────────────────────────
   window.onDepChange = function(sel){
-    const hasClient = sel.value !== '';
-    const btn = document.getElementById('btnFetch');
+    // selectedIndex 0 = placeholder, >0 = real client selected
+    const hasClient = sel.selectedIndex > 0;
+    const btn  = document.getElementById('btnFetch');
     const warn = document.getElementById('depWarning');
-    btn.disabled = !hasClient;
-    btn.style.opacity = hasClient ? '1' : '0.45';
-    btn.style.cursor  = hasClient ? 'pointer' : 'not-allowed';
-    warn.style.display = hasClient ? 'none' : 'flex';
+    btn.disabled          = !hasClient;
+    btn.style.opacity     = hasClient ? '1'       : '0.45';
+    btn.style.cursor      = hasClient ? 'pointer' : 'not-allowed';
+    warn.style.display    = hasClient ? 'none'    : 'flex';
   };
 
   // ── Load deployments into dropdown ──────────────────────────
   (async function loadDeployments(){
-    const loader  = document.getElementById('depLoader');
-    const sel     = document.getElementById('depSelect');
+    const loader = document.getElementById('depLoader');
+    const sel    = document.getElementById('depSelect');
     loader.style.display = 'inline';
     try {
-      const r = await fetch('/api/av/deployments');
+      const r    = await fetch('/api/alienvault/deployments');
       const deps = await r.json();
       if(Array.isArray(deps) && deps.length){
-        // Clear the placeholder option
         sel.innerHTML = '<option value="">— Select a Client First —</option>';
         deps.forEach(d => {
-          // Use url field (maps to _url from server), fall back through fqdn, id, name
-          const depUrl = d.url || d.fqdn || d.id || '';
-          const opt = document.createElement('option');
-          opt.value = depUrl;
-          opt.dataset.depId = d.id || '';
-          opt.textContent = d.displayName || d.name || 'Unknown';
+          const depUrl = d.url || '';
+          const opt    = document.createElement('option');
+          opt.value          = depUrl;                        // resolved https://name.alienvault.cloud
+          opt.dataset.depId  = d.id   || '';
+          opt.dataset.depName = d.name || d.displayName || '';
+          opt.textContent    = d.displayName || d.name || 'Unknown';
           sel.appendChild(opt);
         });
+      } else {
+        console.warn('AV: no deployments returned', deps);
       }
     } catch(e){ console.warn('Could not load AV deployments:', e); }
     finally { loader.style.display = 'none'; }
@@ -295,20 +297,26 @@
     const end_ms   = dt('endDate','endTime');
     if(isNaN(start_ms)||isNaN(end_ms)){showToast('Please select valid dates.'); return;}
     if(start_ms > end_ms){showToast('Start date must be before end date.'); return;}
-    const selEl   = document.getElementById('depSelect');
-    const dep_url = selEl.value;
-    if(!dep_url){
+
+    const selEl = document.getElementById('depSelect');
+    // Guard: index 0 is placeholder
+    if(selEl.selectedIndex <= 0){
       document.getElementById('depWarning').style.display = 'flex';
       showToast('⚠️ Please select a specific client before fetching.','red');
       return;
     }
-    const depName = selEl.selectedOptions[0]?.text || '';
+
+    const dep_url = selEl.value;
+    const depName = selEl.options[selEl.selectedIndex].dataset.depName
+                 || selEl.options[selEl.selectedIndex].textContent
+                 || '';
+
     setLoading(true, `Fetching alarms & events for ${depName}…`);
     document.getElementById('results').classList.add('hidden');
     document.getElementById('btnExport').classList.add('hidden');
 
     try {
-      const resp = await fetch('/api/av/fetch',{
+      const resp = await fetch('/api/alienvault/fetch',{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({start_ms, end_ms, dep_url})
       });
@@ -331,7 +339,7 @@
     if(!cachedData){ showToast('Fetch data first.'); return; }
     showToast('Generating Excel report...');
     try {
-      const resp = await fetch('/api/av/export',{
+      const resp = await fetch('/api/alienvault/export',{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({start_ms: cachedData.start_ms, end_ms: cachedData.end_ms, dep_url: cachedData.dep_url || ''})
       });

@@ -43,9 +43,6 @@ from app import app as soc_app       # noqa: E402
 import app as _soc                   # noqa: E402  — gives access to _bg_task, aggregator, etc.
 os.chdir(str(ROOT))
 
-# ── Import the new AV FastAPI router ─────────────────────────────────────────
-from apps.alienvault.av_router import av_app  # noqa: E402
-
 # ── Prefix-rewrite middleware for SOC redirects ───────────────────────────────
 # FastAPI redirect responses use absolute paths ("/login", "/", etc.)
 # This middleware rewrites Location headers to carry the /soc prefix so
@@ -133,7 +130,7 @@ async def lifespan(app):
     print("[asgi] SOC background fetcher stopped")
 
 
-# ── Combine: Starlette routes Flask + SOC + AV FastAPI ───────────────────────
+# ── Combine: Starlette routes Flask + SOC ──────────────────────────────────────
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.middleware.wsgi import WSGIMiddleware
@@ -142,8 +139,6 @@ application = Starlette(
     lifespan=lifespan,
     routes=[
         Mount("/soc",    app=soc_app),
-        Mount("/api/av", app=av_app),          # ← AV FastAPI router (async, SOC stack)
         Mount("/",       app=WSGIMiddleware(flask_app)),
     ]
 )
-

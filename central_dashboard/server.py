@@ -835,16 +835,20 @@ def alienvault_debug():
 @require_dept('Research and Intelligence')
 @limiter.limit("10 per minute")
 def alienvault_deployments():
-    """Return the list of AV client deployments so the UI can populate a dropdown."""
-    from apps.alienvault.logic import get_deployments
+    """Return AV deployment list for the UI dropdown.
+    Uses AVFetcher (SOC dashboard tech stack) via asyncio.run().
+    """
+    import asyncio
+    from apps.alienvault.av_fetcher import AVFetcher
+    fetcher = AVFetcher()
     try:
-        deps = get_deployments()
+        deps = asyncio.run(fetcher.fetch_deployments())
         return jsonify([
             {
                 "id":          d.get("id", ""),
                 "name":        d.get("name", d.get("displayName", "Unknown")),
                 "displayName": d.get("displayName", d.get("name", "Unknown")),
-                "url":         d.get("_url", ""),
+                "url":         d.get("_resolved_url") or "",
             }
             for d in deps
         ])
@@ -857,38 +861,49 @@ def alienvault_deployments():
 @require_dept('Research and Intelligence')
 @limiter.limit("30 per minute")
 def alienvault_fetch():
-    from apps.alienvault.logic import (
-        get_token, fetch_all_deployments,
-        fetch_alarms_for_deployment, fetch_events_for_deployment,
-        process_alarms, process_events,
-    )
+    """Fetch alarms + events via AVFetcher (SOC dashboard async stack).
+    Runs asyncio.run() safely — Flask routes execute in threads, not the async loop.
+    """
+    import asyncio
+    from apps.alienvault.av_fetcher import AVFetcher
+    from apps.alienvault.logic import process_alarms, process_events
+
+    d        = request.get_json(force=True, silent=True) or {}
+    dep_url  = str(d.get('dep_url', '')).strip()
+    start_ms = d.get('start_ms')
+    end_ms   = d.get('end_ms')
+
+    if start_ms is None or end_ms is None:
+        return jsonify({"error": "start_ms and end_ms are required"}), 400
     try:
-        d        = request.get_json(force=True, silent=True) or {}
-        dep_url  = str(d.get('dep_url', '')).strip()
-        start_ms = d.get('start_ms')
-        end_ms   = d.get('end_ms')
-        if start_ms is None or end_ms is None:
-            return jsonify({"error": "start_ms and end_ms are required"}), 400
-        if dep_url and not _validate_av_url(dep_url):
-            logger.warning(f"SSRF attempt blocked: dep_url={dep_url!r} from {request.remote_addr}")
-            return jsonify({"error": "Invalid deployment URL"}), 400
+        start_ms, end_ms = int(start_ms), int(end_ms)
+    except (TypeError, ValueError):
+        return jsonify({"error": "start_ms and end_ms must be integers"}), 400
+    if dep_url and not _validate_av_url(dep_url):
+        logger.warning(f"SSRF blocked: dep_url={dep_url!r} from {request.remote_addr}")
+        return jsonify({"error": "Invalid deployment URL"}), 400
 
-        token = get_token()
-
+    fetcher = AVFetcher()
+    try:
         if dep_url:
-            # Specific client — fetch directly from that deployment's API
-            alarms = fetch_alarms_for_deployment(dep_url, token, int(start_ms), int(end_ms))
-            events = fetch_events_for_deployment(dep_url, token, int(start_ms), int(end_ms))
-            strategy = f"per_deployment:{dep_url}"
+            # First get deployments to resolve dep_name
+            deps = asyncio.run(fetcher.fetch_deployments())
+            dep_name = next(
+                (d.get("name", "") for d in deps if d.get("_resolved_url") == dep_url),
+                dep_url.split("//")[-1].split(".")[0],
+            )
+            alarms, events = asyncio.run(
+                fetcher.fetch_for_deployment(dep_url, start_ms, end_ms, dep_name)
+            )
+            strategy = f"per_deployment:{dep_name}"
         else:
-            # All clients — fetch from every deployment in parallel
-            alarms, events = fetch_all_deployments(token, int(start_ms), int(end_ms))
+            alarms, events = asyncio.run(fetcher.fetch_all(start_ms, end_ms))
             strategy = "all_deployments"
 
         logger.info(f"AV fetch [{strategy}]: {len(alarms)} alarms, {len(events)} events")
         return jsonify({
-            'alarm_data':  process_alarms(alarms) if alarms else {},
-            'event_data':  process_events(events) if events else {},
+            'alarm_data':  process_alarms(alarms)  if alarms  else {},
+            'event_data':  process_events(events)  if events  else {},
             'alarm_count': len(alarms),
             'event_count': len(events),
             'strategy':    strategy,
@@ -897,41 +912,55 @@ def alienvault_fetch():
         logger.exception("alienvault_fetch error")
         return jsonify({"error": "Internal server error"}), 500
 
+
 @app.route('/api/alienvault/export', methods=['POST'])
 @require_dept('Research and Intelligence')
 @limiter.limit("10 per minute")
 def alienvault_export():
-    from apps.alienvault.logic import (
-        get_token, fetch_all_deployments,
-        fetch_alarms_for_deployment, fetch_events_for_deployment,
-        process_alarms, process_events, export_to_excel,
-    )
+    """Export alarms + events to Excel via AVFetcher (SOC dashboard async stack)."""
+    import asyncio
+    from apps.alienvault.av_fetcher import AVFetcher
+    from apps.alienvault.logic import process_alarms, process_events, export_to_excel
+
     d        = request.get_json(force=True, silent=True) or {}
     dep_url  = str(d.get('dep_url', '')).strip()
     start_ms = d.get('start_ms')
     end_ms   = d.get('end_ms')
+
     if start_ms is None or end_ms is None:
         return jsonify({"error": "start_ms and end_ms are required"}), 400
     try:
-        start_ms = int(start_ms)
-        end_ms   = int(end_ms)
+        start_ms, end_ms = int(start_ms), int(end_ms)
     except (TypeError, ValueError):
         return jsonify({"error": "start_ms and end_ms must be integers"}), 400
     if dep_url and not _validate_av_url(dep_url):
-        logger.warning(f"SSRF attempt blocked (export): dep_url={dep_url!r} from {request.remote_addr}")
+        logger.warning(f"SSRF blocked (export): dep_url={dep_url!r} from {request.remote_addr}")
         return jsonify({"error": "Invalid deployment URL"}), 400
-    try:
-        token = get_token()
-        if dep_url:
-            alarms = fetch_alarms_for_deployment(dep_url, token, start_ms, end_ms)
-            events = fetch_events_for_deployment(dep_url, token, start_ms, end_ms)
-        else:
-            alarms, events = fetch_all_deployments(token, start_ms, end_ms)
 
-        buf = export_to_excel(process_alarms(alarms) if alarms else {},
-                              process_events(events)  if events else {})
-        return send_file(buf, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                         as_attachment=True, download_name='alienvault_report.xlsx')
+    fetcher = AVFetcher()
+    try:
+        if dep_url:
+            deps = asyncio.run(fetcher.fetch_deployments())
+            dep_name = next(
+                (d.get("name", "") for d in deps if d.get("_resolved_url") == dep_url),
+                dep_url.split("//")[-1].split(".")[0],
+            )
+            alarms, events = asyncio.run(
+                fetcher.fetch_for_deployment(dep_url, start_ms, end_ms, dep_name)
+            )
+        else:
+            alarms, events = asyncio.run(fetcher.fetch_all(start_ms, end_ms))
+
+        buf = export_to_excel(
+            process_alarms(alarms)  if alarms  else {},
+            process_events(events)  if events  else {},
+        )
+        return send_file(
+            buf,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='alienvault_report.xlsx',
+        )
     except Exception:
         logger.exception("alienvault_export error")
         return jsonify({"error": "Internal server error"}), 500
